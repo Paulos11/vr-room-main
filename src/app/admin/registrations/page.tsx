@@ -1,0 +1,18 @@
+
+// src/app/admin/registrations/page.tsx
+import { ClientsTable } from "@/components/admin/ClientsTable"
+
+export default function RegistrationsPage() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900">Registrations</h1>
+        <p className="mt-2 text-gray-600">
+          Manage client registrations and verification process
+        </p>
+      </div>
+      
+      <ClientsTable />
+    </div>
+  )
+}
