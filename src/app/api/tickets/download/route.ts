@@ -4,11 +4,12 @@ import { prisma } from '@/lib/prisma'
 import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 import Stripe from 'stripe'
 import { z } from 'zod'
+export const dynamic = 'force-dynamic'
+
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2025-05-28.basil', // Updated API version
 })
-
 const DownloadSchema = z.object({
   registrationId: z.string().optional(),
   ticketNumber: z.string().optional(),

@@ -1,11 +1,10 @@
-
-// src/components/admin/AuthGuard.tsx (Fixed version)
+// src/components/admin/AuthGuard.tsx - Clean and compact with EMS colors
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AuthService } from '@/lib/auth'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Shield } from 'lucide-react'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -50,10 +49,16 @@ export function AuthGuard({ children }: AuthGuardProps) {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-blue-600" />
-          <p className="text-gray-600">Checking authentication...</p>
+      <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center p-8">
+          <div className="relative mb-6">
+            <div className="w-16 h-16 bg-gradient-to-r from-green-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+              <Shield className="h-8 w-8 text-white" />
+            </div>
+            <Loader2 className="h-6 w-6 animate-spin text-green-600 absolute -bottom-1 -right-1 bg-white rounded-full p-1" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">Verifying Access</h3>
+          <p className="text-gray-600 text-sm">Checking your authentication status...</p>
         </div>
       </div>
     )

@@ -1,5 +1,4 @@
-
-// src/app/api/ticket-status/route.ts
+// src/app/api/ticket-status/route.ts - Fixed for multiple tickets
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
@@ -15,12 +14,15 @@ export async function POST(request: NextRequest) {
     const { searchType, searchValue } = SearchSchema.parse(body)
 
     let registration
+    let specificTicket = null
 
     if (searchType === 'email') {
       registration = await prisma.registration.findUnique({
         where: { email: searchValue },
         include: {
-          tickets: true,
+          tickets: {
+            orderBy: { createdAt: 'desc' }
+          },
           payment: true,
           panelInterests: true
         }
@@ -32,13 +34,20 @@ export async function POST(request: NextRequest) {
         include: {
           registration: {
             include: {
+              tickets: {
+                orderBy: { createdAt: 'desc' }
+              },
               payment: true,
               panelInterests: true
             }
           }
         }
       })
-      registration = ticket?.registration
+      
+      if (ticket) {
+        registration = ticket.registration
+        specificTicket = ticket
+      }
     }
 
     if (!registration) {
@@ -48,6 +57,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get the primary ticket (either the searched ticket or the most recent one)
+    const primaryTicket = specificTicket || registration.tickets[0] || null
+
     // Format the response data
     const responseData = {
       id: registration.id,
@@ -56,17 +68,65 @@ export async function POST(request: NextRequest) {
       email: registration.email,
       phone: registration.phone,
       registrationStatus: registration.status,
-      ticketStatus: registration.ticket?.status || null,
       isEmsClient: registration.isEmsClient,
       createdAt: registration.createdAt,
-      ticketNumber: registration.ticket?.ticketNumber || null,
-      qrCode: registration.ticket?.qrCode || null,
-      pdfUrl: registration.ticket?.pdfUrl || null,
-      eventDate: registration.ticket?.eventDate || '2025-07-26',
-      venue: registration.ticket?.venue || 'Malta Fairs and Conventions Centre',
-      panelInterest: registration.panelInterests.length > 0,
       customerName: registration.companyName,
-      emsCustomerId: registration.emsCustomerId
+      emsCustomerId: registration.emsCustomerId,
+      panelInterest: registration.panelInterests.length > 0,
+      
+      // Primary ticket information
+      primaryTicket: primaryTicket ? {
+        id: primaryTicket.id,
+        ticketNumber: primaryTicket.ticketNumber,
+        status: primaryTicket.status,
+        qrCode: primaryTicket.qrCode,
+        pdfUrl: primaryTicket.pdfUrl,
+        issuedAt: primaryTicket.issuedAt,
+        sentAt: primaryTicket.sentAt,
+        collectedAt: primaryTicket.collectedAt,
+        eventDate: primaryTicket.eventDate,
+        venue: primaryTicket.venue,
+        boothLocation: primaryTicket.boothLocation,
+        accessType: primaryTicket.accessType,
+        sequence: primaryTicket.ticketSequence
+      } : null,
+      
+      // All tickets summary
+      ticketsSummary: {
+        total: registration.tickets.length,
+        generated: registration.tickets.filter(t => t.status === 'GENERATED').length,
+        sent: registration.tickets.filter(t => t.status === 'SENT').length,
+        collected: registration.tickets.filter(t => t.status === 'COLLECTED').length,
+        used: registration.tickets.filter(t => t.status === 'USED').length,
+        cancelled: registration.tickets.filter(t => t.status === 'CANCELLED').length
+      },
+      
+      // All tickets list (for detailed view)
+      allTickets: registration.tickets.map(ticket => ({
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        status: ticket.status,
+        sequence: ticket.ticketSequence,
+        issuedAt: ticket.issuedAt,
+        sentAt: ticket.sentAt,
+        collectedAt: ticket.collectedAt
+      })),
+      
+      // Payment information
+      payment: registration.payment ? {
+        status: registration.payment.status,
+        amount: registration.payment.amount,
+        currency: registration.payment.currency,
+        paidAt: registration.payment.paidAt
+      } : null,
+      
+      // Panel interests
+      panelInterests: registration.panelInterests.map(interest => ({
+        id: interest.id,
+        panelType: interest.panelType,
+        interestLevel: interest.interestLevel,
+        status: interest.status
+      }))
     }
 
     return NextResponse.json({
@@ -90,3 +150,36 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// Optional: Add GET method for simpler searches
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const email = searchParams.get('email')
+    const ticketNumber = searchParams.get('ticket')
+    
+    if (!email && !ticketNumber) {
+      return NextResponse.json(
+        { success: false, message: 'Either email or ticket parameter is required' },
+        { status: 400 }
+      )
+    }
+    
+    // Use the same logic as POST
+    const searchType = email ? 'email' : 'ticket'
+    const searchValue = email || ticketNumber || ''
+    
+    // Call the same search logic (you could extract this to a shared function)
+    const mockRequest = {
+      json: async () => ({ searchType, searchValue })
+    } as NextRequest
+    
+    return await POST(mockRequest)
+    
+  } catch (error) {
+    console.error('Error in GET ticket status:', error)
+    return NextResponse.json(
+      { success: false, message: 'Internal server error' },
+      { status: 500 }
+    )
+  }
+}

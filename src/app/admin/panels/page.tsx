@@ -54,7 +54,7 @@ export default function PanelLeadsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900">Panel Leads</h1>
         <p className="mt-2 text-gray-600">

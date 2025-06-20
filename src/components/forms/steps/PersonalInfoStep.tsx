@@ -1,5 +1,3 @@
-
-// src/components/forms/steps/PersonalInfoStep.tsx - With real-time validation
 'use client'
 
 import { useState } from 'react'
@@ -56,7 +54,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
             placeholder="First name"
             value={formData.firstName}
             onChange={(e) => handleFieldChange('firstName', e.target.value)}
-            className={getFieldClasses('firstName')}
+            className={`${getFieldClasses('firstName')} placeholder-gray-500 opacity-50`} 
             required
           />
           {fieldErrors.firstName && (
@@ -74,7 +72,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
             placeholder="Last name"
             value={formData.lastName}
             onChange={(e) => handleFieldChange('lastName', e.target.value)}
-            className={getFieldClasses('lastName')}
+            className={`${getFieldClasses('lastName')} placeholder-gray-500 opacity-50`} 
             required
           />
           {fieldErrors.lastName && (
@@ -94,7 +92,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           placeholder="your@email.com"
           value={formData.email}
           onChange={(e) => handleFieldChange('email', e.target.value)}
-          className={getFieldClasses('email')}
+          className={`${getFieldClasses('email')} placeholder-gray-500 opacity-50`} 
           required
         />
         {fieldErrors.email && (
@@ -118,7 +116,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           placeholder="+356 1234 5678"
           value={formData.phone}
           onChange={(e) => handleFieldChange('phone', e.target.value)}
-          className={getFieldClasses('phone')}
+          className={`${getFieldClasses('phone')} placeholder-gray-500 opacity-50`} 
           required
         />
         {fieldErrors.phone && (
@@ -136,7 +134,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           placeholder="ID number"
           value={formData.idCardNumber}
           onChange={(e) => handleFieldChange('idCardNumber', e.target.value)}
-          className={getFieldClasses('idCardNumber')}
+          className={`${getFieldClasses('idCardNumber')} placeholder-gray-500 opacity-50`} 
           required
         />
         {fieldErrors.idCardNumber && (

@@ -1,12 +1,11 @@
-// src/components/admin/RegistrationsTable.tsx - Main component with proper types
+// src/components/admin/RegistrationsTable.tsx - Improved with EMS colors and better performance
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/components/ui/use-toast'
 
-import { StatsCards } from './StatsCards'
 import { SearchFilters } from './SearchFilters'
 import { RegistrationRow } from './RegistrationRow'
 import { RegistrationDetailsModal } from './RegistrationDetailsModal'
@@ -48,14 +47,6 @@ interface RegistrationData {
   }>
 }
 
-interface StatsData {
-  total: number
-  pending: number
-  completed: number
-  rejected: number
-  paymentPending: number
-}
-
 interface SearchFilters {
   search: string
   status: string
@@ -65,26 +56,22 @@ interface SearchFilters {
 
 export function RegistrationsTable() {
   const [registrations, setRegistrations] = useState<RegistrationData[]>([])
-  const [stats, setStats] = useState<StatsData>({
-    total: 0,
-    pending: 0,
-    completed: 0,
-    rejected: 0,
-    paymentPending: 0
-  })
   const [loading, setLoading] = useState(true)
   const [filters, setFilters] = useState<SearchFilters>({
     search: '',
     status: 'all',
     page: 1,
-    limit: 20
+    limit: 50
   })
   const [selectedRegistration, setSelectedRegistration] = useState<RegistrationData | null>(null)
   const [processingAction, setProcessingAction] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [actionNotes, setActionNotes] = useState('')
 
-  const fetchRegistrations = async () => {
+  // Debounced search to reduce API calls
+  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null)
+
+  const fetchRegistrations = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams({
@@ -94,12 +81,18 @@ export function RegistrationsTable() {
         limit: filters.limit.toString()
       })
 
-      const response = await fetch(`/api/admin/registrations?${params}`)
+      const response = await fetch(`/api/admin/registrations?${params}`, {
+        method: 'GET',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Content-Type': 'application/json'
+        }
+      })
+      
       const result = await response.json()
       
       if (result.success) {
-        setRegistrations(result.data.registrations)
-        setStats(result.data.stats)
+        setRegistrations(result.data.registrations || [])
       } else {
         toast({
           title: "Error",
@@ -117,13 +110,31 @@ export function RegistrationsTable() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [filters])
 
   useEffect(() => {
     fetchRegistrations()
-  }, [filters])
+  }, [fetchRegistrations])
 
-  const handleAction = async (registrationId: string, action: 'APPROVE' | 'REJECT') => {
+  const handleSearchChange = useCallback((value: string) => {
+    // Clear existing debounce
+    if (searchDebounce) {
+      clearTimeout(searchDebounce)
+    }
+
+    // Set new debounce
+    const timeout = setTimeout(() => {
+      setFilters(prev => ({ ...prev, search: value, page: 1 }))
+    }, 300)
+
+    setSearchDebounce(timeout)
+  }, [searchDebounce])
+
+  const handleStatusChange = useCallback((value: string) => {
+    setFilters(prev => ({ ...prev, status: value, page: 1 }))
+  }, [])
+
+  const handleAction = useCallback(async (registrationId: string, action: 'APPROVE' | 'REJECT') => {
     setProcessingAction(registrationId)
     try {
       const response = await fetch('/api/admin/approve-registration', {
@@ -144,7 +155,7 @@ export function RegistrationsTable() {
           description: `Registration ${action.toLowerCase()}d successfully`,
         })
         
-        // Update the registration in the list with proper types
+        // Optimistic update for faster UI response
         setRegistrations((prev: RegistrationData[]) => prev.map((reg: RegistrationData) => 
           reg.id === registrationId 
             ? { 
@@ -161,8 +172,8 @@ export function RegistrationsTable() {
         setSelectedRegistration(null)
         setActionNotes('')
         
-        // Refresh stats
-        fetchRegistrations()
+        // Refresh in background
+        setTimeout(fetchRegistrations, 500)
       } else {
         toast({
           title: "Error",
@@ -179,63 +190,96 @@ export function RegistrationsTable() {
     } finally {
       setProcessingAction(null)
     }
-  }
+  }, [actionNotes, fetchRegistrations])
 
-  const handleView = (registrationId: string) => {
+  const handleView = useCallback((registrationId: string) => {
     const registration = registrations.find((r: RegistrationData) => r.id === registrationId)
     if (registration) {
       setSelectedRegistration(registration)
       setActionNotes(registration.adminNotes || '')
       setDialogOpen(true)
     }
-  }
+  }, [registrations])
+
+  // Memoized statistics for better performance
+  const statistics = useMemo(() => {
+    return registrations.reduce((acc, reg) => {
+      acc.total = registrations.length
+      acc[reg.status.toLowerCase() as keyof typeof acc] = (acc[reg.status.toLowerCase() as keyof typeof acc] || 0) + 1
+      return acc
+    }, {
+      total: 0,
+      pending: 0,
+      completed: 0,
+      rejected: 0,
+      payment_pending: 0
+    })
+  }, [registrations])
 
   return (
-    <div className="space-y-4">
-      <StatsCards stats={stats} loading={loading} />
+    <div className="space-y-1">
+      {/* Header with EMS colors */}
+      <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-xl border border-green-200">
+       
+        
+        {/* Quick stats in header */}
+        <div className="flex gap-6 text-sm">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+            <span className="text-gray-700">Total: <strong>{statistics.total}</strong></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+            <span className="text-gray-700">Pending: <strong>{statistics.pending}</strong></span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <span className="text-gray-700">Approved: <strong>{statistics.completed}</strong></span>
+          </div>
+        </div>
+      </div>
       
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">Registrations</CardTitle>
-          <CardDescription>
-            Manage client registrations and verification process
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SearchFilters
-            search={filters.search}
-            status={filters.status}
-            onSearchChange={(value) => setFilters(prev => ({ ...prev, search: value, page: 1 }))}
-            onStatusChange={(value) => setFilters(prev => ({ ...prev, status: value, page: 1 }))}
-          />
+      <Card className="shadow-sm border-green-100">
+       
+        <CardContent className="p-0">
+          {/* Search filters with better styling */}
+          <div className="p-6 bg-gray-50/50 border-b">
+            <SearchFilters
+              search={filters.search}
+              status={filters.status}
+              onSearchChange={handleSearchChange}
+              onStatusChange={handleStatusChange}
+            />
+          </div>
 
-          <div className="rounded-md border">
+          <div className="overflow-hidden">
             <Table>
               <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="py-2 text-xs">Customer</TableHead>
-                  <TableHead className="py-2 text-xs">Contact</TableHead>
-                  <TableHead className="py-2 text-xs">Type</TableHead>
-                  <TableHead className="py-2 text-xs">Status</TableHead>
-                  <TableHead className="py-2 text-xs">Ticket</TableHead>
-                  <TableHead className="py-2 text-xs">Panel Interest</TableHead>
-                  <TableHead className="py-2 text-xs">Registered</TableHead>
-                  <TableHead className="py-2 text-xs">Actions</TableHead>
+                <TableRow className="bg-gradient-to-r from-green-50 to-blue-50 border-b-2 border-green-200">
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Customer</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Contact</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Type</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Status</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Ticket</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Solar Interest</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Registered</TableHead>
+                  <TableHead className="py-3 text-sm font-semibold text-gray-700">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
+                  // Enhanced loading skeleton
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <TableRow key={i} className="animate-pulse">
                       {Array.from({ length: 8 }).map((_, j) => (
-                        <TableCell key={j} className="py-2">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                        <TableCell key={j} className="py-4">
+                          <div className="h-4 bg-gradient-to-r from-gray-200 to-gray-300 rounded"></div>
                         </TableCell>
                       ))}
                     </TableRow>
                   ))
-                ) : (
-                  registrations.map((registration: RegistrationData) => (
+                ) : registrations.length > 0 ? (
+                  registrations.map((registration: RegistrationData, index) => (
                     <RegistrationRow
                       key={registration.id}
                       registration={registration}
@@ -243,18 +287,31 @@ export function RegistrationsTable() {
                       onApprove={(id) => handleAction(id, 'APPROVE')}
                       onReject={(id) => handleAction(id, 'REJECT')}
                       processing={processingAction === registration.id}
+                      index={index}
                     />
                   ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={8} className="py-12 text-center">
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="w-16 h-16 bg-gradient-to-br from-green-100 to-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-green-600 text-2xl">📋</span>
+                        </div>
+                        <div>
+                          <p className="text-gray-500 font-medium">No registrations found</p>
+                          <p className="text-gray-400 text-sm mt-1">
+                            {filters.search || filters.status !== 'all' 
+                              ? 'Try adjusting your search filters' 
+                              : 'Registrations will appear here when customers sign up'}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                  </TableRow>
                 )}
               </TableBody>
             </Table>
           </div>
-
-          {!loading && registrations.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              No registrations found.
-            </div>
-          )}
         </CardContent>
       </Card>
 

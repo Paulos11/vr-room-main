@@ -1,22 +1,21 @@
-
 // src/hooks/useAsyncAction.ts
 import { useState, useCallback } from 'react'
 import { toast } from '@/components/ui/use-toast'
 
-interface UseAsyncActionOptions {
+interface UseAsyncActionOptions<T = any> {
   successMessage?: string
   errorMessage?: string
-  onSuccess?: () => void
+  onSuccess?: (result: T) => void
   onError?: (error: any) => void
 }
 
-export function useAsyncAction(options: UseAsyncActionOptions = {}) {
+export function useAsyncAction<T = any>(options: UseAsyncActionOptions<T> = {}) {
   const [loading, setLoading] = useState(false)
 
   const execute = useCallback(async (
-    action: () => Promise<any>,
+    action: () => Promise<T>,
     optimisticUpdate?: () => void
-  ) => {
+  ): Promise<T | undefined> => {
     if (loading) return // Prevent double execution
 
     setLoading(true)

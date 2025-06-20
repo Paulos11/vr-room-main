@@ -1,13 +1,12 @@
-
-// src/components/forms/EnhancedRegistrationForm.tsx - Updated with better error handling
+// src/components/forms/EnhancedRegistrationForm.tsx - Fixed Version
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/components/ui/use-toast'
-import { Loader2, ArrowLeft, ArrowRight, AlertTriangle } from 'lucide-react'
+import { Loader2, ArrowLeft, ArrowRight, AlertTriangle, Crown } from 'lucide-react'
 
 import { CustomerSelectionDialog } from './CustomerSelectionDialog'
 import { PersonalInfoStep } from './steps/PersonalInfoStep'
@@ -37,56 +36,50 @@ export function EnhancedRegistrationForm() {
 
   const totalSteps = formData.isEmsClient ? 4 : 3
 
-  const handleCustomerTypeSelected = (isEmsClient: boolean) => {
+  // Calculate total cost - this is a VALUE, not a function
+  const totalCost = useMemo(() => {
+    if (formData.isEmsClient) return 'Free'
+    return `€${((formData.quantity || 1) * 50).toFixed(2)}`
+  }, [formData.isEmsClient, formData.quantity])
+
+  const handleCustomerTypeSelected = useCallback((isEmsClient: boolean) => {
     setFormData(prev => ({ 
       ...prev, 
       isEmsClient,
-      quantity: isEmsClient ? 1 : (prev.quantity || 1) // EMS customers get 1 free ticket
+      quantity: isEmsClient ? 1 : (prev.quantity || 1)
     }))
     setShowCustomerDialog(false)
-  }
+  }, [])
 
-  const handleInputChange = (field: keyof RegistrationFormData, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
-  }
+  const handleInputChange = useCallback((field: keyof RegistrationFormData, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+  }, [])
 
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     const isStepValid = validateStep(currentStep, formData)
     
     if (isStepValid) {
       setCurrentStep(prev => Math.min(prev + 1, totalSteps))
     } else {
       toast({
-        title: "Please fix the errors",
-        description: "Check the highlighted fields and fix any errors before continuing.",
+        title: "Please complete required fields",
+        description: "Check the highlighted fields and fix any errors.",
         variant: "destructive",
       })
     }
-  }
+  }, [currentStep, formData, totalSteps])
 
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     setCurrentStep(prev => Math.max(prev - 1, 1))
-  }
+  }, [])
 
-  const handleSubmit = async () => {
-    // Validate all fields before submission
+  const handleSubmit = useCallback(async () => {
     const validation = validateAllFields(formData)
     
     if (!validation.isValid) {
       toast({
-        title: "Please fix the following errors:",
-        description: (
-          <div className="mt-2">
-            <ul className="list-disc list-inside space-y-1">
-              {validation.errors.map((error, index) => (
-                <li key={index} className="text-sm">{error}</li>
-              ))}
-            </ul>
-          </div>
-        ),
+        title: "Please fix errors:",
+        description: validation.errors.join(', '),
         variant: "destructive",
       })
       return
@@ -95,7 +88,6 @@ export function EnhancedRegistrationForm() {
     setIsSubmitting(true)
 
     try {
-      // Clean the data before sending
       const cleanedData = {
         ...formData,
         firstName: formData.firstName.trim(),
@@ -106,24 +98,19 @@ export function EnhancedRegistrationForm() {
         quantity: formData.isEmsClient ? 1 : (formData.quantity || 1)
       }
 
-      console.log('Submitting registration data:', cleanedData)
-
       const response = await fetch('/api/register', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cleanedData),
       })
 
       const result = await response.json()
-      console.log('Registration response:', result)
 
       if (response.ok && result.success) {
         toast({
           title: "Registration successful!",
           description: formData.isEmsClient 
-            ? "Your registration is pending approval." 
+            ? "Pending approval." 
             : "Redirecting to payment...",
         })
 
@@ -135,24 +122,22 @@ export function EnhancedRegistrationForm() {
       } else {
         toast({
           title: "Registration Failed",
-          description: result.message || "Something went wrong. Please try again.",
+          description: result.message || "Please try again.",
           variant: "destructive",
         })
       }
     } catch (error) {
-      console.error('Registration error:', error)
       toast({
-        title: "Registration Failed",
-        description: "Network error. Please try again.",
+        title: "Network Error",
+        description: "Please check connection and try again.",
         variant: "destructive",
       })
     } finally {
       setIsSubmitting(false)
     }
-  }
+  }, [formData, router])
 
-  const renderStepContent = () => {
-    // Adjust step numbers based on customer type
+  const renderStepContent = useCallback(() => {
     const actualStep = formData.isEmsClient ? currentStep : (currentStep === 1 ? 1 : currentStep + 1)
 
     switch (actualStep) {
@@ -167,16 +152,11 @@ export function EnhancedRegistrationForm() {
       default:
         return null
     }
-  }
+  }, [currentStep, formData, handleInputChange])
 
-  const getTotalCost = () => {
-    if (formData.isEmsClient) return 'Free'
-    return `€${((formData.quantity || 1) * 50).toFixed(2)}`
-  }
-
-  const isCurrentStepValid = () => {
+  const isCurrentStepValid = useMemo(() => {
     return validateStep(currentStep, formData)
-  }
+  }, [currentStep, formData])
 
   if (showCustomerDialog) {
     return <CustomerSelectionDialog open={showCustomerDialog} onCustomerTypeSelected={handleCustomerTypeSelected} />
@@ -184,90 +164,94 @@ export function EnhancedRegistrationForm() {
 
   return (
     <div className="w-full max-w-md mx-auto">
-      <Card className="shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xl text-center">
-            {formData.isEmsClient ? 'EMS Customer' : 'VIP Registration'}
-          </CardTitle>
-          <CardDescription className="text-center text-sm">
-            {formData.isEmsClient 
-              ? 'Free VIP access - pending verification'
-              : `${formData.quantity || 1} VIP ticket(s) - ${getTotalCost()}`
-            }
-          </CardDescription>
+      <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+        {/* Header with enhanced styling */}
+        <CardHeader className="pb-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-t-lg">
+          <div className="text-center">
+            {formData.isEmsClient && (
+              <Crown className="h-6 w-6 text-yellow-500 mx-auto mb-2" />
+            )}
+            <CardTitle className="text-xl text-gray-800">
+              {formData.isEmsClient ? 'EMS Customer Registration' : 'VIP Ticket Registration'}
+            </CardTitle>
+            <CardDescription className="text-sm text-gray-600">
+              {formData.isEmsClient 
+                ? 'Free VIP access - verification required'
+                : `${formData.quantity || 1} VIP ticket(s) - ${totalCost}`
+              }
+            </CardDescription>
+          </div>
           
-          {/* Compact Progress Bar */}
-          <div className="w-full bg-gray-200 rounded-full h-1.5 mt-3">
+          {/* Enhanced Progress Bar */}
+          <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
             <div 
-              className="bg-blue-600 h-1.5 rounded-full transition-all duration-300" 
+              className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500 ease-out" 
               style={{ width: `${(currentStep / totalSteps) * 100}%` }}
             />
           </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1">
-            <span>Step {currentStep}/{totalSteps}</span>
-            <span>{Math.round((currentStep / totalSteps) * 100)}%</span>
+          <div className="flex justify-between text-xs text-gray-500 mt-2">
+            <span>Step {currentStep} of {totalSteps}</span>
+            <span className="font-medium">{Math.round((currentStep / totalSteps) * 100)}% Complete</span>
           </div>
         </CardHeader>
         
-        <CardContent className="px-4 pb-4">
-          <div className="min-h-[320px]">
+        <CardContent className="px-6 pb-6">
+          {/* Step Content with min height for smooth transitions */}
+          <div className="min-h-[300px] transition-all duration-300">
             {renderStepContent()}
           </div>
           
           {/* Step Validation Warning */}
-          {!isCurrentStepValid() && currentStep > 1 && (
-            <div className="flex items-center gap-2 p-2 bg-orange-50 border border-orange-200 rounded mt-4">
-              <AlertTriangle className="h-4 w-4 text-orange-600" />
-              <p className="text-xs text-orange-800">
+          {!isCurrentStepValid && currentStep > 1 && (
+            <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg mt-4 animate-in slide-in-from-top-2 duration-200">
+              <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
+              <p className="text-sm text-orange-800">
                 Please complete all required fields above
               </p>
             </div>
           )}
           
-          {/* Compact Navigation */}
+          {/* Enhanced Navigation */}
           <div className="flex justify-between mt-6 gap-3">
             <Button 
               variant="outline" 
               onClick={handlePrevious}
               disabled={currentStep === 1}
-              size="sm"
-              className="flex-1"
+              className="flex-1 h-10 transition-all duration-200 hover:bg-gray-50"
             >
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              Back
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Previous
             </Button>
             
             {currentStep < totalSteps ? (
               <Button 
                 onClick={handleNext}
-                size="sm"
-                className="flex-1"
-                disabled={!isCurrentStepValid()}
+                className="flex-1 h-10 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 transition-all duration-200"
+                disabled={!isCurrentStepValid}
               >
-                Next
-                <ArrowRight className="ml-1 h-4 w-4" />
+                Continue
+                <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             ) : (
               <Button 
                 onClick={handleSubmit}
-                disabled={isSubmitting || !isCurrentStepValid()}
-                size="sm"
-                className="flex-1"
+                disabled={isSubmitting || !isCurrentStepValid}
+                className="flex-1 h-10 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all duration-200"
               >
-                {isSubmitting && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-                {isSubmitting ? 'Submitting...' : 
-                 formData.isEmsClient ? 'Submit' : `Pay ${getTotalCost()}`}
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSubmitting ? 'Processing...' : 
+                 formData.isEmsClient ? 'Submit Registration' : `Pay ${totalCost}`}
               </Button>
             )}
           </div>
           
           {/* Customer Type Change */}
-          <div className="text-center mt-3">
+          <div className="text-center mt-4">
             <Button 
               variant="ghost" 
               size="sm"
               onClick={() => setShowCustomerDialog(true)}
-              className="text-gray-500 text-xs h-8"
+              className="text-gray-500 text-sm h-8 hover:bg-green-50 transition-colors"
             >
               Change customer type
             </Button>

@@ -1,27 +1,38 @@
 // src/types/index.ts
-import { Client, Ticket, PanelInterest, AdminUser, EmailLog } from '@prisma/client'
+import { Registration, Ticket, PanelInterest, AdminUser, EmailLog, Payment } from '@prisma/client'
 
-export type ClientWithRelations = Client & {
+export type RegistrationWithRelations = Registration & {
   tickets: Ticket[]
   panelInterests: PanelInterest[]
   emailLogs: EmailLog[]
+  payment?: Payment
 }
 
-export type TicketWithClient = Ticket & {
-  client: Client
+export type TicketWithRegistration = Ticket & {
+  registration: Registration
 }
 
-export type PanelInterestWithClient = PanelInterest & {
-  client: Client
+export type PanelInterestWithRegistration = PanelInterest & {
+  registration: Registration
+}
+
+export type PaymentWithRegistration = Payment & {
+  registration: Registration
 }
 
 export interface DashboardStats {
   totalRegistrations: number
   pendingVerifications: number
-  verifiedClients: number
+  verifiedRegistrations: number
+  completedRegistrations: number
   ticketsGenerated: number
   panelInterests: number
-  recentRegistrations: Client[]
+  recentRegistrations: Registration[]
+  paymentStats: {
+    totalPaid: number
+    pendingPayments: number
+    failedPayments: number
+  }
 }
 
 export interface EventInfo {
@@ -60,13 +71,14 @@ export interface EmailTemplate {
 
 export interface TicketData {
   ticketNumber: string
-  clientName: string
+  registrationName: string
   eventName: string
   eventDates: string
   venue: string
   boothLocation: string
   qrCode: string
   instructions: string
+  accessType: string
 }
 
 // API Response types
@@ -94,20 +106,49 @@ export interface RegistrationFormData {
   lastName: string
   email: string
   phone: string
-  idNumber: string
+  idCardNumber: string
+  isEmsClient?: boolean
+  companyName?: string
+  emsCustomerId?: string
+  accountManager?: string
   panelInterest?: boolean
   panelType?: string
-  interestLevel?: 'HIGH' | 'MEDIUM' | 'LOW'
+  interestLevel?: 'HIGH' | 'MEDIUM' | 'LOW' | 'URGENT'
+  estimatedBudget?: string
+  timeframe?: string
+  notes?: string
   acceptTerms: boolean
 }
 
 export interface SearchFilters {
   search?: string
   status?: string
+  isEmsClient?: boolean
   dateFrom?: string
   dateTo?: string
   page?: number
   limit?: number
+}
+
+// Admin interface types
+export interface AdminStats {
+  totalRegistrations: number
+  byStatus: Record<string, number>
+  ticketStats: Record<string, number>
+  paymentStats: Record<string, number>
+  recentActivity: Array<{
+    id: string
+    type: string
+    description: string
+    timestamp: Date
+  }>
+}
+
+export interface TicketValidation {
+  valid: boolean
+  message: string
+  ticket?: TicketWithRegistration
+  qrData?: any
 }
 
 // Configuration types
@@ -117,3 +158,14 @@ export interface AppConfig {
   activities: ActivityInfo[]
   emailTemplates: EmailTemplate[]
 }
+
+// Enum types for better type safety
+export type RegistrationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'PAYMENT_PENDING' | 'COMPLETED'
+export type TicketStatus = 'GENERATED' | 'SENT' | 'COLLECTED' | 'USED' | 'EXPIRED' | 'CANCELLED'
+export type PaymentStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'REFUNDED'
+export type AccessType = 'STANDARD' | 'VIP' | 'PRESS' | 'EXHIBITOR'
+export type InterestLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+export type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL_SENT' | 'NEGOTIATING' | 'CONVERTED' | 'LOST' | 'CLOSED'
+export type AdminRole = 'SUPER_ADMIN' | 'ADMIN' | 'BOOTH_STAFF' | 'SALES_MANAGER'
+export type EmailType = 'REGISTRATION_CONFIRMATION' | 'ADMIN_APPROVAL_NEEDED' | 'REGISTRATION_APPROVED' | 'REGISTRATION_REJECTED' | 'PAYMENT_REQUIRED' | 'PAYMENT_CONFIRMATION' | 'TICKET_DELIVERY' | 'EVENT_REMINDER' | 'PANEL_FOLLOWUP' | 'CHECK_IN_CONFIRMATION'
+export type EmailStatus = 'SENT' | 'FAILED' | 'OPENED' | 'CLICKED' | 'BOUNCED'

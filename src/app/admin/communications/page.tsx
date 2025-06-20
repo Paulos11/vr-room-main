@@ -76,9 +76,9 @@ export default function CommunicationsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-8">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Communications</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Communications</h1>
         <p className="mt-2 text-gray-600">
           Manage email campaigns and communication templates
         </p>

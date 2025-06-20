@@ -1,7 +1,7 @@
-// src/app/admin/tickets/page.tsx - Complete tickets management page
+// src/app/admin/tickets/page.tsx - Optimized with EMS colors and better performance
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,10 +18,10 @@ import {
   Search,
   MoreHorizontal,
   RefreshCw,
-  Users,
   AlertCircle,
   QrCode,
-  Plus
+  Plus,
+  Filter
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -30,7 +30,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { TicketStatsCards } from '@/components/admin/TicketStatsCards'
 import { GenerateTicketDialog } from '@/components/admin/GenerateTicketDialog'
 
 interface TicketData {
@@ -58,50 +57,33 @@ interface TicketData {
   }
 }
 
-interface TicketStats {
-  total: number
-  generated: number
-  sent: number
-  collected: number
-  used: number
-  expired: number
-  cancelled: number
-}
-
 export default function AdminTicketsPage() {
   const [tickets, setTickets] = useState<TicketData[]>([])
-  const [stats, setStats] = useState<TicketStats>({
-    total: 0,
-    generated: 0,
-    sent: 0,
-    collected: 0,
-    used: 0,
-    expired: 0,
-    cancelled: 0
-  })
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [page, setPage] = useState(1)
   const [processingAction, setProcessingAction] = useState<string | null>(null)
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
+  
+  // Debounced search
+  const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null)
 
-  const fetchTickets = async () => {
+  const fetchTickets = useCallback(async () => {
     try {
       setLoading(true)
       const params = new URLSearchParams({
         search: search,
         status: statusFilter === 'all' ? '' : statusFilter,
-        page: page.toString(),
-        limit: '20'
+        limit: '100'
       })
 
-      const response = await fetch(`/api/admin/tickets?${params}`)
+      const response = await fetch(`/api/admin/tickets?${params}`, {
+        headers: { 'Cache-Control': 'no-cache' }
+      })
       const result = await response.json()
       
       if (result.success) {
-        setTickets(result.data.tickets)
-        setStats(result.data.stats)
+        setTickets(result.data.tickets || [])
       } else {
         toast({
           title: "Error",
@@ -119,22 +101,25 @@ export default function AdminTicketsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [search, statusFilter])
 
   useEffect(() => {
     fetchTickets()
-  }, [search, statusFilter, page])
+  }, [fetchTickets])
 
-  const handleTicketAction = async (ticketId: string, action: string) => {
+  const handleSearchChange = useCallback((value: string) => {
+    if (searchDebounce) clearTimeout(searchDebounce)
+    const timeout = setTimeout(() => setSearch(value), 300)
+    setSearchDebounce(timeout)
+  }, [searchDebounce])
+
+  const handleTicketAction = useCallback(async (ticketId: string, action: string) => {
     setProcessingAction(ticketId)
     try {
       const response = await fetch(`/api/admin/tickets/${ticketId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          adminUser: 'Admin User' // You can get this from auth context
-        }),
+        body: JSON.stringify({ action, adminUser: 'Admin User' }),
       })
 
       const result = await response.json()
@@ -145,15 +130,19 @@ export default function AdminTicketsPage() {
           description: result.message,
         })
         
-        // Update ticket in list
+        // Optimistic update
         setTickets(prev => prev.map(ticket => 
           ticket.id === ticketId 
-            ? { ...ticket, status: getNewStatus(action), [getTimestampField(action)]: new Date().toISOString() }
+            ? { 
+                ...ticket, 
+                status: getNewStatus(action), 
+                [getTimestampField(action)]: new Date().toISOString() 
+              }
             : ticket
         ))
         
-        // Refresh stats
-        fetchTickets()
+        // Background refresh
+        setTimeout(fetchTickets, 500)
       } else {
         toast({
           title: "Error",
@@ -170,42 +159,42 @@ export default function AdminTicketsPage() {
     } finally {
       setProcessingAction(null)
     }
-  }
+  }, [fetchTickets])
 
   const getNewStatus = (action: string) => {
-    switch (action) {
-      case 'SEND': return 'SENT'
-      case 'COLLECT': return 'COLLECTED'
-      case 'USE': return 'USED'
-      case 'CANCEL': return 'CANCELLED'
-      case 'REGENERATE': return 'GENERATED'
-      default: return 'GENERATED'
+    const statusMap: Record<string, string> = {
+      'SEND': 'SENT',
+      'COLLECT': 'COLLECTED',
+      'USE': 'USED',
+      'CANCEL': 'CANCELLED',
+      'REGENERATE': 'GENERATED'
     }
+    return statusMap[action] || 'GENERATED'
   }
 
   const getTimestampField = (action: string) => {
-    switch (action) {
-      case 'SEND': return 'sentAt'
-      case 'COLLECT': return 'collectedAt'
-      default: return 'issuedAt'
+    const fieldMap: Record<string, string> = {
+      'SEND': 'sentAt',
+      'COLLECT': 'collectedAt'
     }
+    return fieldMap[action] || 'issuedAt'
   }
 
   const getStatusBadge = (status: string) => {
-    const variants: Record<string, any> = {
-      GENERATED: { variant: 'outline', color: 'text-orange-600', icon: Clock },
-      SENT: { variant: 'secondary', color: 'text-blue-600', icon: Send },
-      COLLECTED: { variant: 'secondary', color: 'text-purple-600', icon: CheckCircle },
-      USED: { variant: 'default', color: 'text-green-600', icon: CheckCircle },
-      EXPIRED: { variant: 'destructive', color: 'text-red-600', icon: AlertCircle },
-      CANCELLED: { variant: 'destructive', color: 'text-gray-600', icon: AlertCircle }
+    const statusStyles: Record<string, { className: string; icon: any }> = {
+      GENERATED: { className: 'bg-orange-100 text-orange-700 border-orange-200', icon: Clock },
+      SENT: { className: 'bg-blue-100 text-blue-700 border-blue-200', icon: Send },
+      COLLECTED: { className: 'bg-purple-100 text-purple-700 border-purple-200', icon: CheckCircle },
+      USED: { className: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle },
+      EXPIRED: { className: 'bg-red-100 text-red-700 border-red-200', icon: AlertCircle },
+      CANCELLED: { className: 'bg-gray-100 text-gray-700 border-gray-200', icon: AlertCircle }
     }
 
-    const config = variants[status] || variants.GENERATED
+    const config = statusStyles[status] || statusStyles.GENERATED
     const Icon = config.icon
 
     return (
-      <Badge variant={config.variant} className="text-xs">
+      <Badge variant="outline" className={`text-xs font-medium ${config.className}`}>
         <Icon className="w-3 h-3 mr-1" />
         {status}
       </Badge>
@@ -249,223 +238,292 @@ export default function AdminTicketsPage() {
     })
   }
 
+  // Memoized statistics
+  const statistics = useMemo(() => {
+    return tickets.reduce((acc, ticket) => {
+      acc.total = tickets.length
+      acc[ticket.status.toLowerCase() as keyof typeof acc] = (acc[ticket.status.toLowerCase() as keyof typeof acc] || 0) + 1
+      return acc
+    }, {
+      total: 0,
+      generated: 0,
+      sent: 0,
+      collected: 0,
+      used: 0,
+      expired: 0,
+      cancelled: 0
+    })
+  }, [tickets])
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tickets Management</h1>
-          <p className="mt-2 text-gray-600">
-            Manage generated tickets, delivery status, and ticket operations
-          </p>
-        </div>
-        <Button onClick={() => setShowGenerateDialog(true)}>
-          <Plus className="w-4 h-4 mr-2" />
-          Generate Tickets
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <TicketStatsCards stats={stats} loading={loading} />
-
-      {/* Main Tickets Table */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg">All Tickets</CardTitle>
-          <CardDescription>
-            View and manage all generated tickets
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {/* Search and Filters */}
-          <div className="flex gap-3 mb-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search by ticket number, customer name, email..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8 h-9"
-              />
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-green-50/30">
+      <div className="container mx-auto px-4 py-6 space-y-6">
+        {/* Header with EMS styling */}
+        <div className="bg-gradient-to-r from-green-50 to-blue-50 p-6 rounded-xl border border-green-200">
+          <div className="flex justify-between items-start">
+            <div>
+              <p className="text-gray-600 mb-4">
+                Generate, manage and track all event tickets
+              </p>
+              
+              {/* Compact stats */}
+              <div className="flex gap-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <span>Total: <strong>{statistics.total}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
+                  <span>Generated: <strong>{statistics.generated}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+                  <span>Active: <strong>{statistics.sent + statistics.collected}</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
+                  <span>Used: <strong>{statistics.used}</strong></span>
+                </div>
+              </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40 h-9">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="GENERATED">Generated</SelectItem>
-                <SelectItem value="SENT">Sent</SelectItem>
-                <SelectItem value="COLLECTED">Collected</SelectItem>
-                <SelectItem value="USED">Used</SelectItem>
-                <SelectItem value="EXPIRED">Expired</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" onClick={fetchTickets}>
-              <RefreshCw className="w-4 h-4" />
+            
+            <Button 
+              onClick={() => setShowGenerateDialog(true)}
+              className="bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Generate Tickets
             </Button>
           </div>
+        </div>
 
-          <div className="rounded-md border">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-gray-50">
-                  <TableHead className="py-2 text-xs">Ticket</TableHead>
-                  <TableHead className="py-2 text-xs">Customer</TableHead>
-                  <TableHead className="py-2 text-xs">Type</TableHead>
-                  <TableHead className="py-2 text-xs">Status</TableHead>
-                  <TableHead className="py-2 text-xs">Generated</TableHead>
-                  <TableHead className="py-2 text-xs">Sent</TableHead>
-                  <TableHead className="py-2 text-xs">Collected</TableHead>
-                  <TableHead className="py-2 text-xs">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  Array.from({ length: 10 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 8 }).map((_, j) => (
-                        <TableCell key={j} className="py-2">
-                          <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  tickets.map((ticket) => (
-                    <TableRow key={ticket.id} className="hover:bg-gray-50">
-                      <TableCell className="py-2">
-                        <div>
-                          <p className="font-mono text-sm font-medium">{ticket.ticketNumber}</p>
-                          {ticket.sequence > 1 && (
-                            <p className="text-xs text-gray-500">Seq: {ticket.sequence}</p>
-                          )}
-                        </div>
-                      </TableCell>
+        {/* Main Table */}
+        <Card className="shadow-sm border-green-100">
+          <CardHeader className="pb-4 bg-gradient-to-r from-green-50/50 to-blue-50/50">
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle className="text-xl text-gray-800 flex items-center gap-2">
+                  <div className="w-2 h-6 bg-gradient-to-b from-green-500 to-blue-500 rounded-full"></div>
+                  Ticket Overview
+                </CardTitle>
+                <CardDescription className="text-gray-600">
+                  Monitor ticket status and manage delivery
+                </CardDescription>
+              </div>
+              <Button variant="outline" size="sm" onClick={fetchTickets} className="hover:bg-green-50">
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </div>
+            
+            {/* Enhanced Search and Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 mt-4">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by ticket number, customer name, or email..."
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  className="pl-10 h-10 border-2 border-gray-200 focus:border-green-400 focus:ring-green-400/20"
+                />
+              </div>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-48 h-10 border-2 border-gray-200 focus:border-blue-400">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-gray-500" />
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Tickets</SelectItem>
+                  <SelectItem value="GENERATED">Generated</SelectItem>
+                  <SelectItem value="SENT">Sent</SelectItem>
+                  <SelectItem value="COLLECTED">Collected</SelectItem>
+                  <SelectItem value="USED">Used</SelectItem>
+                  <SelectItem value="EXPIRED">Expired</SelectItem>
+                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          
+          <CardContent className="p-0">
+            <div className="overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-gradient-to-r from-green-50 to-blue-50 border-b-2 border-green-200">
+                    <TableHead className="py-3 text-sm font-semibold text-gray-700">Ticket</TableHead>
+                    <TableHead className="py-3 text-sm font-semibold text-gray-700">Customer</TableHead>
+                    <TableHead className="py-3 text-sm font-semibold text-gray-700">Status</TableHead>
+                    <TableHead className="py-3 text-sm font-semibold text-gray-700">Generated</TableHead>
+                    <TableHead className="py-3 text-sm font-semibold text-gray-700">Delivery</TableHead>
+                    <TableHead className="py-3 text-sm font-semibold text-gray-700">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <TableRow key={i} className="animate-pulse">
+                        {Array.from({ length: 6 }).map((_, j) => (
+                          <TableCell key={j} className="py-4">
+                            <div className="h-4 bg-gradient-to-r from-gray-200 to-gray-300 rounded"></div>
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
+                  ) : tickets.length > 0 ? (
+                    tickets.map((ticket, index) => {
+                      const isEven = index % 2 === 0
+                      const rowBg = isEven ? 'bg-white' : 'bg-green-50/30'
+                      const hoverBg = isEven ? 'hover:bg-green-50/50' : 'hover:bg-green-50/70'
                       
-                      <TableCell className="py-2">
-                        <div>
-                          <p className="font-medium text-sm">{ticket.customer.name}</p>
-                          <p className="text-xs text-gray-500">{ticket.customer.email}</p>
-                          <div className="flex items-center gap-1 mt-1">
-                            <Badge variant={ticket.customer.isEmsClient ? "default" : "outline"} className="text-xs">
-                              {ticket.customer.isEmsClient ? 'EMS' : 'Public'}
-                            </Badge>
+                      return (
+                        <TableRow key={ticket.id} className={`${rowBg} ${hoverBg} transition-all duration-200 border-b border-green-100/50`}>
+                          <TableCell className="py-3">
+                            <div>
+                              <p className="font-mono text-sm font-semibold text-gray-800">
+                                {ticket.ticketNumber}
+                              </p>
+                              {ticket.sequence > 1 && (
+                                <p className="text-xs text-gray-500">#{ticket.sequence}</p>
+                              )}
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="py-3">
+                            <div className="space-y-1">
+                              <p className="font-semibold text-sm text-gray-900">{ticket.customer.name}</p>
+                              <p className="text-xs text-gray-600">{ticket.customer.email}</p>
+                              <Badge 
+                                variant={ticket.customer.isEmsClient ? "default" : "outline"}
+                                className={`text-xs ${
+                                  ticket.customer.isEmsClient 
+                                    ? 'bg-green-500 text-white' 
+                                    : 'border-blue-300 text-blue-700'
+                                }`}
+                              >
+                                {ticket.customer.isEmsClient ? 'EMS' : 'Public'}
+                              </Badge>
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="py-3">
+                            {getStatusBadge(ticket.status)}
+                          </TableCell>
+                          
+                          <TableCell className="py-3">
+                            <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                              {formatDate(ticket.issuedAt)}
+                            </span>
+                          </TableCell>
+                          
+                          <TableCell className="py-3">
+                            <div className="text-xs space-y-1">
+                              {ticket.sentAt && (
+                                <div className="text-blue-600">Sent: {formatDate(ticket.sentAt)}</div>
+                              )}
+                              {ticket.collectedAt && (
+                                <div className="text-purple-600">
+                                  Collected: {formatDate(ticket.collectedAt)}
+                                  {ticket.collectedBy && <div className="text-gray-500">by {ticket.collectedBy}</div>}
+                                </div>
+                              )}
+                              {!ticket.sentAt && !ticket.collectedAt && (
+                                <span className="text-gray-400 italic">Not delivered</span>
+                              )}
+                            </div>
+                          </TableCell>
+                          
+                          <TableCell className="py-3">
+                            <div className="flex gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => downloadTicket(ticket.id)}
+                                className="h-8 w-8 p-0 hover:bg-blue-50 hover:border-blue-300"
+                                title="Download PDF"
+                              >
+                                <Download className="h-3 w-3" />
+                              </Button>
+                              
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="h-8 w-8 p-0 hover:bg-green-50 hover:border-green-300"
+                                    disabled={processingAction === ticket.id}
+                                  >
+                                    <MoreHorizontal className="h-3 w-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-48">
+                                  {ticket.status === 'GENERATED' && (
+                                    <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'SEND')}>
+                                      <Send className="w-4 h-4 mr-2 text-blue-600" />
+                                      Mark as Sent
+                                    </DropdownMenuItem>
+                                  )}
+                                  {(ticket.status === 'SENT' || ticket.status === 'GENERATED') && (
+                                    <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'COLLECT')}>
+                                      <CheckCircle className="w-4 h-4 mr-2 text-purple-600" />
+                                      Mark as Collected
+                                    </DropdownMenuItem>
+                                  )}
+                                  {ticket.status === 'COLLECTED' && (
+                                    <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'USE')}>
+                                      <QrCode className="w-4 h-4 mr-2 text-green-600" />
+                                      Check In
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'REGENERATE')}>
+                                    <RefreshCw className="w-4 h-4 mr-2 text-orange-600" />
+                                    Regenerate
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => handleTicketAction(ticket.id, 'CANCEL')}
+                                    className="text-red-600 focus:text-red-600"
+                                  >
+                                    <AlertCircle className="w-4 h-4 mr-2" />
+                                    Cancel
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-12 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <div className="w-16 h-16 bg-gradient-to-br from-green-100 to-blue-100 rounded-full flex items-center justify-center">
+                            <Ticket className="w-8 h-8 text-green-600" />
+                          </div>
+                          <div>
+                            <p className="text-gray-500 font-medium">No tickets found</p>
+                            <p className="text-gray-400 text-sm mt-1">
+                              {search || statusFilter !== 'all' 
+                                ? 'Try adjusting your search filters' 
+                                : 'Generate tickets for approved registrations'}
+                            </p>
                           </div>
                         </div>
                       </TableCell>
-                      
-                      <TableCell className="py-2">
-                        <Badge variant="outline" className="text-xs">
-                          {ticket.accessType}
-                        </Badge>
-                      </TableCell>
-                      
-                      <TableCell className="py-2">
-                        {getStatusBadge(ticket.status)}
-                      </TableCell>
-                      
-                      <TableCell className="py-2">
-                        <span className="text-xs text-gray-600">
-                          {formatDate(ticket.issuedAt)}
-                        </span>
-                      </TableCell>
-                      
-                      <TableCell className="py-2">
-                        <span className="text-xs text-gray-600">
-                          {ticket.sentAt ? formatDate(ticket.sentAt) : '-'}
-                        </span>
-                      </TableCell>
-                      
-                      <TableCell className="py-2">
-                        <div className="text-xs">
-                          {ticket.collectedAt ? (
-                            <div>
-                              <p className="text-gray-600">{formatDate(ticket.collectedAt)}</p>
-                              <p className="text-gray-500">by {ticket.collectedBy}</p>
-                            </div>
-                          ) : '-'}
-                        </div>
-                      </TableCell>
-                      
-                      <TableCell className="py-2">
-                        <div className="flex gap-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => downloadTicket(ticket.id)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Download className="h-3 w-3" />
-                          </Button>
-                          
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="h-8 w-8 p-0"
-                                disabled={processingAction === ticket.id}
-                              >
-                                <MoreHorizontal className="h-3 w-3" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {ticket.status === 'GENERATED' && (
-                                <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'SEND')}>
-                                  <Send className="w-4 h-4 mr-2" />
-                                  Mark as Sent
-                                </DropdownMenuItem>
-                              )}
-                              {(ticket.status === 'SENT' || ticket.status === 'GENERATED') && (
-                                <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'COLLECT')}>
-                                  <CheckCircle className="w-4 h-4 mr-2" />
-                                  Mark as Collected
-                                </DropdownMenuItem>
-                              )}
-                              {ticket.status === 'COLLECTED' && (
-                                <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'USE')}>
-                                  <QrCode className="w-4 h-4 mr-2" />
-                                  Check In
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem onClick={() => handleTicketAction(ticket.id, 'REGENERATE')}>
-                                <RefreshCw className="w-4 h-4 mr-2" />
-                                Regenerate
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleTicketAction(ticket.id, 'CANCEL')}
-                                className="text-red-600"
-                              >
-                                <AlertCircle className="w-4 h-4 mr-2" />
-                                Cancel
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {!loading && tickets.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
-              <Ticket className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>No tickets found matching your criteria.</p>
+                  )}
+                </TableBody>
+              </Table>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      <GenerateTicketDialog 
-        open={showGenerateDialog}
-        onOpenChange={setShowGenerateDialog}
-        onSuccess={fetchTickets}
-      />
+        <GenerateTicketDialog 
+          open={showGenerateDialog}
+          onOpenChange={setShowGenerateDialog}
+          onSuccess={fetchTickets}
+        />
+      </div>
     </div>
   )
 }

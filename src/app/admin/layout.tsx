@@ -1,5 +1,5 @@
 
-// src/app/admin/layout.tsx (Updated to handle login page)
+// src/app/admin/layout.tsx - Simplified and clean
 'use client'
 
 import { usePathname } from 'next/navigation'
@@ -17,7 +17,9 @@ export default function Layout({
   if (pathname === '/admin/login') {
     return (
       <AuthGuard>
-        {children}
+        <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+          {children}
+        </div>
       </AuthGuard>
     )
   }

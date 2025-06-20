@@ -1,4 +1,4 @@
-// src/app/api/register/route.ts - Updated with quantity support and better validation
+// src/app/api/register/route.ts - Updated: NO tickets for EMS clients until approval
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { TicketService } from '@/lib/ticketService'
@@ -96,17 +96,22 @@ export async function POST(request: NextRequest) {
       console.log('Panel interest created')
     }
     
-    // Create tickets based on quantity
+    // IMPORTANT: Only create tickets for NON-EMS clients
     const tickets = []
-    for (let i = 0; i < quantity; i++) {
-      try {
-        const ticket = await TicketService.createTicket(registration.id)
-        tickets.push(ticket)
-        console.log(`Ticket ${i + 1} created:`, ticket.ticketNumber)
-      } catch (error) {
-        console.error(`Failed to create ticket ${i + 1}:`, error)
-        // Continue with other tickets
+    if (!validatedData.isEmsClient) {
+      console.log('Creating tickets for non-EMS client...')
+      for (let i = 0; i < quantity; i++) {
+        try {
+          const ticket = await TicketService.createTicket(registration.id, i + 1)
+          tickets.push(ticket)
+          console.log(`Ticket ${i + 1} created:`, ticket.ticketNumber)
+        } catch (error) {
+          console.error(`Failed to create ticket ${i + 1}:`, error)
+          // Continue with other tickets
+        }
       }
+    } else {
+      console.log('EMS client - NO tickets created. Waiting for admin approval.')
     }
     
     // Send appropriate email
@@ -118,7 +123,7 @@ export async function POST(request: NextRequest) {
         registrationId: registration.id,
         emailType,
         subject: validatedData.isEmsClient 
-          ? 'Registration Received - Pending Approval'
+          ? 'Registration Received - Pending Admin Verification'
           : `Complete Your Registration - Payment Required (${quantity} ticket${quantity > 1 ? 's' : ''})`,
         recipient: registration.email,
         status: 'SENT'
@@ -138,7 +143,8 @@ export async function POST(request: NextRequest) {
         status: registration.status,
         quantity: quantity,
         totalCost: validatedData.isEmsClient ? 0 : quantity * 5000, // in cents
-        ticketNumbers: tickets.map(t => t.ticketNumber)
+        ticketNumbers: tickets.map(t => t.ticketNumber),
+        pendingApproval: validatedData.isEmsClient // Indicate if waiting for approval
       }
     })
     

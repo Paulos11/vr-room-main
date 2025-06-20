@@ -1,11 +1,11 @@
-// src/app/api/webhooks/stripe/route.ts - Complete webhook handler
+// src/app/api/webhooks/stripe/route.ts - Fixed webhook handler
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { TicketService } from '@/lib/ticketService'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2023-10-16',
+  apiVersion: '2025-05-28.basil', // Updated API version
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`Received webhook: ${event.type}`)
 
+    // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed':
         await handlePaymentSuccess(event.data.object as Stripe.Checkout.Session)
@@ -81,17 +82,25 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
       data: { status: 'COMPLETED' }
     })
 
-    // Generate ticket if it doesn't exist
-    let ticket = await prisma.ticket.findUnique({
-      where: { registrationId }
+    // Query for existing tickets using registrationId
+    let ticket = await prisma.ticket.findFirst({
+      where: { registrationId: registrationId }
     })
 
+    // Handle ticket creation/update with proper null checking
     if (!ticket) {
+      // If no ticket exists, create a new one
+      console.log(`Creating new ticket for registration: ${registrationId}`)
       ticket = await TicketService.createTicket(registrationId)
+      
+      // Verify ticket was actually created
+      if (!ticket) {
+        throw new Error('Failed to create ticket - createTicket returned null/undefined')
+      }
     }
 
-    // Update ticket as sent
-    await prisma.ticket.update({
+    // Now we can safely update the ticket since we've verified it exists
+    const updatedTicket = await prisma.ticket.update({
       where: { id: ticket.id },
       data: {
         status: 'SENT',
@@ -99,7 +108,7 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
       }
     })
 
-    // Log successful ticket delivery email
+    // Log the ticket delivery email
     await prisma.emailLog.create({
       data: {
         registrationId,
@@ -110,11 +119,11 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
       }
     })
 
-    console.log(`Successfully processed payment for registration ${registrationId}`)
+    console.log(`Successfully processed payment for registration ${registrationId}, ticket: ${updatedTicket.ticketNumber}`)
 
   } catch (error: any) {
     console.error('Error handling payment success:', error.message)
-    
+
     // Log the error in database for admin review
     try {
       await prisma.emailLog.create({
