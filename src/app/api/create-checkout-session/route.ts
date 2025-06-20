@@ -1,0 +1,142 @@
+// src/app/api/create-checkout-session/route.ts - Fixed for new schema
+import { NextRequest, NextResponse } from 'next/server'
+import Stripe from 'stripe'
+import { prisma } from '@/lib/prisma'
+import { z } from 'zod'
+
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2023-10-16',
+})
+
+const CheckoutSchema = z.object({
+  registrationId: z.string(),
+})
+
+export async function POST(request: NextRequest) {
+  try {
+    console.log('=== CHECKOUT SESSION DEBUG ===')
+    
+    const body = await request.json()
+    console.log('Request body:', body)
+    
+    const { registrationId } = CheckoutSchema.parse(body)
+
+    // Get registration details with tickets (FIXED)
+    const registration = await prisma.registration.findUnique({
+      where: { id: registrationId },
+      include: { 
+        panelInterests: true,
+        tickets: true,  // Changed from 'ticket' to 'tickets'
+        payment: true
+      }
+    })
+
+    if (!registration) {
+      return NextResponse.json(
+        { success: false, message: 'Registration not found' },
+        { status: 404 }
+      )
+    }
+
+    if (registration.status !== 'PAYMENT_PENDING') {
+      return NextResponse.json(
+        { success: false, message: 'Payment not required for this registration' },
+        { status: 400 }
+      )
+    }
+
+    // Count tickets to determine quantity (FIXED)
+    const quantity = Math.max(registration.tickets.length, 1) // Use 'tickets' array
+    const totalAmount = quantity * 5000 // €50 per ticket in cents
+
+    console.log(`Creating checkout for ${quantity} ticket(s), total: €${totalAmount/100}`)
+
+    try {
+      // Create new Stripe Checkout Session
+      const session = await stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'eur',
+              product_data: {
+                name: `EMS VIP Trade Fair Access 2025 ${quantity > 1 ? `(${quantity} Tickets)` : ''}`,
+                description: `VIP access to EMS Trade Fair at MFCC (July 26 - August 6, 2025)${quantity > 1 ? ` - ${quantity} tickets under the name ${registration.firstName} ${registration.lastName}` : ''}`,
+              },
+              unit_amount: 5000, // €50.00 per ticket in cents
+            },
+            quantity: quantity,
+          },
+        ],
+        metadata: {
+          registrationId,
+          customerName: `${registration.firstName} ${registration.lastName}`,
+          customerEmail: registration.email,
+          customerPhone: registration.phone,
+          panelInterest: registration.panelInterests.length > 0 ? 'yes' : 'no',
+          eventName: 'EMS Trade Fair 2025',
+          ticketQuantity: quantity.toString(),
+          totalTickets: quantity.toString()
+        },
+        customer_email: registration.email,
+        success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/cancelled?id=${registrationId}`,
+        expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
+      })
+
+      console.log('Stripe session created:', session.id)
+
+      // Create or update payment record
+      await prisma.payment.upsert({
+        where: { registrationId },
+        update: {
+          stripePaymentId: session.id,
+          amount: totalAmount,
+          status: 'PENDING'
+        },
+        create: {
+          registrationId,
+          stripePaymentId: session.id,
+          amount: totalAmount,
+          currency: 'eur',
+          status: 'PENDING'
+        }
+      })
+
+      return NextResponse.json({
+        success: true,
+        sessionId: session.id,
+        checkoutUrl: session.url,
+        quantity: quantity,
+        totalAmount: totalAmount
+      })
+
+    } catch (stripeError: any) {
+      console.error('Stripe API Error:', stripeError.message)
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: `Stripe Error: ${stripeError.message}`,
+          errorType: stripeError.type
+        },
+        { status: 400 }
+      )
+    }
+
+  } catch (error: any) {
+    console.error('Checkout session error:', error.message)
+    
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid data', errors: error.errors },
+        { status: 400 }
+      )
+    }
+
+    return NextResponse.json(
+      { success: false, message: `Server error: ${error.message}` },
+      { status: 500 }
+    )
+  }
+}

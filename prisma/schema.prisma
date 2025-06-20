@@ -34,8 +34,8 @@ model Registration {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relations
-  ticket         Ticket?
+  // Relations - UPDATED: Changed from ticket? to tickets[]
+  tickets        Ticket[] // One registration can have multiple tickets
   payment        Payment?
   panelInterests PanelInterest[]
   emailLogs      EmailLog[]
@@ -45,7 +45,7 @@ model Registration {
 
 model Ticket {
   id             String  @id @default(cuid())
-  registrationId String  @unique @map("registration_id")
+  registrationId String  @map("registration_id") // REMOVED @unique to allow multiple tickets
   ticketNumber   String  @unique @map("ticket_number")
   qrCode         String  @unique @map("qr_code")
   pdfUrl         String? @map("pdf_url")
@@ -57,13 +57,20 @@ model Ticket {
   collectedAt DateTime?    @map("collected_at")
   collectedBy String?      @map("collected_by")
 
+  // Timestamps - ADDED
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
   // Event Details
   eventDate     DateTime @map("event_date")
   venue         String   @default("Malta Fairs and Conventions Centre")
   boothLocation String   @default("EMS Booth - MFCC") @map("booth_location")
 
   // Access Level
-  accessType AccessType @default(STANDARD) @map("access_type")
+  accessType AccessType @default(VIP) @map("access_type") // Changed default to VIP
+
+  // Ticket Sequence - ADDED for ordering multiple tickets
+  ticketSequence Int @default(1) @map("ticket_sequence") // 1st ticket, 2nd ticket, etc.
 
   // Relations
   registration Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)

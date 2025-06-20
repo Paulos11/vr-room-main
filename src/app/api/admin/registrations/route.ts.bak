@@ -1,0 +1,131 @@
+// src/app/api/admin/registrations/route.ts - Updated for new schema
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+export async function GET(request: NextRequest) {
+  try {
+    const searchParams = request.nextUrl.searchParams
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '20')
+    const status = searchParams.get('status')
+    const search = searchParams.get('search')
+    
+    const skip = (page - 1) * limit
+    
+    // Build where clause
+    const where: any = {}
+    
+    if (status) {
+      where.status = status
+    }
+    
+    if (search) {
+      where.OR = [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+        { idCardNumber: { contains: search, mode: 'insensitive' } }
+      ]
+    }
+    
+    // Get registrations with updated includes
+    const registrations = await prisma.registration.findMany({
+      where,
+      include: {
+        tickets: true,        // Changed from 'ticket' to 'tickets'
+        payment: true,        // Added payment
+        panelInterests: true,
+        emailLogs: {
+          orderBy: { sentAt: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit
+    })
+    
+    // Get total count for pagination
+    const totalCount = await prisma.registration.count({ where })
+    
+    // Format response data
+    const formattedRegistrations = registrations.map(reg => ({
+      id: reg.id,
+      firstName: reg.firstName,
+      lastName: reg.lastName,
+      email: reg.email,
+      phone: reg.phone,
+      idCardNumber: reg.idCardNumber,
+      isEmsClient: reg.isEmsClient,
+      companyName: reg.companyName,
+      emsCustomerId: reg.emsCustomerId,
+      status: reg.status,
+      createdAt: reg.createdAt,
+      verifiedAt: reg.verifiedAt,
+      verifiedBy: reg.verifiedBy,
+      rejectedReason: reg.rejectedReason,
+      adminNotes: reg.adminNotes,
+      
+      // Updated ticket information
+      ticketCount: reg.tickets?.length || 0,
+      tickets: reg.tickets?.map(ticket => ({
+        id: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        status: ticket.status,
+        sequence: ticket.ticketSequence,
+        issuedAt: ticket.issuedAt
+      })) || [],
+      
+      // Payment information
+      payment: reg.payment ? {
+        id: reg.payment.id,
+        amount: reg.payment.amount,
+        currency: reg.payment.currency,
+        status: reg.payment.status,
+        paidAt: reg.payment.paidAt,
+        stripePaymentId: reg.payment.stripePaymentId
+      } : null,
+      
+      // Panel interests
+      panelInterests: reg.panelInterests?.map(interest => ({
+        id: interest.id,
+        panelType: interest.panelType,
+        interestLevel: interest.interestLevel,
+        status: interest.status,
+        createdAt: interest.createdAt
+      })) || [],
+      
+      // Latest email
+      latestEmail: reg.emailLogs?.[0] ? {
+        type: reg.emailLogs[0].emailType,
+        subject: reg.emailLogs[0].subject,
+        status: reg.emailLogs[0].status,
+        sentAt: reg.emailLogs[0].sentAt
+      } : null
+    }))
+    
+    return NextResponse.json({
+      success: true,
+      data: {
+        registrations: formattedRegistrations,
+        pagination: {
+          currentPage: page,
+          totalPages: Math.ceil(totalCount / limit),
+          totalCount,
+          hasNext: page * limit < totalCount,
+          hasPrev: page > 1
+        }
+      }
+    })
+    
+  } catch (error: any) {
+    console.error('Error fetching registrations:', error.message)
+    console.error('Error stack:', error.stack)
+    
+    return NextResponse.json(
+      { success: false, message: 'Failed to fetch registrations', error: error.message },
+      { status: 500 }
+    )
+  }
+}

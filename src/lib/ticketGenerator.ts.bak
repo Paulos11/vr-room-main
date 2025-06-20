@@ -1,0 +1,144 @@
+
+// src/lib/ticketGenerator.ts
+import { prisma } from '@/lib/prisma'
+
+interface TicketGenerationOptions {
+  registrationId: string
+  isEmsClient: boolean
+  eventYear?: number
+}
+
+interface GeneratedTicket {
+  ticketNumber: string
+  qrCode: string
+  accessType: 'VIP' | 'STANDARD'
+}
+
+export class TicketGenerator {
+  private static readonly PREFIX = 'EMS'
+  private static readonly YEAR = new Date().getFullYear()
+
+  /**
+   * Generate a unique ticket number
+   * Format: EMS-2025-001234
+   */
+  static async generateTicketNumber(): Promise<string> {
+    const year = this.YEAR
+    
+    // Get the next sequence number
+    const sequenceNumber = await this.getNextSequenceNumber(year)
+    
+    // Format: EMS-2025-001234 (6-digit padded sequence)
+    const ticketNumber = `${this.PREFIX}-${year}-${sequenceNumber.toString().padStart(6, '0')}`
+    
+    return ticketNumber
+  }
+
+  /**
+   * Generate QR code data for the ticket
+   */
+  static generateQRCode(ticketNumber: string, registrationId: string): string {
+    // QR code contains ticket verification data
+    const qrData = {
+      ticket: ticketNumber,
+      registration: registrationId,
+      event: 'EMS-TRADE-FAIR-2025',
+      venue: 'MFCC',
+      timestamp: Date.now()
+    }
+    
+    // Convert to base64 encoded string for QR code
+    return Buffer.from(JSON.stringify(qrData)).toString('base64')
+  }
+
+  /**
+   * Get next sequence number for ticket generation
+   */
+  private static async getNextSequenceNumber(year: number): Promise<number> {
+    try {
+      // Find the highest sequence number for this year
+      const lastTicket = await prisma.ticket.findFirst({
+        where: {
+          ticketNumber: {
+            startsWith: `${this.PREFIX}-${year}-`
+          }
+        },
+        orderBy: {
+          ticketNumber: 'desc'
+        }
+      })
+
+      if (!lastTicket) {
+        return 1 // First ticket of this year
+      }
+
+      // Extract sequence number from ticket number
+      const ticketParts = lastTicket.ticketNumber.split('-')
+      const lastSequence = parseInt(ticketParts[2]) || 0
+      
+      return lastSequence + 1
+    } catch (error) {
+      console.error('Error getting next sequence number:', error)
+      // Fallback to timestamp-based sequence to avoid conflicts
+      return Date.now() % 1000000
+    }
+  }
+
+  /**
+   * Generate complete ticket with number and QR code
+   */
+  static async generateTicket(options: TicketGenerationOptions): Promise<GeneratedTicket> {
+    const { registrationId } = options
+    
+    const ticketNumber = await this.generateTicketNumber()
+    const qrCode = this.generateQRCode(ticketNumber, registrationId)
+    
+    return {
+      ticketNumber,
+      qrCode,
+      accessType: 'VIP' // Internal access type for database
+    }
+  }
+
+  /**
+   * Validate ticket number format
+   */
+  static validateTicketNumber(ticketNumber: string): boolean {
+    // Format: EMS-2025-001234
+    const pattern = /^EMS-\d{4}-\d{6}$/
+    return pattern.test(ticketNumber)
+  }
+
+  /**
+   * Parse ticket number to extract information
+   */
+  static parseTicketNumber(ticketNumber: string): {
+    prefix: string
+    year: number
+    sequence: number
+  } | null {
+    if (!this.validateTicketNumber(ticketNumber)) {
+      return null
+    }
+
+    const parts = ticketNumber.split('-')
+    return {
+      prefix: parts[0],
+      year: parseInt(parts[1]),
+      sequence: parseInt(parts[2])
+    }
+  }
+
+  /**
+   * Decode QR code data
+   */
+  static decodeQRCode(qrCode: string): any | null {
+    try {
+      const decoded = Buffer.from(qrCode, 'base64').toString('utf-8')
+      return JSON.parse(decoded)
+    } catch (error) {
+      console.error('Error decoding QR code:', error)
+      return null
+    }
+  }
+}
