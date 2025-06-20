@@ -1,4 +1,4 @@
-// src/app/admin/registrations/page.tsx - Fixed version
+// src/app/admin/registrations/page.tsx - Fixed version to resolve dynamic server error
 import { Suspense } from 'react'
 import { RegistrationsTable } from "@/components/admin/RegistrationsTable"
 

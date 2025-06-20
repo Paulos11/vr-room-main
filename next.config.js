@@ -1,13 +1,12 @@
-// next.config.js - Fixed and optimized configuration
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Remove deprecated experimental features
+  // Experimental features - compatible with Next.js 14.0.4
   experimental: {
     serverComponentsExternalPackages: ["@prisma/client", "bcryptjs"],
-    // Remove optimizeCss and optimizeServerReact as they're deprecated
+    // Removed ppr as it's only available in canary
   },
 
-  // Image optimization
+  // Image optimization - enhanced
   images: {
     remotePatterns: [
       {
@@ -18,6 +17,8 @@ const nextConfig = {
     ],
     formats: ["image/webp", "image/avif"],
     minimumCacheTTL: 60 * 60 * 24 * 30, // 30 days
+    dangerouslyAllowSVG: true,
+    contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
 
   // Environment variables
@@ -31,7 +32,7 @@ const nextConfig = {
   compress: true,
   poweredByHeader: false,
 
-  // Headers for security and performance
+  // Enhanced headers for better performance and security
   async headers() {
     return [
       {
@@ -55,6 +56,26 @@ const nextConfig = {
           },
         ],
       },
+      // Static assets caching
+      {
+        source: "/_next/static/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=31536000, immutable",
+          },
+        ],
+      },
+      // Image caching
+      {
+        source: "/:path*.{jpg,jpeg,png,webp,avif,ico,svg}",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [
@@ -66,42 +87,78 @@ const nextConfig = {
             key: "Referrer-Policy",
             value: "strict-origin-when-cross-origin",
           },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
         ],
       },
     ];
   },
 
-  // Webpack optimizations
+  // Enhanced webpack optimizations
   webpack: (config, { dev, isServer }) => {
-    // Optimize bundle splitting for production
-    if (!dev && !isServer) {
-      config.optimization.splitChunks = {
-        ...config.optimization.splitChunks,
-        cacheGroups: {
-          ...config.optimization.splitChunks.cacheGroups,
-          vendor: {
-            test: /[\\/]node_modules[\\/]/,
-            name: "vendors",
-            chunks: "all",
-            enforce: true,
+    // Production optimizations
+    if (!dev) {
+      // Better tree shaking
+      config.optimization.usedExports = true;
+      config.optimization.sideEffects = false;
+
+      // Enhanced bundle splitting
+      if (!isServer) {
+        config.optimization.splitChunks = {
+          ...config.optimization.splitChunks,
+          chunks: "all",
+          cacheGroups: {
+            ...config.optimization.splitChunks.cacheGroups,
+            // Vendor chunk optimization
+            vendor: {
+              test: /[\\/]node_modules[\\/]/,
+              name: "vendors",
+              chunks: "all",
+              enforce: true,
+              priority: 20,
+            },
+            // React/Next.js specific chunk
+            react: {
+              test: /[\\/]node_modules[\\/](react|react-dom|next)[\\/]/,
+              name: "react",
+              chunks: "all",
+              enforce: true,
+              priority: 30,
+            },
+            // UI library chunk
+            ui: {
+              test: /[\\/]node_modules[\\/](@radix-ui|lucide-react)[\\/]/,
+              name: "ui",
+              chunks: "all",
+              enforce: true,
+              priority: 25,
+            },
+            // Common shared code
+            common: {
+              name: "common",
+              minChunks: 2,
+              chunks: "all",
+              enforce: true,
+              priority: 10,
+            },
           },
-          common: {
-            name: "common",
-            minChunks: 2,
-            chunks: "all",
-            enforce: true,
-          },
-        },
-      };
+        };
+      }
     }
 
-    // Optimize module resolution
+    // Module resolution optimizations
     config.resolve.fallback = {
       ...config.resolve.fallback,
       fs: false,
       net: false,
       tls: false,
+      crypto: false,
     };
+
+    // Optimize module resolution
+    config.resolve.modules = ["node_modules", "."];
 
     return config;
   },
@@ -112,15 +169,32 @@ const nextConfig = {
   trailingSlash: false,
   generateEtags: true,
 
-  // Output configuration for better performance
+  // Output configuration
   output: "standalone",
 
-  // Redirect configuration
+  // Compiler options for better performance
+  compiler: {
+    removeConsole:
+      process.env.NODE_ENV === "production"
+        ? {
+            exclude: ["error", "warn"],
+          }
+        : false,
+  },
+
+  // Logging for better debugging
+  logging: {
+    fetches: {
+      fullUrl: true,
+    },
+  },
+
+  // Redirects - optimize common patterns
   async redirects() {
     return [];
   },
 
-  // Rewrite configuration
+  // Rewrites for cleaner URLs if needed
   async rewrites() {
     return [];
   },

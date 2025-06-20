@@ -1,4 +1,4 @@
-// src/app/payment/page.tsx - Updated to show quantity and total cost
+// src/components/payment/PaymentPageContent.tsx - Separated content component
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,7 +6,6 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
 import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
@@ -24,7 +23,7 @@ interface RegistrationData {
   totalCost: number
 }
 
-export default function PaymentPage() {
+export function PaymentPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const registrationId = searchParams.get('id')
@@ -132,12 +131,16 @@ export default function PaymentPage() {
         <div className="max-w-md mx-auto pt-8">
           <Card>
             <CardHeader>
-              <Skeleton className="h-6 w-3/4" />
-              <Skeleton className="h-4 w-full" />
+              <div className="animate-pulse space-y-2">
+                <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-4 bg-gray-200 rounded w-full"></div>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full" />
+                <div key={i} className="animate-pulse">
+                  <div className="h-16 bg-gray-200 rounded"></div>
+                </div>
               ))}
             </CardContent>
           </Card>
@@ -219,20 +222,6 @@ export default function PaymentPage() {
                   All tickets under {registration.firstName} {registration.lastName}
                 </div>
               )}
-            </div>
-
-            {/* Ticket Information */}
-            <div className="p-3 border rounded-lg bg-purple-50">
-              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                <Ticket className="h-4 w-4 text-purple-600" />
-                Your Ticket{registration.quantity > 1 ? 's' : ''}
-              </h3>
-              <ul className="space-y-1 text-xs text-purple-800">
-                <li>• {registration.quantity > 1 ? `${registration.quantity} unique ticket numbers` : 'Unique ticket number'}</li>
-                <li>• All tickets registered to your name</li>
-                <li>• Instant delivery after payment</li>
-                <li>• Each ticket grants full VIP access</li>
-              </ul>
             </div>
 
             {/* VIP Benefits */}
