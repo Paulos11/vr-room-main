@@ -1,4 +1,4 @@
-// src/app/layout.tsx - Updated with metadataBase fix
+// src/app/layout.tsx - Updated with hydration fixes
 import type { Metadata } from 'next'
 import { Poppins, Inter } from 'next/font/google'
 import './globals.css'
@@ -25,7 +25,7 @@ const baseUrl = process.env.NODE_ENV === 'production'
   : 'http://localhost:3000';
 
 export const metadata: Metadata = {
-  metadataBase: new URL(baseUrl), // This fixes the metadataBase warning
+  metadataBase: new URL(baseUrl),
   title: 'EMS Trade Fair 2025 | MFCC Ta\' Qali Malta | VIP Tickets & Solar Panels',
   description: 'Join EMS Trade Fair at Malta Fairs & Conventions Centre (MFCC) Ta\' Qali, Malta. July 26 - August 6, 2025. FREE VIP tickets, ice skating, VR games, magic shows, food & exclusive solar panel offers. Book now!',
   keywords: [
@@ -95,7 +95,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
+    <html lang="en" className={`${poppins.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
         {/* Additional SEO Meta Tags */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -161,8 +161,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className={`${inter.className} font-sans antialiased`}>
-        {children}
+      <body className={`${inter.className} font-sans antialiased`} suppressHydrationWarning>
+        <main suppressHydrationWarning>
+          {children}
+        </main>
         <Toaster />
       </body>
     </html>

@@ -163,10 +163,10 @@ export function EnhancedRegistrationForm() {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full max-w-md mx-auto ">
       <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
         {/* Header with enhanced styling */}
-        <CardHeader className="pb-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-t-lg">
+        <CardHeader className="pb-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-t-lg pt-8">
           <div className="text-center">
             {formData.isEmsClient && (
               <Crown className="h-6 w-6 text-yellow-500 mx-auto mb-2" />

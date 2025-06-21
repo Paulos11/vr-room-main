@@ -1,7 +1,7 @@
-// src/app/ticket-status/page.tsx - Fixed to match HeroSection pattern
+// src/app/ticket-status/TicketStatusContent.tsx - Main component without hydration issues
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -31,23 +31,18 @@ interface TicketData {
   emsCustomerId?: string
 }
 
-export default function TicketStatusPage() {
+export default function TicketStatusContent() {
   const [searchType, setSearchType] = useState<'email' | 'ticket'>('email')
   const [searchValue, setSearchValue] = useState('')
   const [ticketData, setTicketData] = useState<TicketData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
 
   // Handle search type change with clearing input
   const handleSearchTypeChange = (type: 'email' | 'ticket') => {
     setSearchType(type)
-    setSearchValue('')
-    setError('')
+    setSearchValue('') // Clear input when switching
+    setError('') // Clear any errors
   }
 
   const handleSearch = async (e: React.FormEvent) => {
@@ -120,43 +115,8 @@ export default function TicketStatusPage() {
     }
   }
 
-  // Show loading state until mounted
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-white relative overflow-hidden">
-        <div className="absolute inset-0 pointer-events-none">
-          <div className="absolute top-10 right-10 w-32 h-32 bg-gradient-to-br from-green-100 to-blue-100 rounded-full opacity-60"></div>
-          <div className="absolute top-20 left-20 w-24 h-24 bg-gradient-to-br from-blue-100 to-purple-100 rounded-full opacity-40"></div>
-          <div className="absolute bottom-20 left-10 w-40 h-40 bg-gradient-to-br from-orange-100 to-pink-100 rounded-full opacity-50"></div>
-          <div className="absolute bottom-32 right-32 w-28 h-28 bg-gradient-to-br from-purple-100 to-green-100 rounded-full opacity-45"></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-gradient-to-r from-green-50 to-blue-50 rounded-full opacity-30 blur-3xl"></div>
-          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 via-blue-400 to-purple-400 opacity-60"></div>
-          <div className="absolute bottom-0 left-0 w-full h-2 bg-gradient-to-r from-purple-400 via-blue-400 to-green-400 opacity-60"></div>
-        </div>
-        <div className="relative z-10 container mx-auto px-4 py-8">
-          <div className="mb-8">
-            <Skeleton className="w-32 h-10" />
-          </div>
-          <Card className="w-full max-w-2xl mx-auto">
-            <CardHeader>
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-4 w-3/4 mx-auto" />
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen bg-white relative overflow-hidden">
+    <div className="ticket-status-page min-h-screen bg-white relative overflow-hidden">
       {/* Background Decorations - matching register page */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Top decorative circles */}
@@ -177,7 +137,7 @@ export default function TicketStatusPage() {
 
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="mb-6">
-          <Link href="/">
+          <Link href="/" className="inline-block">
             <Button variant="ghost" className="mb-4 hover:bg-green-50 transition-colors">
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to Home
@@ -197,6 +157,7 @@ export default function TicketStatusPage() {
           </CardHeader>
           
           <CardContent className="p-6 bg-white">
+            {/* Search Form */}
             <form onSubmit={handleSearch} className="space-y-6">
               {/* Tab Buttons */}
               <div className="flex border border-gray-200 rounded-lg p-1 bg-gray-50">
@@ -339,11 +300,14 @@ export default function TicketStatusPage() {
                         {ticketData.pdfUrl && (
                           <div className="flex justify-between items-center">
                             <span className="text-blue-700">Ticket PDF:</span>
-                            <a href={ticketData.pdfUrl} target="_blank" rel="noopener noreferrer">
-                              <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100">
-                                <Download className="mr-2 h-3 w-3" />
-                                Download
-                              </Button>
+                            <a 
+                              href={ticketData.pdfUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center px-3 py-1 text-sm font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-100 transition-colors"
+                            >
+                              <Download className="mr-2 h-3 w-3" />
+                              Download
                             </a>
                           </div>
                         )}
@@ -409,7 +373,7 @@ export default function TicketStatusPage() {
                     <p className="text-sm text-blue-700 mb-4">
                       Complete your €50 payment to receive your ticket instantly.
                     </p>
-                    <Link href={`/payment?id=${ticketData.id}`}>
+                    <Link href={`/payment?id=${ticketData.id}`} className="inline-block">
                       <Button className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white">
                         <CreditCard className="mr-2 h-4 w-4" />
                         Complete Payment
@@ -455,8 +419,8 @@ export default function TicketStatusPage() {
                   >
                     Search Again
                   </Button>
-                  <Link href="/">
-                    <Button variant="outline" className="flex-1 border border-gray-300 hover:bg-gray-50">
+                  <Link href="/" className="flex-1">
+                    <Button variant="outline" className="w-full border border-gray-300 hover:bg-gray-50">
                       <ArrowLeft className="mr-2 h-4 w-4" />
                       Home
                     </Button>

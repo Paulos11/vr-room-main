@@ -8,7 +8,7 @@ import { Crown, Ticket, Phone, Globe } from 'lucide-react';
 export const HeroSection = () => (
   <section className="relative min-h-screen overflow-hidden bg-gradient-to-br from-green-400 via-blue-400 to-purple-500">
     {/* Background Image */}
-    <div className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-50" 
+    <div className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-90" 
          style={{ backgroundImage: 'url(/hero.jpg)' }}>
     </div>
     
