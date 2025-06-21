@@ -31,7 +31,7 @@ export const SolarPanelSection = () => (
           <div className="relative overflow-hidden rounded-3xl shadow-2xl">
             <img 
               src="/panels.png" 
-              alt="HJT ECH 950W Solar Panel System with EcoFlow Battery" 
+              alt="Powerful 950W Solar Panel System with EcoFlow Battery" 
               className="w-full h-auto object-cover"
               loading="lazy"
             />
@@ -40,7 +40,7 @@ export const SolarPanelSection = () => (
               <div className="bg-white/90 backdrop-blur-sm p-4 rounded-2xl">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h3 className="text-2xl font-black text-gray-800 mb-2">HJT ECH</h3>
+                    <h3 className="text-2xl font-black text-gray-800 mb-2">Powerfull</h3>
                     <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-red-500 mb-2">
                       950W
                     </div>
