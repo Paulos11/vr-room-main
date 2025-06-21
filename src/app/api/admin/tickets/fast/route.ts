@@ -80,32 +80,34 @@ export async function GET(request: NextRequest) {
     })
     
     // Format response efficiently with minimal transformations
-// Format response efficiently with minimal transformations
-const formattedTickets = tickets.map(ticket => ({
-  id: ticket.id,
-  ticketNumber: ticket.ticketNumber,
-  status: ticket.status,
-  accessType: ticket.accessType,
-  sequence: ticket.ticketSequence,
-  issuedAt: ticket.issuedAt.toISOString(),
-  sentAt: ticket.sentAt?.toISOString(),
-  collectedAt: ticket.collectedAt?.toISOString(),
-  collectedBy: ticket.collectedBy,
-  customer: {
-    id: ticket.registration.id,
-    name: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
-    email: ticket.registration.email,
-    phone: ticket.registration.phone,
-    isEmsClient: ticket.registration.isEmsClient,
-    registrationStatus: ticket.registration.status
-  },
-  lastCheckIn: ticket.checkIns[0] ? {
-    checkedInAt: ticket.checkIns[0].checkedInAt.toISOString(),
-    checkedInBy: ticket.checkIns[0].checkedInBy,
-    location: ticket.checkIns[0].location
-  } : undefined
-}))
-
+    const formattedTickets = tickets.map(ticket => ({
+      id: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      status: ticket.status,
+      accessType: ticket.accessType,
+      sequence: ticket.ticketSequence,
+      issuedAt: ticket.issuedAt.toISOString(),
+      sentAt: ticket.sentAt?.toISOString(),
+      collectedAt: ticket.collectedAt?.toISOString(),
+      collectedBy: ticket.collectedBy,
+      customer: {
+        id: ticket.registration.id,
+        name: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
+        email: ticket.registration.email,
+      customer: {
+        id: ticket.registration.id,
+        name: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
+        email: ticket.registration.email,
+        phone: ticket.registration.phone,
+        isEmsClient: ticket.registration.isEmsClient,
+        registrationStatus: ticket.registration.status
+      },
+      lastCheckIn: ticket.checkIns[0] ? {
+        checkedInAt: ticket.checkIns[0].checkedInAt.toISOString(),
+        checkedInBy: ticket.checkIns[0].checkedInBy,
+        location: ticket.checkIns[0].location
+      } : undefined
+    }}))
     
     return NextResponse.json({
       success: true,

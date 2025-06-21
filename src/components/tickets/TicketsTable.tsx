@@ -1,12 +1,15 @@
-// src/components/tickets/TicketsTable.tsx - Compact and fast table
-import React from 'react'
+// src/components/tickets/TicketsTable.tsx - Enhanced with download, confirmations, and no tooltips
+import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { 
-  Ticket, Plus, Eye, Send, Package, CheckCircle, X, RotateCcw, 
-  Building, Users, Copy, Phone, Mail 
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
+} from '@/components/ui/dialog'
+import { 
+  Ticket, Plus, Download, Send, Package, CheckCircle, X, RotateCcw, RefreshCw,
+  Building, Users, Copy, Phone, Mail, AlertTriangle
 } from 'lucide-react'
 import { TicketData } from '@/app/admin/tickets/page'
 import { toast } from '@/components/ui/use-toast'
@@ -27,7 +30,8 @@ const StatusBadge = ({ status }: { status: string }) => {
     COLLECTED: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-300', label: 'Collected', icon: '●' },
     USED: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-300', label: 'Used', icon: '●' },
     EXPIRED: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-300', label: 'Expired', icon: '●' },
-    CANCELLED: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-300', label: 'Cancelled', icon: '●' }
+    CANCELLED: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-300', label: 'Cancelled', icon: '●' },
+    REFUNDED: { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-300', label: 'Refunded', icon: '●' }
   }[status] || { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-300', label: status, icon: '●' }
 
   return (
@@ -38,6 +42,53 @@ const StatusBadge = ({ status }: { status: string }) => {
   )
 }
 
+// Confirmation Dialog Component
+const ConfirmationDialog = ({ 
+  open, 
+  onOpenChange, 
+  onConfirm, 
+  title, 
+  description, 
+  confirmText, 
+  variant = "destructive" 
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+  title: string
+  description: string
+  confirmText: string
+  variant?: "destructive" | "default"
+}) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="max-w-md">
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <AlertTriangle className={`h-5 w-5 ${variant === "destructive" ? "text-red-500" : "text-orange-500"}`} />
+          {title}
+        </DialogTitle>
+        <DialogDescription>
+          {description}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="outline" onClick={() => onOpenChange(false)}>
+          Cancel
+        </Button>
+        <Button 
+          variant={variant} 
+          onClick={() => {
+            onConfirm()
+            onOpenChange(false)
+          }}
+        >
+          {confirmText}
+        </Button>
+      </DialogFooter>
+    </DialogContent>
+  </Dialog>
+)
+
 // Compact Ticket Row
 const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
   ticket: TicketData
@@ -45,164 +96,238 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
   processing: boolean
   onAction: (id: string, action: string) => void
 }) => {
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean
+    action: string
+    title: string
+    description: string
+    confirmText: string
+    variant: "destructive" | "default"
+  }>({
+    open: false,
+    action: '',
+    title: '',
+    description: '',
+    confirmText: '',
+    variant: 'destructive'
+  })
+
   const copyTicketNumber = () => {
     navigator.clipboard.writeText(ticket.ticketNumber)
     toast({ title: "Copied!", description: "Ticket number copied to clipboard" })
+  }
+
+  const handleDownload = () => {
+    // Create download link for ticket PDF
+    const downloadUrl = `/api/admin/tickets/download/${ticket.id}`
+    const link = document.createElement('a')
+    link.href = downloadUrl
+    link.download = `ticket-${ticket.ticketNumber}.pdf`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    
+    toast({
+      title: "Download Started",
+      description: `Downloading ticket ${ticket.ticketNumber}`,
+    })
+  }
+
+  const handleActionWithConfirmation = (action: string) => {
+    const actionConfigs = {
+      CANCEL: {
+        title: "Cancel Ticket",
+        description: `Are you sure you want to cancel ticket ${ticket.ticketNumber}? This action cannot be undone and the customer will not be able to use this ticket.`,
+        confirmText: "Cancel Ticket",
+        variant: "destructive" as const
+      }
+    }
+
+    const config = actionConfigs[action as keyof typeof actionConfigs]
+    if (config) {
+      setConfirmDialog({
+        open: true,
+        action,
+        ...config
+      })
+    } else {
+      onAction(ticket.id, action)
+    }
+  }
+
+  const confirmAction = () => {
+    onAction(ticket.id, confirmDialog.action)
   }
 
   const isEven = index % 2 === 0
   const rowBg = isEven ? 'bg-white' : 'bg-gray-50/30'
 
   return (
-    <TableRow className={`h-14 ${rowBg} hover:bg-blue-50/30 transition-colors group`}>
-      {/* Ticket Number */}
-      <TableCell className="py-2">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <code className="text-sm font-mono text-gray-900 bg-gray-100 px-2 py-1 rounded">
-              {ticket.ticketNumber}
-            </code>
-            <button 
-              onClick={copyTicketNumber}
-              className="text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <Copy className="h-3 w-3" />
-            </button>
-          </div>
-          <div className="text-xs text-gray-500">
-            Seq: #{ticket.sequence}
-          </div>
-        </div>
-      </TableCell>
-
-      {/* Customer */}
-      <TableCell className="py-2">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <p className="font-medium text-sm text-gray-900">{ticket.customer.name}</p>
-            <Badge variant={ticket.customer.isEmsClient ? "default" : "outline"} className="text-xs">
-              {ticket.customer.isEmsClient ? (
-                <><Building className="h-3 w-3 mr-1" />EMS</>
-              ) : (
-                <><Users className="h-3 w-3 mr-1" />Public</>
-              )}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <Mail className="h-3 w-3" />
-            <span className="truncate max-w-32">{ticket.customer.email}</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <Phone className="h-3 w-3" />
-            <span>{ticket.customer.phone}</span>
-          </div>
-        </div>
-      </TableCell>
-
-      {/* Status */}
-      <TableCell className="py-2">
-        <StatusBadge status={ticket.status} />
-      </TableCell>
-
-      {/* Generated */}
-      <TableCell className="py-2">
-        <div className="text-center">
-          <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
-            {new Date(ticket.issuedAt).toLocaleDateString('en-US', { 
-              month: 'short', 
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}
-          </span>
-        </div>
-      </TableCell>
-
-      {/* Delivery Status */}
-      <TableCell className="py-2">
-        <div className="space-y-1">
-          {ticket.sentAt && (
-            <div className="text-xs text-blue-600">
-              Sent: {new Date(ticket.sentAt).toLocaleDateString()}
+    <>
+      <TableRow className={`h-14 ${rowBg} hover:bg-blue-50/30 transition-colors group`}>
+        {/* Ticket Number */}
+        <TableCell className="py-2">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <code className="text-sm font-mono text-gray-900 bg-gray-100 px-2 py-1 rounded">
+                {ticket.ticketNumber}
+              </code>
+              <button 
+                onClick={copyTicketNumber}
+                className="text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
             </div>
-          )}
-          {ticket.collectedAt && (
-            <div className="text-xs text-purple-600">
-              Collected: {new Date(ticket.collectedAt).toLocaleDateString()}
+            <div className="text-xs text-gray-500">
+              Seq: #{ticket.sequence}
             </div>
-          )}
-          {!ticket.sentAt && !ticket.collectedAt && (
-            <span className="text-xs text-gray-400 italic">Not delivered</span>
-          )}
-        </div>
-      </TableCell>
+          </div>
+        </TableCell>
 
-      {/* Actions */}
-      <TableCell className="py-2">
-        <div className="flex gap-1">
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs hover:bg-blue-50">
-            <Eye className="h-3 w-3" />
-          </Button>
+        {/* Customer */}
+        <TableCell className="py-2">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="font-medium text-sm text-gray-900">{ticket.customer.name}</p>
+              <Badge variant={ticket.customer.isEmsClient ? "default" : "outline"} className="text-xs">
+                {ticket.customer.isEmsClient ? (
+                  <><Building className="h-3 w-3 mr-1" />EMS</>
+                ) : (
+                  <><Users className="h-3 w-3 mr-1" />Public</>
+                )}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-600">
+              <Mail className="h-3 w-3" />
+              <span className="truncate max-w-32">{ticket.customer.email}</span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Phone className="h-3 w-3" />
+              <span>{ticket.customer.phone}</span>
+            </div>
+          </div>
+        </TableCell>
 
-          {ticket.status === 'GENERATED' && (
+        {/* Status */}
+        <TableCell className="py-2">
+          <StatusBadge status={ticket.status} />
+        </TableCell>
+
+        {/* Generated */}
+        <TableCell className="py-2">
+          <div className="text-center">
+            <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
+              {new Date(ticket.issuedAt).toLocaleDateString('en-US', { 
+                month: 'short', 
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+          </div>
+        </TableCell>
+
+        {/* Delivery Status */}
+        <TableCell className="py-2">
+          <div className="space-y-1">
+            {ticket.sentAt && (
+              <div className="text-xs text-blue-600">
+                Sent: {new Date(ticket.sentAt).toLocaleDateString()}
+              </div>
+            )}
+            {ticket.collectedAt && (
+              <div className="text-xs text-purple-600">
+                Collected: {new Date(ticket.collectedAt).toLocaleDateString()}
+              </div>
+            )}
+            {!ticket.sentAt && !ticket.collectedAt && (
+              <span className="text-xs text-gray-400 italic">Not delivered</span>
+            )}
+          </div>
+        </TableCell>
+
+        {/* Actions */}
+        <TableCell className="py-2">
+          <div className="flex gap-1">
+            {/* Download Button */}
             <Button
               size="sm"
-              onClick={() => onAction(ticket.id, 'SEND')}
-              disabled={processing}
-              className="h-7 px-2 text-xs bg-blue-500 hover:bg-blue-600"
+              variant="outline"
+              onClick={handleDownload}
+              className="h-7 px-2 text-xs hover:bg-green-50"
             >
-              {processing ? '...' : <Send className="h-3 w-3" />}
+              <Download className="h-3 w-3" />
             </Button>
-          )}
 
-          {ticket.status === 'SENT' && (
-            <Button
-              size="sm"
-              onClick={() => onAction(ticket.id, 'COLLECT')}
-              disabled={processing}
-              className="h-7 px-2 text-xs bg-purple-500 hover:bg-purple-600"
-            >
-              {processing ? '...' : <Package className="h-3 w-3" />}
-            </Button>
-          )}
+            {/* Send Button */}
+            {ticket.status === 'GENERATED' && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => onAction(ticket.id, 'SEND')}
+                disabled={processing}
+                className="h-7 px-2 text-xs bg-blue-500 hover:bg-blue-600 text-white"
+              >
+                {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+              </Button>
+            )}
 
-          {(ticket.status === 'COLLECTED' || ticket.status === 'SENT') && (
-            <Button
-              size="sm"
-              onClick={() => onAction(ticket.id, 'USE')}
-              disabled={processing}
-              className="h-7 px-2 text-xs bg-green-500 hover:bg-green-600"
-            >
-              {processing ? '...' : <CheckCircle className="h-3 w-3" />}
-            </Button>
-          )}
+            {/* Collect Button */}
+            {ticket.status === 'SENT' && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => onAction(ticket.id, 'COLLECT')}
+                disabled={processing}
+                className="h-7 px-2 text-xs bg-purple-500 hover:bg-purple-600 text-white"
+              >
+                {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
+              </Button>
+            )}
 
-          {ticket.status !== 'USED' && ticket.status !== 'CANCELLED' && (
-            <>
+            {/* Check-in Button */}
+            {(ticket.status === 'COLLECTED' || ticket.status === 'SENT') && (
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => onAction(ticket.id, 'USE')}
+                disabled={processing}
+                className="h-7 px-2 text-xs bg-green-500 hover:bg-green-600 text-white"
+              >
+                {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+              </Button>
+            )}
+
+
+
+            {/* Cancel Button */}
+            {ticket.status !== 'USED' && ticket.status !== 'CANCELLED' && (
               <Button
                 size="sm"
                 variant="destructive"
-                onClick={() => onAction(ticket.id, 'CANCEL')}
+                onClick={() => handleActionWithConfirmation('CANCEL')}
                 disabled={processing}
                 className="h-7 px-2 text-xs"
               >
                 <X className="h-3 w-3" />
               </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
 
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => onAction(ticket.id, 'REGENERATE')}
-                disabled={processing}
-                className="h-7 px-2 text-xs hover:bg-orange-50"
-              >
-                <RotateCcw className="h-3 w-3" />
-              </Button>
-            </>
-          )}
-        </div>
-      </TableCell>
-    </TableRow>
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog(prev => ({ ...prev, open }))}
+        onConfirm={confirmAction}
+        title={confirmDialog.title}
+        description={confirmDialog.description}
+        confirmText={confirmDialog.confirmText}
+        variant={confirmDialog.variant}
+      />
+    </>
   )
 })
 

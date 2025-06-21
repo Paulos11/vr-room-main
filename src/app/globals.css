@@ -1,4 +1,4 @@
-/* src/app/globals.css - Simplified without border conflicts */
+/* src/app/globals.css - Clean version compatible with shadcn/ui */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,69 +7,64 @@
 :root {
   --font-poppins: 'Poppins', sans-serif;
   --font-inter: 'Inter', sans-serif;
+  
+  /* shadcn/ui CSS Variables */
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222.2 84% 4.9%;
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --secondary: 210 40% 96%;
+  --secondary-foreground: 222.2 84% 4.9%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --accent: 210 40% 96%;
+  --accent-foreground: 222.2 84% 4.9%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 214.3 31.8% 91.4%;
+  --input: 214.3 31.8% 91.4%;
+  --ring: 221.2 83.2% 53.3%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+  --popover: 222.2 84% 4.9%;
+  --popover-foreground: 210 40% 98%;
+  --primary: 210 40% 98%;
+  --primary-foreground: 222.2 84% 4.9%;
+  --secondary: 217.2 32.6% 17.5%;
+  --secondary-foreground: 210 40% 98%;
+  --muted: 217.2 32.6% 17.5%;
+  --muted-foreground: 215 20.2% 65.1%;
+  --accent: 217.2 32.6% 17.5%;
+  --accent-foreground: 210 40% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 210 40% 98%;
+  --border: 217.2 32.6% 17.5%;
+  --input: 217.2 32.6% 17.5%;
+  --ring: 212.7 26.8% 83.9%;
 }
 
 @layer base {
   * {
-    box-sizing: border-box;
+    @apply border-border;
   }
-  
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
-  
-  /* Custom font classes */
-  .font-heading {
-    font-family: var(--font-poppins);
-    font-weight: 700;
-    letter-spacing: -0.025em;
-  }
-  
-  .font-display {
-    font-family: var(--font-poppins);
-    font-weight: 900;
-    letter-spacing: -0.05em;
-  }
-  
-  .font-body {
-    font-family: var(--font-inter);
-    font-weight: 400;
-  }
-  
-  .font-medium {
-    font-family: var(--font-inter);
-    font-weight: 500;
-  }
-  
-  .font-semibold {
-    font-family: var(--font-poppins);
-    font-weight: 600;
-  }
-  
-  .font-bold {
-    font-family: var(--font-poppins);
-    font-weight: 700;
-  }
-  
-  .font-black {
-    font-family: var(--font-poppins);
-    font-weight: 900;
-  }
 }
 
 @layer components {
-  /* Custom button styles */
-  .btn-gradient {
-    @apply bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 transform hover:scale-105;
-  }
-  
-  /* Custom card styles */
-  .card-hover {
-    @apply transition-all duration-300 hover:shadow-xl hover:scale-105;
-  }
-  
-  /* Gradient text */
+  /* Custom gradient text */
   .text-gradient {
     @apply bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent;
   }
@@ -282,49 +277,7 @@
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(to bottom, #3b82f6, #8b5cf6);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(to bottom, #2563eb, #7c3aed);
-}
-
 /* Smooth scrolling */
 html {
   scroll-behavior: smooth;
-}
-
-/* Focus styles for accessibility */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  @apply outline-2 outline-offset-2 outline-blue-500;
-}
-
-/* Print styles */
-@media print {
-  .no-print {
-    display: none !important;
-  }
-  
-  body {
-    font-size: 12pt;
-    line-height: 1.4;
-  }
-  
-  h1, h2, h3, h4, h5, h6 {
-    page-break-after: avoid;
-  }
 }
