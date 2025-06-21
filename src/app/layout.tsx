@@ -1,4 +1,4 @@
-// src/app/layout.tsx - Updated with hydration fixes
+// src/app/layout.tsx - Fixed hydration issues
 import type { Metadata } from 'next'
 import { Poppins, Inter } from 'next/font/google'
 import './globals.css'
@@ -95,7 +95,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${inter.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
       <head>
         {/* Additional SEO Meta Tags */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -161,10 +161,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className={`${inter.className} font-sans antialiased`} suppressHydrationWarning>
-        <main suppressHydrationWarning>
-          {children}
-        </main>
+      <body className={`${inter.className} font-sans antialiased`}>
+        {children}
         <Toaster />
       </body>
     </html>

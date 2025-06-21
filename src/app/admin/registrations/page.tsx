@@ -12,12 +12,7 @@ export const fetchCache = 'force-no-store' // Don't cache API calls
 function RegistrationsContent() {
   return (
     <div className="space-y-6 p-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Registrations</h1>
-        <p className="mt-2 text-gray-600">
-          Manage client registrations and verification process
-        </p>
-      </div>
+    
       
       <RegistrationsTable />
     </div>

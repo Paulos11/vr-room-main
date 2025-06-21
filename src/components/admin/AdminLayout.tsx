@@ -50,12 +50,7 @@ const navigation = [
     icon: Zap,
     color: 'text-orange-600'
   },
-  {
-    name: 'Communications',
-    href: '/admin/communications',
-    icon: Mail,
-    color: 'text-blue-600'
-  },
+
   {
     name: 'Settings',
     href: '/admin/settings',
