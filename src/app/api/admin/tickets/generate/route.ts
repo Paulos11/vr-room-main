@@ -1,6 +1,7 @@
 
 // src/app/api/admin/tickets/generate/route.ts - Generate new tickets
 import { prisma } from "@/lib/prisma"
+import { TicketService } from "@/lib/ticketService"
 import { NextRequest, NextResponse } from "next/server"
 export async function POST(request: NextRequest) {
   try {
