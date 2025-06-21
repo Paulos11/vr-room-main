@@ -164,12 +164,14 @@ export default function AdminTicketsPage() {
 
   return (
     <div className="space-y-4 p-8">
-      <TicketsHeader 
-        tickets={tickets}
-        onRefresh={fetchTickets}
-        onGenerateTickets={() => setShowGenerateDialog(true)}
-        loading={loading}
-      />
+<TicketsHeader 
+  tickets={tickets}
+  filteredCount={filteredTickets.length}  // <-- Add this line
+  onRefresh={fetchTickets}
+  onGenerateTickets={() => setShowGenerateDialog(true)}
+  loading={loading}
+/>
+
 
       <TicketsFilters
         search={search}
