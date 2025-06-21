@@ -29,7 +29,7 @@ export const EventInfoSection = () => (
             <CardTitle className="text-sm font-bold">Dates</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <p className="text-sm font-bold text-gray-800">July 26 - August 6</p>
+            <p className="text-sm font-bold text-gray-800">June 26 - July 6</p>
             <p className="text-gray-600 text-xs">2025</p>
           </CardContent>
         </Card>

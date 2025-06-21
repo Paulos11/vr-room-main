@@ -330,7 +330,7 @@ export default function TicketStatusContent() {
                   <div className="space-y-3 text-sm">
                     <div className="flex items-center gap-2 text-purple-700">
                       <Calendar className="h-4 w-4" />
-                      <span><strong>Dates:</strong> July 26 - August 6, 2025</span>
+                      <span><strong>Dates:</strong> June 26 - July 6, 2025</span>
                     </div>
                     <div className="flex items-center gap-2 text-purple-700">
                       <MapPin className="h-4 w-4" />

@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
               currency: 'eur',
               product_data: {
                 name: `EMS VIP Trade Fair Access 2025 ${quantity > 1 ? `(${quantity} Tickets)` : ''}`,
-                description: `VIP access to EMS Trade Fair at MFCC (July 26 - August 6, 2025)${quantity > 1 ? ` - ${quantity} tickets under the name ${registration.firstName} ${registration.lastName}` : ''}`,
+                description: `VIP access to EMS Trade Fair at MFCC (June 26 - July 6, 2025)${quantity > 1 ? ` - ${quantity} tickets under the name ${registration.firstName} ${registration.lastName}` : ''}`,
               },
               unit_amount: 5000, // €50.00 per ticket in cents
             },

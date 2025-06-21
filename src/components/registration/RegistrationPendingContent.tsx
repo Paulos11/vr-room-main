@@ -383,7 +383,7 @@ export function RegistrationPendingContent() {
             <div className="p-3 border rounded-lg bg-indigo-50">
               <h3 className="font-medium mb-2 text-sm">Event Details</h3>
               <div className="space-y-1 text-xs text-indigo-800">
-                <p><strong>Dates:</strong> July 26 - August 6, 2025</p>
+                <p><strong>Dates:</strong> June 26 - July 6, 2025</p>
                 <p><strong>Venue:</strong> Malta Fairs and Conventions Centre, Ta' Qali</p>
                 <p><strong>EMS Booth:</strong> MFCC Main Hall</p>
               </div>

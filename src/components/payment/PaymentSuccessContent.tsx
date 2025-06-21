@@ -286,7 +286,7 @@ export function PaymentSuccessContent() {
               <div className="space-y-2 text-xs text-indigo-800">
                 <div className="flex items-center gap-2">
                   <Calendar className="h-3 w-3" />
-                  <span><strong>Dates:</strong> July 26 - August 6, 2025</span>
+                  <span><strong>Dates:</strong> June 26 - July 6, 2025</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <MapPin className="h-3 w-3" />

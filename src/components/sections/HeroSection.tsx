@@ -62,12 +62,12 @@ export const HeroSection = () => {
         </Badge>
         
         <h1 className="text-6xl md:text-8xl font-black mb-6 text-white drop-shadow-2xl">
-          <span className="block text-[#9BC93A]">EMS</span>
+          <span className="block text-green-300">EMS</span>
           <span className="text-4xl md:text-5xl font-bold">AT MFCC!</span>
         </h1>
         
         <div className="text-2xl md:text-3xl font-bold mb-8 text-white bg-gradient-to-r from-green-600 to-blue-600 px-6 py-3 rounded-full">
-          26th July - 6th August
+          26th June - 6th July
         </div>
         
         <p className="text-xl md:text-2xl mb-8 max-w-3xl text-white/90 font-medium">

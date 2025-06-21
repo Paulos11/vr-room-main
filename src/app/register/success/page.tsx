@@ -285,7 +285,7 @@ export default function RegistrationSuccessPage() {
             <div className="space-y-2 text-sm text-blue-800">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                <span><strong>Dates:</strong> July 26 - August 6, 2025</span>
+                <span><strong>Dates:</strong> June 26 - July 6, 2025</span>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
