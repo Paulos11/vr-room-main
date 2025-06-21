@@ -46,9 +46,9 @@ export const HeroSection = () => {
       
       {/* Animated Background Elements */}
       <div className="absolute inset-0 overflow-hidden">
-        <div className="absolute top-10 left-10 w-32 h-32 bg-white/10 rounded-full animate-bounce"></div>
+        <div className="absolute top-10 left-10 w-32 h-32 bg-white/10 rounded-full "></div>
         <div className="absolute top-20 right-20 w-24 h-24 bg-yellow-300/10 rounded-full animate-pulse"></div>
-        <div className="absolute bottom-20 left-20 w-40 h-40 bg-pink-300/10 rounded-full animate-bounce delay-1000"></div>
+        <div className="absolute bottom-20 left-20 w-40 h-40 bg-pink-300/10 rounded-full delay-1000"></div>
         <div className="absolute bottom-32 right-32 w-28 h-28 bg-green-300/15 rounded-full animate-pulse delay-500"></div>
         
         {/* Large Central Balloon */}
