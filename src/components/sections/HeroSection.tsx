@@ -62,7 +62,7 @@ export const HeroSection = () => {
         </Badge>
         
         <h1 className="text-6xl md:text-8xl font-black mb-6 text-white drop-shadow-2xl">
-          <span className="block text-green-300">EMS</span>
+          <span className="block text-[#9BC93A]">EMS</span>
           <span className="text-4xl md:text-5xl font-bold">AT MFCC!</span>
         </h1>
         
