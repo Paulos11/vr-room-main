@@ -1,5 +1,6 @@
-// src/lib/ticketGenerator.ts - Updated with random ticket numbers
+// src/lib/ticketGenerator.ts - Updated with verification URLs for fast scanning
 import { prisma } from '@/lib/prisma'
+import crypto from 'crypto'
 
 interface TicketGenerationOptions {
   registrationId: string
@@ -14,12 +15,13 @@ interface GeneratedTicket {
 }
 
 export class TicketGenerator {
-  private static readonly PREFIX = 'EMS'
+  private static readonly PREFIX = 'TKT'
   private static readonly YEAR = new Date().getFullYear()
+  private static readonly BASE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
 
   /**
    * Generate a random, unique ticket number
-   * Format: EMS-2025-A7K9M2 (random alphanumeric)
+   * Format: TKT-2025-A7K9M2 (random alphanumeric)
    */
   static async generateTicketNumber(): Promise<string> {
     const year = this.YEAR
@@ -70,32 +72,43 @@ export class TicketGenerator {
   }
 
   /**
-   * Generate QR code data for the ticket
+   * Generate verification token for QR code security
    */
-  static generateQRCode(ticketNumber: string, registrationId: string): string {
-    // QR code contains ticket verification data
-    const qrData = {
-      ticket: ticketNumber,
-      registration: registrationId,
-      event: 'EMS-TRADE-FAIR-2025',
-      venue: 'MFCC',
-      timestamp: Date.now(),
-      // Add random verification code for extra security
-      verification: this.generateRandomString(8)
-    }
-
-    // Convert to base64 encoded string for QR code
-    return Buffer.from(JSON.stringify(qrData)).toString('base64')
+  private static generateVerificationToken(ticketNumber: string): string {
+    // Create a secure hash for verification
+    const secret = process.env.TICKET_VERIFICATION_SECRET || 'default-secret-change-in-production'
+    const timestamp = Math.floor(Date.now() / 1000) // Current timestamp in seconds
+    
+    // Create hash with ticket number and timestamp (valid for 24 hours)
+    const data = `${ticketNumber}:${timestamp}`
+    const hash = crypto.createHmac('sha256', secret).update(data).digest('hex')
+    
+    // Return first 16 characters of hash + timestamp
+    return `${hash.substring(0, 16)}:${timestamp}`
   }
 
   /**
-   * Generate complete ticket with random number and QR code
+   * Generate QR code with verification URL for super-fast scanning
+   */
+  static generateQRCode(ticketNumber: string): string {
+    // Generate verification token
+    const verificationToken = this.generateVerificationToken(ticketNumber)
+    
+    // Create verification URL that directly identifies the ticket
+    const verificationUrl = `${this.BASE_URL}/verify/${ticketNumber}?token=${verificationToken}`
+    
+    return verificationUrl
+  }
+
+  /**
+   * Generate complete ticket with verification URL QR code
    */
   static async generateTicket(options: TicketGenerationOptions): Promise<GeneratedTicket> {
-    const { registrationId } = options
-
     const ticketNumber = await this.generateTicketNumber()
-    const qrCode = this.generateQRCode(ticketNumber, registrationId)
+    const qrCode = this.generateQRCode(ticketNumber)
+
+    console.log(`Generated ticket: ${ticketNumber}`)
+    console.log(`QR Code URL: ${qrCode}`)
 
     return {
       ticketNumber,
@@ -108,9 +121,34 @@ export class TicketGenerator {
    * Validate ticket number format
    */
   static validateTicketNumber(ticketNumber: string): boolean {
-    // Format: EMS-2025-A7K9M2 (6 or 8 character suffix)
-    const pattern = /^EMS-\d{4}-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6,8}$/
+    // Format: TKT-2025-A7K9M2 (6 or 8 character suffix)
+    const pattern = /^TKT-\d{4}-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6,8}$/
     return pattern.test(ticketNumber)
+  }
+
+  /**
+   * Validate verification token
+   */
+  static validateVerificationToken(ticketNumber: string, token: string): boolean {
+    try {
+      const [hash, timestamp] = token.split(':')
+      const tokenTimestamp = parseInt(timestamp)
+      const currentTimestamp = Math.floor(Date.now() / 1000)
+      
+      // Check if token is not older than 24 hours
+      if (currentTimestamp - tokenTimestamp > 86400) {
+        return false
+      }
+      
+      // Recreate expected hash
+      const secret = process.env.TICKET_VERIFICATION_SECRET || 'default-secret-change-in-production'
+      const data = `${ticketNumber}:${timestamp}`
+      const expectedHash = crypto.createHmac('sha256', secret).update(data).digest('hex').substring(0, 16)
+      
+      return hash === expectedHash
+    } catch (error) {
+      return false
+    }
   }
 
   /**
@@ -130,19 +168,6 @@ export class TicketGenerator {
       prefix: parts[0],
       year: parseInt(parts[1]),
       randomCode: parts[2]
-    }
-  }
-
-  /**
-   * Decode QR code data
-   */
-  static decodeQRCode(qrCode: string): any | null {
-    try {
-      const decoded = Buffer.from(qrCode, 'base64').toString('utf-8')
-      return JSON.parse(decoded)
-    } catch (error) {
-      console.error('Error decoding QR code:', error)
-      return null
     }
   }
 

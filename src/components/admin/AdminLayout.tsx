@@ -1,4 +1,4 @@
-// src/components/admin/AdminLayout.tsx - Compact and clean with EMS colors
+// src/components/admin/AdminLayout.tsx - Updated with Ticket Types navigation
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -14,11 +14,12 @@ import {
   Users, 
   Ticket, 
   Zap, 
-  Mail, 
   Settings, 
   Menu, 
   LogOut,
-  Building2
+  Building2,
+  Package,
+  Gift
 } from 'lucide-react'
 
 interface AdminLayoutProps {
@@ -45,12 +46,23 @@ const navigation = [
     color: 'text-purple-600'
   },
   {
+    name: 'Ticket Types',
+    href: '/admin/ticket-types',
+    icon: Package,
+    color: 'text-indigo-600'
+  },
+  {
+    name: 'Coupons',
+    href: '/admin/coupons',
+    icon: Gift,
+    color: 'text-pink-600'
+  },
+  {
     name: 'Panel Leads',
     href: '/admin/panels',
     icon: Zap,
     color: 'text-orange-600'
   },
-
   {
     name: 'Settings',
     href: '/admin/settings',
@@ -94,7 +106,9 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const NavItems = ({ mobile = false }) => (
     <nav className={`space-y-1 ${mobile ? 'px-3 py-4' : 'px-3 py-6'}`}>
       {navigation.map((item) => {
-        const isActive = pathname === item.href
+        const isActive = pathname === item.href || 
+          (pathname.startsWith(item.href) && item.href !== '/admin')
+        
         return (
           <Link
             key={item.name}

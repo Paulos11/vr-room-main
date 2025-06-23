@@ -27,7 +27,7 @@ const baseUrl = process.env.NODE_ENV === 'production'
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
   title: 'EMS Trade Fair 2025 | MFCC Ta\' Qali Malta | VIP Tickets & Solar Panels',
-  description: 'Join EMS Trade Fair at Malta Fairs & Conventions Centre (MFCC) Ta\' Qali, Malta. July 26 - August 6, 2025. FREE VIP tickets, ice skating, VR games, magic shows, food & exclusive solar panel offers. Book now!',
+  description: 'Join EMS Trade Fair at Malta Fairs & Conventions Centre (MFCC) Ta\' Qali, Malta. June 26 - July 6, 2025. FREE VIP tickets, ice skating, VR games, magic shows, food & exclusive solar panel offers. Book now!',
   keywords: [
     'EMS Trade Fair',
     'MFCC Malta',
@@ -61,7 +61,7 @@ export const metadata: Metadata = {
     locale: 'en_MT',
     url: baseUrl,
     title: 'EMS Trade Fair 2025 | MFCC Ta\' Qali Malta | FREE VIP Tickets',
-    description: 'Malta\'s premier trade fair at MFCC Ta\' Qali. Entertainment, solar panels, VIP experience. July 26 - August 6, 2025. Get your FREE VIP ticket now!',
+    description: 'Malta\'s premier trade fair at MFCC Ta\' Qali. Entertainment, solar panels, VIP experience. June 26 - July 6, 2025. Get your FREE VIP ticket now!',
     siteName: 'EMS Trade Fair',
     images: [
       {

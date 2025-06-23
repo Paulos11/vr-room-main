@@ -1,6 +1,8 @@
-// src/app/api/admin/registrations/compact/route.ts - Ultra-fast minimal data API
+// src/app/api/admin/registrations/compact/route.ts - Updated with correct field names
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+
+export const dynamic = 'force-dynamic'; // Added this line
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +28,7 @@ export async function GET(request: NextRequest) {
           { lastName: { contains: searchTerm, mode: 'insensitive' } },
           { email: { contains: searchTerm, mode: 'insensitive' } },
           { phone: { contains: searchTerm, mode: 'insensitive' } },
-          { companyName: { contains: searchTerm, mode: 'insensitive' } },
+          { customerName: { contains: searchTerm, mode: 'insensitive' } },
           { id: { contains: searchTerm, mode: 'insensitive' } }
         ]
       }
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
     
     // Super optimized parallel queries with minimal selects but including modal data
     const [registrations, stats] = await Promise.all([
-      // Minimal data selection for maximum speed but include necessary fields for modal
+      // Updated field names to match new schema
       prisma.registration.findMany({
         where,
         select: {
@@ -46,9 +48,11 @@ export async function GET(request: NextRequest) {
           idCardNumber: true,
           status: true,
           isEmsClient: true,
-          companyName: true,
-          emsCustomerId: true,
-          accountManager: true,
+          // Updated EMS customer fields
+          customerName: true,
+          orderNumber: true,
+          applicationNumber: true,
+          orderDate: true,
           adminNotes: true,
           verifiedAt: true,
           verifiedBy: true,
@@ -66,10 +70,9 @@ export async function GET(request: NextRequest) {
             select: { 
               id: true,
               ticketNumber: true, 
-              status: true,
-              ticketSequence: true
+              status: true
             },
-            orderBy: { ticketSequence: 'asc' }
+            orderBy: { createdAt: 'desc' }
           },
           // Get panel interests for modal
           panelInterests: {
@@ -111,9 +114,12 @@ export async function GET(request: NextRequest) {
       idCardNumber: reg.idCardNumber,
       status: reg.status,
       isEmsClient: reg.isEmsClient,
-      company: reg.companyName,
-      emsCustomerId: reg.emsCustomerId,
-      accountManager: reg.accountManager,
+      // Updated field mappings
+      company: reg.customerName, //
+      customerName: reg.customerName, //
+      orderNumber: reg.orderNumber,
+      applicationNumber: reg.applicationNumber,
+      orderDate: reg.orderDate?.toISOString(),
       adminNotes: reg.adminNotes,
       verifiedAt: reg.verifiedAt?.toISOString(),
       verifiedBy: reg.verifiedBy,

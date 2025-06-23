@@ -1,31 +1,32 @@
-
-// src/app/api/admin/approve-registration/route.ts - Enhanced admin approval with ticket generation
+// src/app/api/admin/approve-registration/route.ts - Fixed to use selected tickets
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { TicketService } from '@/lib/ticketService'
 import { z } from 'zod'
 
 const ApprovalSchema = z.object({
   registrationId: z.string(),
   action: z.enum(['APPROVE', 'REJECT']),
   notes: z.string().optional(),
-  adminId: z.string().optional().default('admin'),
-  ticketQuantity: z.number().min(1).max(10).optional().default(1) // Allow admin to specify quantity
+  adminId: z.string().optional().default('admin')
 })
 
 export async function POST(request: NextRequest) {
   try {
     console.log('=== ADMIN APPROVAL REQUEST ===')
     const body = await request.json()
-    const { registrationId, action, notes, adminId, ticketQuantity } = ApprovalSchema.parse(body)
+    const { registrationId, action, notes, adminId } = ApprovalSchema.parse(body)
     
     console.log(`Processing ${action} for registration ${registrationId}`)
 
-    // Find the registration with related data
+    // Find the registration with related data INCLUDING existing tickets
     const registration = await prisma.registration.findUnique({
       where: { id: registrationId },
       include: {
-        tickets: true,
+        tickets: {
+          include: {
+            ticketType: true
+          }
+        },
         panelInterests: true
       }
     })
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (action === 'APPROVE') {
       console.log('Approving EMS customer registration...')
+      console.log(`Found ${registration.tickets.length} existing tickets`)
       
       // Use transaction for consistency
       const result = await prisma.$transaction(async (tx) => {
@@ -60,52 +62,40 @@ export async function POST(request: NextRequest) {
           }
         })
 
-        // Generate tickets for approved EMS customer
-        const tickets = []
-        try {
-          console.log(`Generating ${ticketQuantity} ticket(s) for approved EMS customer...`)
-          
-          // Create tickets using the service
-          for (let i = 1; i <= ticketQuantity; i++) {
-            const ticket = await TicketService.createTicket(registrationId, i)
-            
-            // Update ticket to SENT status immediately
-            const sentTicket = await tx.ticket.update({
+        // Update existing tickets to SENT status instead of creating new ones
+        const updatedTickets = await Promise.all(
+          registration.tickets.map(ticket => 
+            tx.ticket.update({
               where: { id: ticket.id },
               data: {
                 status: 'SENT',
                 sentAt: new Date()
               }
             })
-            
-            tickets.push(sentTicket)
-            console.log(`Ticket ${i} generated and sent:`, ticket.ticketNumber)
-          }
-          
-        } catch (ticketError) {
-          console.error('Error generating tickets:', ticketError)
-          throw new Error(`Failed to generate tickets: ${ticketError}`)
-        }
+          )
+        )
+
+        console.log(`Updated ${updatedTickets.length} tickets to SENT status`)
 
         // Log approval email
         await tx.emailLog.create({
           data: {
             registrationId,
             emailType: 'REGISTRATION_APPROVED',
-            subject: `Registration Approved - Your ${ticketQuantity > 1 ? ticketQuantity + ' VIP Tickets' : 'VIP Ticket'} Ready!`,
+            subject: `Registration Approved - Your ${registration.tickets.length > 1 ? registration.tickets.length + ' VIP Tickets' : 'VIP Ticket'} Ready!`,
             recipient: registration.email,
             status: 'SENT'
           }
         })
 
-        return { updatedRegistration, tickets }
+        return { updatedRegistration, tickets: updatedTickets }
       })
 
-      console.log(`EMS registration approved - ${result.tickets.length} tickets generated`)
+      console.log(`EMS registration approved - ${result.tickets.length} tickets activated`)
 
       return NextResponse.json({
         success: true,
-        message: `Registration approved and ${result.tickets.length} ticket(s) generated`,
+        message: `Registration approved and ${result.tickets.length} ticket(s) activated`,
         data: {
           registration: result.updatedRegistration,
           tickets: result.tickets,
@@ -117,16 +107,48 @@ export async function POST(request: NextRequest) {
     } else if (action === 'REJECT') {
       console.log('Rejecting EMS customer registration...')
       
-      // Update registration to REJECTED
-      const updatedRegistration = await prisma.registration.update({
-        where: { id: registrationId },
-        data: {
-          status: 'REJECTED',
-          adminNotes: notes,
-          rejectedReason: notes || 'EMS customer status could not be verified',
-          verifiedAt: new Date(),
-          verifiedBy: adminId
+      // Use transaction to update registration and handle tickets
+      const result = await prisma.$transaction(async (tx) => {
+        // Update registration to REJECTED
+        const updatedRegistration = await tx.registration.update({
+          where: { id: registrationId },
+          data: {
+            status: 'REJECTED',
+            adminNotes: notes,
+            rejectedReason: notes || 'EMS customer status could not be verified',
+            verifiedAt: new Date(),
+            verifiedBy: adminId
+          }
+        })
+
+        // Cancel existing tickets
+        const cancelledTickets = await Promise.all(
+          registration.tickets.map(ticket =>
+            tx.ticket.update({
+              where: { id: ticket.id },
+              data: {
+                status: 'CANCELLED'
+              }
+            })
+          )
+        )
+
+        // Restore ticket type stock for cancelled tickets
+        for (const ticket of registration.tickets) {
+          await tx.ticketType.update({
+            where: { id: ticket.ticketTypeId },
+            data: {
+              availableStock: {
+                increment: 1
+              },
+              soldStock: {
+                decrement: 1
+              }
+            }
+          })
         }
+
+        return { updatedRegistration, cancelledTickets }
       })
 
       // Log rejection email
@@ -140,13 +162,13 @@ export async function POST(request: NextRequest) {
         }
       })
 
-      console.log('EMS registration rejected')
+      console.log('EMS registration rejected and tickets cancelled')
 
       return NextResponse.json({
         success: true,
-        message: 'Registration rejected',
+        message: 'Registration rejected and tickets cancelled',
         data: {
-          registration: updatedRegistration,
+          registration: result.updatedRegistration,
           status: 'REJECTED'
         }
       })

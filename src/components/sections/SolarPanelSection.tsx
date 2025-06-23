@@ -40,7 +40,7 @@ export const SolarPanelSection = () => (
               <div className="bg-white/90 backdrop-blur-sm p-4 rounded-2xl">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h3 className="text-2xl font-black text-gray-800 mb-2">Powerfull</h3>
+                    <h3 className="text-2xl font-black text-gray-800 mb-2">Powerful</h3>
                     <div className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-red-500 mb-2">
                       950W
                     </div>

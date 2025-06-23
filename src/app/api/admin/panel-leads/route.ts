@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
         { lastName: { contains: searchTerm, mode: 'insensitive' } },
         { email: { contains: searchTerm, mode: 'insensitive' } },
         { phone: { contains: searchTerm, mode: 'insensitive' } },
-        { companyName: { contains: searchTerm, mode: 'insensitive' } }
+        { customerName: { contains: searchTerm, mode: 'insensitive' } }, // Fixed: was companyName
+        { orderNumber: { contains: searchTerm, mode: 'insensitive' } },
+        { applicationNumber: { contains: searchTerm, mode: 'insensitive' } }
       ]
     }
 
@@ -53,8 +55,10 @@ export async function GET(request: NextRequest) {
             email: true,
             phone: true,
             isEmsClient: true,
-            companyName: true,
-            emsCustomerId: true,
+            customerName: true,      // Fixed: was companyName
+            orderNumber: true,       // Fixed: was emsCustomerId
+            applicationNumber: true, // Added: from schema
+            orderDate: true,         // Added: from schema
             status: true,
             createdAt: true,
             tickets: {
@@ -99,6 +103,8 @@ export async function GET(request: NextRequest) {
       new_status: (statusStats.find(s => s.status === 'NEW')?._count.id || 0),
       contacted_status: (statusStats.find(s => s.status === 'CONTACTED')?._count.id || 0),
       qualified_status: (statusStats.find(s => s.status === 'QUALIFIED')?._count.id || 0),
+      proposal_sent_status: (statusStats.find(s => s.status === 'PROPOSAL_SENT')?._count.id || 0), // Added missing status
+      negotiating_status: (statusStats.find(s => s.status === 'NEGOTIATING')?._count.id || 0), // Added missing status
       converted_status: (statusStats.find(s => s.status === 'CONVERTED')?._count.id || 0),
       lost_status: (statusStats.find(s => s.status === 'LOST')?._count.id || 0),
       closed_status: (statusStats.find(s => s.status === 'CLOSED')?._count.id || 0)
@@ -114,8 +120,10 @@ export async function GET(request: NextRequest) {
       email: interest.registration.email,
       phone: interest.registration.phone,
       isEmsClient: interest.registration.isEmsClient,
-      companyName: interest.registration.companyName,
-      emsCustomerId: interest.registration.emsCustomerId,
+      companyName: interest.registration.customerName,        // Fixed: using customerName from schema
+      orderNumber: interest.registration.orderNumber,         // Fixed: using orderNumber from schema
+      applicationNumber: interest.registration.applicationNumber, // Added: from schema
+      orderDate: interest.registration.orderDate?.toISOString(), // Added: from schema
       registrationStatus: interest.registration.status,
       ticketCount: interest.registration.tickets.length,
       panelType: interest.panelType,
@@ -164,6 +172,15 @@ export async function PUT(request: NextRequest) {
     if (!leadId || !status) {
       return NextResponse.json(
         { success: false, message: 'Lead ID and status are required' },
+        { status: 400 }
+      )
+    }
+
+    // Validate status against enum values
+    const validStatuses = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL_SENT', 'NEGOTIATING', 'CONVERTED', 'LOST', 'CLOSED']
+    if (!validStatuses.includes(status)) {
+      return NextResponse.json(
+        { success: false, message: 'Invalid status value' },
         { status: 400 }
       )
     }

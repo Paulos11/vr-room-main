@@ -1,7 +1,7 @@
-// src/components/forms/EnhancedRegistrationForm.tsx - Fixed Version
+// src/components/forms/EnhancedRegistrationForm.tsx - Updated to include panel interest for public customers
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -9,11 +9,12 @@ import { toast } from '@/components/ui/use-toast'
 import { Loader2, ArrowLeft, ArrowRight, AlertTriangle, Crown } from 'lucide-react'
 
 import { CustomerSelectionDialog } from './CustomerSelectionDialog'
+import { TicketSelectionStep } from './steps/TicketSelectionStep'
 import { PersonalInfoStep } from './steps/PersonalInfoStep'
 import { EmsCustomerStep } from './steps/EmsCustomerStep'
 import { PanelInterestStep } from './steps/PanelInterestStep'
 import { TermsStep } from './steps/TermsStep'
-import { RegistrationFormData } from '@/types/registration'
+import { RegistrationFormData } from '@/types/registration' // Assuming this type is correctly defined
 import { validateStep, validateAllFields } from '@/utils/formValidation'
 
 export function EnhancedRegistrationForm() {
@@ -28,30 +29,61 @@ export function EnhancedRegistrationForm() {
     phone: '',
     idCardNumber: '',
     isEmsClient: false,
-    quantity: 1,
+    selectedTickets: [],
     panelInterest: false,
     acceptTerms: false,
-    acceptPrivacyPolicy: false
+    acceptPrivacyPolicy: false,
+    couponCode: '',
+    // Updated EMS client fields - ensure these match RegistrationFormData
+    customerName: '',
+    orderNumber: '',
+    applicationNumber: '',
+    orderDate: ''
   })
 
-  const totalSteps = formData.isEmsClient ? 4 : 3
+  // Calculate total steps based on customer type
+  const totalSteps = formData.isEmsClient ? 5 : 4 // EMS: 5 steps, Public: 4 steps
 
-  // Calculate total cost - this is a VALUE, not a function
+  // Calculate totals
+  const totalTickets = useMemo(() => {
+    return formData.selectedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0)
+  }, [formData.selectedTickets])
+
   const totalCost = useMemo(() => {
     if (formData.isEmsClient) return 'Free'
-    return `€${((formData.quantity || 1) * 50).toFixed(2)}`
-  }, [formData.isEmsClient, formData.quantity])
+    const totalCents = formData.selectedTickets.reduce((sum, ticket) => 
+      sum + (ticket.priceInCents * ticket.quantity), 0
+    )
+    return `€${(totalCents / 100).toFixed(2)}`
+  }, [formData.selectedTickets, formData.isEmsClient])
 
   const handleCustomerTypeSelected = useCallback((isEmsClient: boolean) => {
-    setFormData(prev => ({ 
-      ...prev, 
+    // Reset all form data when customer type changes
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      idCardNumber: '',
       isEmsClient,
-      quantity: isEmsClient ? 1 : (prev.quantity || 1)
-    }))
+      selectedTickets: [],
+      panelInterest: false,
+      acceptTerms: false,
+      acceptPrivacyPolicy: false,
+      couponCode: '',
+      // EMS client fields - **REMOVE emsCustomerId and accountManager**
+      customerName: '',
+      orderNumber: '',       // Initialize optional fields as empty string or undefined
+      applicationNumber: '', // Initialize optional fields as empty string or undefined
+      orderDate: ''          // Initialize optional fields as empty string or undefined
+    })
+    
+    // Reset to step 1
+    setCurrentStep(1)
     setShowCustomerDialog(false)
   }, [])
 
-  const handleInputChange = useCallback((field: keyof RegistrationFormData, value: any) => {
+  const handleInputChange = useCallback((field: keyof RegistrationFormData | string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }, [])
 
@@ -85,6 +117,15 @@ export function EnhancedRegistrationForm() {
       return
     }
 
+    if (formData.selectedTickets.length === 0) {
+      toast({
+        title: "No tickets selected",
+        description: "Please select at least one ticket",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
@@ -95,7 +136,12 @@ export function EnhancedRegistrationForm() {
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim(),
         idCardNumber: formData.idCardNumber.trim(),
-        quantity: formData.isEmsClient ? 1 : (formData.quantity || 1)
+        couponCode: formData.couponCode || undefined,
+        // Ensure optional EMS client fields are set to undefined if empty strings
+        customerName: formData.customerName || undefined,
+        orderNumber: formData.orderNumber || undefined,
+        applicationNumber: formData.applicationNumber || undefined,
+        orderDate: formData.orderDate || undefined, // Keep as string for API, conversion happens there
       }
 
       const response = await fetch('/api/register', {
@@ -138,19 +184,39 @@ export function EnhancedRegistrationForm() {
   }, [formData, router])
 
   const renderStepContent = useCallback(() => {
-    const actualStep = formData.isEmsClient ? currentStep : (currentStep === 1 ? 1 : currentStep + 1)
-
-    switch (actualStep) {
+    // Debug logging
+    console.log('Rendering step:', currentStep, 'isEmsClient:', formData.isEmsClient)
+    
+    switch (currentStep) {
       case 1:
-        return <PersonalInfoStep formData={formData} onUpdate={handleInputChange} />
+        return <TicketSelectionStep formData={formData} onUpdate={handleInputChange} />
       case 2:
-        return <EmsCustomerStep formData={formData} onUpdate={handleInputChange} />
+        return <PersonalInfoStep formData={formData} onUpdate={handleInputChange} />
       case 3:
-        return <PanelInterestStep formData={formData} onUpdate={handleInputChange} />
+        if (formData.isEmsClient) {
+          return <EmsCustomerStep formData={formData} onUpdate={handleInputChange} />
+        } else {
+          // Panel Interest Step for Public Customers
+          return <PanelInterestStep formData={formData} onUpdate={handleInputChange} />
+        }
       case 4:
-        return <TermsStep formData={formData} onUpdate={handleInputChange} />
+        if (formData.isEmsClient) {
+          // Panel Interest Step for EMS Customers (Step 4 for EMS)
+          return <PanelInterestStep formData={formData} onUpdate={handleInputChange} />
+        } else {
+          // Terms Step for Public Customers (Step 4 for Public)
+          return <TermsStep formData={formData} onUpdate={handleInputChange} />
+        }
+      case 5:
+        // This case should only be reachable by EMS clients for Terms Step
+        if (formData.isEmsClient) {
+          return <TermsStep formData={formData} onUpdate={handleInputChange} />
+        } else {
+          console.error('Public customer should not reach step 5')
+          return <div className="p-4 text-center text-red-600">Error: Invalid step for public customer</div>
+        }
       default:
-        return null
+        return <div>Error: Invalid step {currentStep}</div>
     }
   }, [currentStep, formData, handleInputChange])
 
@@ -163,26 +229,27 @@ export function EnhancedRegistrationForm() {
   }
 
   return (
-    <div className="w-full max-w-md mx-auto ">
+    <div className="w-full max-w-md mx-auto">
       <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
-        {/* Header with enhanced styling */}
+        {/* Header */}
         <CardHeader className="pb-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-t-lg pt-8">
           <div className="text-center">
             {formData.isEmsClient && (
               <Crown className="h-6 w-6 text-yellow-500 mx-auto mb-2" />
             )}
             <CardTitle className="text-xl text-gray-800">
-              {formData.isEmsClient ? 'EMS Customer Registration' : 'VIP Ticket Registration'}
+              {formData.isEmsClient ? 'EMS Customer Registration' : 'Event Registration'}
             </CardTitle>
             <CardDescription className="text-sm text-gray-600">
-              {formData.isEmsClient 
-                ? 'Free VIP access - verification required'
-                : `${formData.quantity || 1} VIP ticket(s) - ${totalCost}`
-              }
+              {totalTickets > 0 ? (
+                `${totalTickets} ticket${totalTickets > 1 ? 's' : ''} - ${totalCost}`
+              ) : (
+                formData.isEmsClient ? 'Select your complimentary tickets' : 'Select your tickets'
+              )}
             </CardDescription>
           </div>
           
-          {/* Enhanced Progress Bar */}
+          {/* Progress Bar */}
           <div className="w-full bg-gray-200 rounded-full h-2 mt-4">
             <div 
               className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-500 ease-out" 
@@ -196,14 +263,14 @@ export function EnhancedRegistrationForm() {
         </CardHeader>
         
         <CardContent className="px-6 pb-6">
-          {/* Step Content with min height for smooth transitions */}
-          <div className="min-h-[300px] transition-all duration-300">
+          {/* Step Content */}
+          <div className="min-h-[400px] transition-all duration-300">
             {renderStepContent()}
           </div>
           
           {/* Step Validation Warning */}
           {!isCurrentStepValid && currentStep > 1 && (
-            <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg mt-4 animate-in slide-in-from-top-2 duration-200">
+            <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-200 rounded-lg mt-4">
               <AlertTriangle className="h-4 w-4 text-orange-600 flex-shrink-0" />
               <p className="text-sm text-orange-800">
                 Please complete all required fields above
@@ -211,13 +278,13 @@ export function EnhancedRegistrationForm() {
             </div>
           )}
           
-          {/* Enhanced Navigation */}
+          {/* Navigation */}
           <div className="flex justify-between mt-6 gap-3">
             <Button 
               variant="outline" 
               onClick={handlePrevious}
               disabled={currentStep === 1}
-              className="flex-1 h-10 transition-all duration-200 hover:bg-gray-50"
+              className="flex-1 h-10"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Previous
@@ -226,7 +293,7 @@ export function EnhancedRegistrationForm() {
             {currentStep < totalSteps ? (
               <Button 
                 onClick={handleNext}
-                className="flex-1 h-10 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 transition-all duration-200"
+                className="flex-1 h-10 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600"
                 disabled={!isCurrentStepValid}
               >
                 Continue
@@ -236,7 +303,7 @@ export function EnhancedRegistrationForm() {
               <Button 
                 onClick={handleSubmit}
                 disabled={isSubmitting || !isCurrentStepValid}
-                className="flex-1 h-10 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 transition-all duration-200"
+                className="flex-1 h-10 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
               >
                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isSubmitting ? 'Processing...' : 
@@ -250,8 +317,12 @@ export function EnhancedRegistrationForm() {
             <Button 
               variant="ghost" 
               size="sm"
-              onClick={() => setShowCustomerDialog(true)}
-              className="text-gray-500 text-sm h-8 hover:bg-green-50 transition-colors"
+              onClick={() => {
+                // Reset to step 1 when changing customer type
+                setCurrentStep(1)
+                setShowCustomerDialog(true)
+              }}
+              className="text-gray-500 text-sm h-8"
             >
               Change customer type
             </Button>

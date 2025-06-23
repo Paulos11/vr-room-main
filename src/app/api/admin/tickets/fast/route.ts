@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
         id: true,
         ticketNumber: true,
         status: true,
-        accessType: true,
+        // Removed accessType as it's not in the Prisma schema
         ticketSequence: true,
         issuedAt: true,
         sentAt: true,
@@ -84,16 +84,15 @@ export async function GET(request: NextRequest) {
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
       status: ticket.status,
-      accessType: ticket.accessType,
+      // Removed accessType from here as well
       sequence: ticket.ticketSequence,
       issuedAt: ticket.issuedAt.toISOString(),
       sentAt: ticket.sentAt?.toISOString(),
       collectedAt: ticket.collectedAt?.toISOString(),
       collectedBy: ticket.collectedBy,
-      customer: {
-        id: ticket.registration.id,
-        name: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
-        email: ticket.registration.email,
+      eventDate: ticket.eventDate.toISOString(), // Added eventDate mapping
+      venue: ticket.venue, // Added venue mapping
+      boothLocation: ticket.boothLocation, // Added boothLocation mapping
       customer: {
         id: ticket.registration.id,
         name: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
@@ -107,7 +106,7 @@ export async function GET(request: NextRequest) {
         checkedInBy: ticket.checkIns[0].checkedInBy,
         location: ticket.checkIns[0].location
       } : undefined
-    }}))
+    }))
     
     return NextResponse.json({
       success: true,

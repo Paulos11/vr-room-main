@@ -1,5 +1,4 @@
-
-// src/components/forms/steps/EmsCustomerStep.tsx - More compact
+// src/components/forms/steps/EmsCustomerStep.tsx - Updated with simplified fields
 'use client'
 
 import { Input } from '@/components/ui/input'
@@ -18,45 +17,61 @@ export function EmsCustomerStep({ formData, onUpdate }: StepProps) {
         <p className="text-xs text-gray-600">Help us verify your account (optional)</p>
       </div>
 
+      {/* EMS Customer Information */}
       <div className="space-y-3 p-3 border rounded-lg bg-green-50">
+        <h4 className="text-sm font-medium text-green-900">Customer & Order Information (Optional)</h4>
+        
         <div>
-          <Label htmlFor="customerName" className="text-sm">Customer/Company Name</Label>
+          <Label htmlFor="customerName" className="text-sm">Customer Name</Label>
           <Input 
             id="customerName"
-            placeholder="Your company name"
+            placeholder="Your name or business name"
             value={formData.customerName || ''}
             onChange={(e) => onUpdate('customerName', e.target.value)}
             className="h-9"
           />
         </div>
 
-        <div>
-          <Label htmlFor="emsCustomerId" className="text-sm">EMS Customer ID</Label>
-          <Input 
-            id="emsCustomerId"
-            placeholder="Customer ID (if known)"
-            value={formData.emsCustomerId || ''}
-            onChange={(e) => onUpdate('emsCustomerId', e.target.value)}
-            className="h-9"
-          />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label htmlFor="orderNumber" className="text-sm">Order Number</Label>
+            <Input 
+              id="orderNumber"
+              placeholder="e.g., ORD-2024-001"
+              value={formData.orderNumber || ''}
+              onChange={(e) => onUpdate('orderNumber', e.target.value)}
+              className="h-9"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="applicationNumber" className="text-sm">Application Number</Label>
+            <Input 
+              id="applicationNumber"
+              placeholder="e.g., APP-2024-001"
+              value={formData.applicationNumber || ''}
+              onChange={(e) => onUpdate('applicationNumber', e.target.value)}
+              className="h-9"
+            />
+          </div>
         </div>
 
         <div>
-          <Label htmlFor="accountManager" className="text-sm">Account Manager</Label>
+          <Label htmlFor="orderDate" className="text-sm">Order Date</Label>
           <Input 
-            id="accountManager"
-            placeholder="Manager name (if known)"
-            value={formData.accountManager || ''}
-            onChange={(e) => onUpdate('accountManager', e.target.value)}
+            id="orderDate"
+            type="date"
+            value={formData.orderDate || ''}
+            onChange={(e) => onUpdate('orderDate', e.target.value)}
             className="h-9"
           />
         </div>
       </div>
 
-      <div className="p-3 border rounded-lg bg-blue-50">
-        <p className="text-xs text-blue-800">
+      <div className="p-3 border rounded-lg bg-purple-50">
+        <p className="text-xs text-purple-800">
           <strong>Free VIP Access:</strong> As an EMS customer, your access is complimentary 
-          pending verification by our admin team.
+          pending verification by our admin team. Providing order details helps speed up verification.
         </p>
       </div>
     </div>

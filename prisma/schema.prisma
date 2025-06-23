@@ -18,10 +18,11 @@ model Registration {
   idCardNumber String  @unique @map("id_card_number")
   isEmsClient  Boolean @default(false) @map("is_ems_client")
 
-  // For EMS Clients
-  companyName    String? @map("company_name")
-  emsCustomerId  String? @map("ems_customer_id")
-  accountManager String? @map("account_manager")
+  // For EMS Clients - UPDATED FIELDS
+  customerName      String?   @map("customer_name")
+  orderNumber       String?   @map("order_number")
+  applicationNumber String?   @map("application_number")
+  orderDate         DateTime? @map("order_date")
 
   // Registration Status
   status         RegistrationStatus @default(PENDING)
@@ -30,23 +31,33 @@ model Registration {
   verifiedBy     String?            @map("verified_by")
   rejectedReason String?            @map("rejected_reason")
 
+  // Enhanced Pricing & Coupons
+  originalAmount    Int     @default(0) @map("original_amount") // in cents
+  discountAmount    Int     @default(0) @map("discount_amount") // in cents
+  finalAmount       Int     @default(0) @map("final_amount") // in cents
+  appliedCouponCode String? @map("applied_coupon_code")
+  appliedCouponId   String? @map("applied_coupon_id")
+
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  // Relations - UPDATED: Changed from ticket? to tickets[]
-  tickets        Ticket[] // One registration can have multiple tickets
+  // Relations
+  tickets        Ticket[]
   payment        Payment?
   panelInterests PanelInterest[]
   emailLogs      EmailLog[]
+  appliedCoupon  Coupon?         @relation(fields: [appliedCouponId], references: [id])
 
   @@map("registrations")
 }
 
 model Ticket {
   id             String  @id @default(cuid())
-  registrationId String  @map("registration_id") // REMOVED @unique to allow multiple tickets
+  registrationId String  @map("registration_id")
+  ticketTypeId   String  @map("ticket_type_id") // Reference to TicketType
   ticketNumber   String  @unique @map("ticket_number")
+  ticketSequence Int?    @map("ticket_sequence") // ✅ ADDED: Sequence number for ordering
   qrCode         String  @unique @map("qr_code")
   pdfUrl         String? @map("pdf_url")
 
@@ -57,7 +68,10 @@ model Ticket {
   collectedAt DateTime?    @map("collected_at")
   collectedBy String?      @map("collected_by")
 
-  // Timestamps - ADDED
+  // Pricing at time of purchase
+  purchasePrice Int @map("purchase_price") // Price paid for this specific ticket
+
+  // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -66,17 +80,59 @@ model Ticket {
   venue         String   @default("Malta Fairs and Conventions Centre")
   boothLocation String   @default("EMS Booth - MFCC") @map("booth_location")
 
-  // Access Level
-  accessType AccessType @default(VIP) @map("access_type") // Changed default to VIP
-
-  // Ticket Sequence - ADDED for ordering multiple tickets
-  ticketSequence Int @default(1) @map("ticket_sequence") // 1st ticket, 2nd ticket, etc.
-
   // Relations
   registration Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  ticketType   TicketType      @relation(fields: [ticketTypeId], references: [id])
   checkIns     TicketCheckIn[]
 
   @@map("tickets")
+}
+
+model TicketType {
+  id          String  @id @default(cuid())
+  name        String // e.g., "Ice Skating", "VR Games", "Magic Show"
+  description String?
+  category    String? // e.g., "Entertainment", "Sports", "Shows"
+
+  // Pricing
+  priceInCents Int    @map("price_in_cents")
+  currency     String @default("EUR")
+
+  // Stock Management
+  totalStock     Int @default(0) @map("total_stock") // Total available
+  reservedStock  Int @default(0) @map("reserved_stock") // Currently in carts/pending
+  soldStock      Int @default(0) @map("sold_stock") // Actually sold
+  availableStock Int @default(0) @map("available_stock") // Available for purchase
+
+  // Availability
+  isActive       Boolean   @default(true) @map("is_active")
+  availableFrom  DateTime? @map("available_from")
+  availableUntil DateTime? @map("available_until")
+  maxPerOrder    Int       @default(10) @map("max_per_order")
+  minPerOrder    Int       @default(1) @map("min_per_order")
+
+  // Target Audience
+  emsClientsOnly Boolean @default(false) @map("ems_clients_only")
+  publicOnly     Boolean @default(false) @map("public_only")
+
+  // Display & Sorting
+  sortOrder Int     @default(0) @map("sort_order")
+  imageUrl  String? @map("image_url")
+  featured  Boolean @default(false)
+  tags      String? // JSON array of tags
+
+  // Admin Info
+  createdBy String  @map("created_by")
+  notes     String?
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tickets Ticket[]
+
+  @@map("ticket_types")
 }
 
 model Payment {
@@ -85,7 +141,9 @@ model Payment {
 
   // Payment Details
   stripePaymentId String @unique @map("stripe_payment_id")
-  amount          Int // Amount in cents
+  amount          Int // Amount in cents (final amount after discounts)
+  originalAmount  Int    @map("original_amount") // Original amount before discounts
+  discountAmount  Int    @default(0) @map("discount_amount") // Discount applied
   currency        String @default("EUR")
 
   // Payment Status
@@ -104,6 +162,48 @@ model Payment {
   @@map("payments")
 }
 
+model Coupon {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+
+  // Discount Configuration
+  discountType   DiscountType @map("discount_type")
+  discountValue  Int          @map("discount_value")
+  minOrderAmount Int?         @map("min_order_amount")
+
+  // Usage Limits
+  maxUses        Int? @map("max_uses")
+  maxUsesPerUser Int? @default(1) @map("max_uses_per_user")
+  currentUses    Int  @default(0) @map("current_uses")
+
+  // Validity
+  isActive  Boolean   @default(true) @map("is_active")
+  validFrom DateTime  @map("valid_from")
+  validTo   DateTime? @map("valid_to")
+
+  // Target Audience
+  emsClientsOnly Boolean @default(false) @map("ems_clients_only")
+  publicOnly     Boolean @default(false) @map("public_only")
+
+  // Applicable Ticket Types (JSON array of ticket type IDs)
+  applicableTicketTypes String? @map("applicable_ticket_types")
+
+  // Admin Info
+  createdBy String  @map("created_by")
+  notes     String?
+
+  // Timestamps
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  registrations Registration[]
+
+  @@map("coupons")
+}
+
 model PanelInterest {
   id             String @id @default(cuid())
   registrationId String @map("registration_id")
@@ -111,7 +211,7 @@ model PanelInterest {
   panelType       String        @map("panel_type")
   interestLevel   InterestLevel @map("interest_level")
   estimatedBudget String?       @map("estimated_budget")
-  timeframe       String? // When they plan to purchase
+  timeframe       String?
   notes           String?
 
   // Lead Management
@@ -134,9 +234,12 @@ model TicketCheckIn {
   ticketId String @map("ticket_id")
 
   checkedInAt DateTime @default(now()) @map("checked_in_at")
-  checkedInBy String   @map("checked_in_by") // Admin who checked them in
-  location    String   @default("EMS Booth") // Where they checked in
-  notes       String? // Any notes about the check-in
+  checkedInBy String   @map("checked_in_by")
+  location    String   @default("EMS Booth")
+  notes       String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
@@ -193,35 +296,28 @@ model EventSettings {
 
 // Enums
 enum RegistrationStatus {
-  PENDING // Waiting for admin approval (EMS clients only)
-  VERIFIED // Approved by admin
-  REJECTED // Rejected by admin
-  PAYMENT_PENDING // Non-EMS clients who need to pay
-  COMPLETED // Registration complete (paid or approved)
+  PENDING
+  VERIFIED
+  REJECTED
+  PAYMENT_PENDING
+  COMPLETED
 }
 
 enum TicketStatus {
-  GENERATED // Ticket created but not sent
-  SENT // Ticket emailed to customer
-  COLLECTED // Customer collected physical ticket at booth
-  USED // Ticket scanned/used for entry
-  EXPIRED // Ticket expired
-  CANCELLED // Ticket cancelled
+  GENERATED
+  SENT
+  COLLECTED
+  USED
+  EXPIRED
+  CANCELLED
 }
 
 enum PaymentStatus {
-  PENDING // Payment initiated but not completed
-  SUCCEEDED // Payment successful
-  FAILED // Payment failed
-  CANCELLED // Payment cancelled
-  REFUNDED // Payment refunded
-}
-
-enum AccessType {
-  STANDARD // Regular access
-  VIP // VIP access with additional benefits
-  PRESS // Press/Media access
-  EXHIBITOR // Exhibitor access
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
 }
 
 enum InterestLevel {
@@ -260,6 +356,7 @@ enum EmailType {
   EVENT_REMINDER
   PANEL_FOLLOWUP
   CHECK_IN_CONFIRMATION
+  COUPON_APPLIED
 }
 
 enum EmailStatus {
@@ -268,4 +365,9 @@ enum EmailStatus {
   OPENED
   CLICKED
   BOUNCED
+}
+
+enum DiscountType {
+  PERCENTAGE
+  FIXED_AMOUNT
 }

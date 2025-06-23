@@ -1,4 +1,4 @@
-// src/lib/pdfTicketGenerator.ts - Clean version with all fixes
+// src/lib/pdfTicketGenerator.ts - Improved design with proper layout and information
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -21,149 +21,250 @@ export class PDFTicketGenerator {
     x: number, 
     y: number
   ): Promise<void> {
-    // Compact ticket dimensions
-    const ticketWidth = 252;  // 3.5 inches
-    const ticketHeight = 144; // 2 inches
+    // Ticket dimensions - more compact
+    const ticketWidth = 260;  // Compact width
+    const ticketHeight = 160; // Compact height
     
     // Get fonts
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     
-    // Premium color scheme
-    const navy = rgb(0.02, 0.12, 0.35);      // Deep navy
-    const gold = rgb(0.85, 0.65, 0.13);      // Premium gold
-    const silver = rgb(0.7, 0.7, 0.7);       // Silver accent
-    const cream = rgb(0.98, 0.97, 0.94);     // Cream background
-    const charcoal = rgb(0.2, 0.2, 0.2);     // Dark text
+    // Color scheme
+    const primaryBlue = rgb(0.1, 0.3, 0.6);     // EMS Blue
+    const lightBlue = rgb(0.9, 0.95, 1);        // Light blue background
+    const darkGray = rgb(0.2, 0.2, 0.2);        // Dark text
+    const mediumGray = rgb(0.5, 0.5, 0.5);      // Medium gray
+    const lightGray = rgb(0.9, 0.9, 0.9);       // Light gray
     const white = rgb(1, 1, 1);
+    const gold = rgb(0.85, 0.65, 0.13);         // Accent color
     
-    // Main background
+    // Main ticket background
     page.drawRectangle({
       x: x,
       y: y,
       width: ticketWidth,
       height: ticketHeight,
-      color: cream,
-      borderColor: silver,
-      borderWidth: 1,
+      color: white,
+      borderColor: lightGray,
+      borderWidth: 2,
     });
     
-    // Navy header stripe
+    // Header section background
     page.drawRectangle({
       x: x,
       y: y + ticketHeight - 35,
       width: ticketWidth,
       height: 35,
-      color: navy,
+      color: primaryBlue,
     });
     
-    // Gold accent line
-    page.drawRectangle({
-      x: x,
-      y: y + ticketHeight - 37,
-      width: ticketWidth,
-      height: 2,
-      color: gold,
-    });
-    
-    // Left side accent
-    page.drawRectangle({
-      x: x,
-      y: y,
-      width: 4,
-      height: ticketHeight - 37,
-      color: gold,
-    });
-    
-    // EMS branding
-    page.drawText('EMS', {
+    // Main title - EMS TICKETS
+    page.drawText('EMS TICKETS', {
       x: x + 12,
-      y: y + ticketHeight - 22,
+      y: y + ticketHeight - 20,
       size: 14,
       font: boldFont,
       color: white,
     });
     
-    // Event title
-    page.drawText('VIP TRADE FAIR PASS', {
-      x: x + 45,
-      y: y + ticketHeight - 18,
-      size: 9,
-      font: boldFont,
-      color: white,
-    });
-    
-    page.drawText('MALTA 2025', {
-      x: x + 45,
-      y: y + ticketHeight - 30,
-      size: 7,
+    // Subtitle - MFCC, Malta 2025
+    page.drawText('MFCC, Malta 2025', {
+      x: x + 12,
+      y: y + ticketHeight - 32,
+      size: 8,
       font: regularFont,
-      color: silver,
+      color: rgb(0.8, 0.8, 0.8),
     });
     
-    // Status badge
+    // Status badge (VIP/COMP)
     const statusText = ticketData.isEmsClient ? 'COMP' : 'VIP';
-    const statusBg = ticketData.isEmsClient ? gold : rgb(0.1, 0.5, 0.2);
+    const statusBg = ticketData.isEmsClient ? gold : rgb(0.2, 0.7, 0.2);
     
     page.drawRectangle({
-      x: x + ticketWidth - 45,
-      y: y + ticketHeight - 30,
-      width: 35,
-      height: 12,
+      x: x + ticketWidth - 50,
+      y: y + ticketHeight - 28,
+      width: 38,
+      height: 16,
       color: statusBg,
     });
     
     page.drawText(statusText, {
-      x: x + ticketWidth - 40,
-      y: y + ticketHeight - 24,
-      size: 6,
+      x: x + ticketWidth - 43,
+      y: y + ticketHeight - 22,
+      size: 8,
       font: boldFont,
       color: white,
     });
     
-    // Ticket number section
+    // Content area starts here - more compact spacing
+    let currentY = y + ticketHeight - 45;
+    
+    // Ticket Number Section
+    page.drawText('TICKET NUMBER:', {
+      x: x + 12,
+      y: currentY,
+      size: 7,
+      font: boldFont,
+      color: darkGray,
+    });
+    
+    currentY -= 12;
     page.drawRectangle({
-      x: x + 8,
-      y: y + ticketHeight - 55,
-      width: ticketWidth - 75,
-      height: 15,
-      color: rgb(0.9, 0.9, 0.9),
-      borderColor: navy,
+      x: x + 12,
+      y: currentY - 2,
+      width: ticketWidth - 80, // Leave space for QR code
+      height: 14,
+      color: lightBlue,
+      borderColor: primaryBlue,
       borderWidth: 1,
     });
     
-    page.drawText('TICKET NO.', {
-      x: x + 12,
-      y: y + ticketHeight - 48,
-      size: 5,
-      font: regularFont,
-      color: charcoal,
-    });
-    
     page.drawText(ticketData.ticketNumber, {
-      x: x + 12,
-      y: y + ticketHeight - 53,
+      x: x + 15,
+      y: currentY + 2,
       size: 8,
       font: boldFont,
-      color: navy,
+      color: primaryBlue,
     });
     
-    // Multiple ticket indicator
+    // Sequence indicator for multiple tickets
     if (ticketData.totalTickets > 1) {
-      page.drawText(`${ticketData.sequence} of ${ticketData.totalTickets}`, {
-        x: x + ticketWidth - 65,
-        y: y + ticketHeight - 50,
+      page.drawText(`${ticketData.sequence}/${ticketData.totalTickets}`, {
+        x: x + ticketWidth - 75,
+        y: currentY + 2,
         size: 6,
         font: regularFont,
-        color: charcoal,
+        color: mediumGray,
       });
     }
     
-    // QR Code
+    currentY -= 18;
+    
+    // Customer Information Section
+    page.drawText('CUSTOMER INFORMATION:', {
+      x: x + 12,
+      y: currentY,
+      size: 7,
+      font: boldFont,
+      color: darkGray,
+    });
+    
+    currentY -= 12;
+    
+    // Customer Name
+    page.drawText('Name:', {
+      x: x + 12,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: mediumGray,
+    });
+    
+    // Truncate long names
+    const displayName = ticketData.customerName.length > 28 
+      ? ticketData.customerName.substring(0, 28) + '...'
+      : ticketData.customerName;
+      
+    page.drawText(displayName.toUpperCase(), {
+      x: x + 38,
+      y: currentY,
+      size: 7,
+      font: boldFont,
+      color: darkGray,
+    });
+    
+    currentY -= 10;
+    
+    // Email
+    page.drawText('Email:', {
+      x: x + 12,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: mediumGray,
+    });
+    
+    // Truncate long emails
+    const displayEmail = ticketData.email.length > 28 
+      ? ticketData.email.substring(0, 28) + '...'
+      : ticketData.email;
+      
+    page.drawText(displayEmail, {
+      x: x + 38,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: darkGray,
+    });
+    
+    currentY -= 10;
+    
+    // Phone
+    page.drawText('Phone:', {
+      x: x + 12,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: mediumGray,
+    });
+    
+    page.drawText(ticketData.phone, {
+      x: x + 38,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: darkGray,
+    });
+    
+    // Event Details Section - More compact
+    currentY -= 15;
+    
+    page.drawText('EVENT DETAILS:', {
+      x: x + 12,
+      y: currentY,
+      size: 7,
+      font: boldFont,
+      color: darkGray,
+    });
+    
+    currentY -= 10;
+    
+    page.drawText('June 26 - July 6, 2025', {
+      x: x + 12,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: darkGray,
+    });
+    
+    currentY -= 8;
+    
+    page.drawText('MFCC, Ta\' Qali, Malta', {
+      x: x + 12,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: darkGray,
+    });
+    
+    currentY -= 8;
+    
+    page.drawText('EMS Booth - Main Hall', {
+      x: x + 12,
+      y: currentY,
+      size: 6,
+      font: regularFont,
+      color: darkGray,
+    });
+    
+    // QR Code Section (positioned on the right side) - more compact
+    const qrX = x + ticketWidth - 65;
+    const qrY = y + ticketHeight - 110;
+    
     try {
       const qrCodeDataUrl = await QRCode.toDataURL(ticketData.qrCode, {
-        width: 40,
-        margin: 0,
+        width: 50,
+        margin: 1,
         color: {
           dark: '#000000',
           light: '#FFFFFF'
@@ -173,102 +274,105 @@ export class PDFTicketGenerator {
       const base64Data = qrCodeDataUrl.split(',')[1];
       const qrCodeImage = await pdfDoc.embedPng(Buffer.from(base64Data, 'base64'));
       
-      page.drawImage(qrCodeImage, {
-        x: x + ticketWidth - 50,
-        y: y + ticketHeight - 105,
-        width: 40,
-        height: 40,
+      // QR Code background
+      page.drawRectangle({
+        x: qrX - 3,
+        y: qrY - 3,
+        width: 56,
+        height: 56,
+        color: white,
+        borderColor: lightGray,
+        borderWidth: 1,
       });
       
-      page.drawText('SCAN', {
-        x: x + ticketWidth - 45,
-        y: y + ticketHeight - 110,
+      page.drawImage(qrCodeImage, {
+        x: qrX,
+        y: qrY,
+        width: 50,
+        height: 50,
+      });
+      
+      // QR Code label - more compact
+      page.drawText('SCAN FOR', {
+        x: qrX + 8,
+        y: qrY - 10,
         size: 5,
         font: regularFont,
-        color: charcoal,
+        color: mediumGray,
       });
+      
+      page.drawText('VERIFICATION', {
+        x: qrX + 3,
+        y: qrY - 17,
+        size: 5,
+        font: regularFont,
+        color: mediumGray,
+      });
+      
     } catch (error) {
-      console.error('QR code error:', error);
-      // Fallback rectangle
+      console.error('QR code generation error:', error);
+      // Fallback: draw placeholder rectangle
       page.drawRectangle({
-        x: x + ticketWidth - 50,
-        y: y + ticketHeight - 105,
-        width: 40,
-        height: 40,
-        color: rgb(0.9, 0.9, 0.9),
-        borderColor: charcoal,
+        x: qrX,
+        y: qrY,
+        width: 50,
+        height: 50,
+        color: lightGray,
+        borderColor: mediumGray,
         borderWidth: 1,
+      });
+      
+      page.drawText('QR CODE', {
+        x: qrX + 12,
+        y: qrY + 23,
+        size: 6,
+        font: regularFont,
+        color: mediumGray,
       });
     }
     
-    // Guest information
-    page.drawText('GUEST', {
-      x: x + 12,
-      y: y + ticketHeight - 68,
-      size: 5,
-      font: regularFont,
-      color: charcoal,
+    // Footer section - more compact
+    page.drawRectangle({
+      x: x,
+      y: y,
+      width: ticketWidth,
+      height: 20,
+      color: rgb(0.95, 0.95, 0.95),
     });
     
-    const guestName = ticketData.customerName.length > 25 
-      ? ticketData.customerName.substring(0, 25) + '...'
-      : ticketData.customerName;
-      
-    page.drawText(guestName.toUpperCase(), {
+    // Support contact
+    page.drawText('support@emstickets.com', {
       x: x + 12,
-      y: y + ticketHeight - 78,
-      size: 7,
-      font: boldFont,
-      color: charcoal,
-    });
-    
-    // Event details
-    page.drawText('26 JUL - 06 AUG 2025', {
-      x: x + 12,
-      y: y + ticketHeight - 90,
+      y: y + 12,
       size: 6,
-      font: boldFont,
-      color: navy,
+      font: regularFont,
+      color: mediumGray,
     });
     
-    page.drawText('MFCC, TA\' QALI, MALTA', {
+    // Important notice
+    page.drawText('Valid ID Required • Non-Transferable', {
       x: x + 12,
-      y: y + ticketHeight - 98,
+      y: y + 5,
       size: 5,
       font: regularFont,
-      color: charcoal,
+      color: mediumGray,
     });
     
-    page.drawText('EMS BOOTH - MAIN HALL', {
-      x: x + 12,
-      y: y + ticketHeight - 106,
-      size: 5,
-      font: regularFont,
-      color: charcoal,
-    });
-    
-    // Entry requirements
-    page.drawText('VALID ID REQUIRED • NON-TRANSFERABLE', {
-      x: x + 12,
-      y: y + ticketHeight - 120,
-      size: 4,
-      font: regularFont,
-      color: charcoal,
-    });
-    
-    // Footer
-    page.drawText('support@ems-events.com • +356 2123 4567', {
-      x: x + 12,
-      y: y + 8,
-      size: 4,
-      font: regularFont,
-      color: silver,
-    });
+    // Sequential number in footer (for multiple tickets)
+    if (ticketData.totalTickets > 1) {
+      page.drawText(`#${ticketData.sequence}`, {
+        x: x + ticketWidth - 20,
+        y: y + 8,
+        size: 7,
+        font: boldFont,
+        color: primaryBlue,
+      });
+    }
   }
   
   static async generateTicketPDF(ticketData: TicketData): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([252, 144]); // Single ticket size
+    const page = pdfDoc.addPage([260, 160]); // Compact single ticket size
     
     await this.drawSingleTicket(page, pdfDoc, ticketData, 0, 0);
     
@@ -282,16 +386,16 @@ export class PDFTicketGenerator {
     // A4 page dimensions
     const pageWidth = 595;
     const pageHeight = 842;
-    const ticketWidth = 252;
-    const ticketHeight = 144;
-    const margin = 20;
+    const ticketWidth = 260;  // Updated compact width
+    const ticketHeight = 160; // Updated compact height
+    const margin = 15;
     
-    // Calculate how many tickets fit per page
-    const ticketsPerRow = Math.floor((pageWidth - margin * 2) / (ticketWidth + margin));
-    const ticketsPerCol = Math.floor((pageHeight - margin * 2) / (ticketHeight + margin));
+    // Calculate layout - 2 tickets per row, multiple rows per page
+    const ticketsPerRow = 2;
+    const ticketsPerCol = Math.floor((pageHeight - 60) / (ticketHeight + margin)); // Leave space for header
     const ticketsPerPage = ticketsPerRow * ticketsPerCol;
     
-    console.log(`Arranging ${tickets.length} tickets: ${ticketsPerRow} per row, ${ticketsPerCol} per column`);
+    console.log(`Arranging ${tickets.length} tickets: ${ticketsPerRow} per row, ${ticketsPerCol} per column, ${ticketsPerPage} per page`);
     
     let currentPage: PDFPage | null = null;
     
@@ -300,25 +404,44 @@ export class PDFTicketGenerator {
       if (i % ticketsPerPage === 0) {
         currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
         
-        // Add page title
+        // Page header
         const titleFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-        currentPage.drawText('EMS VIP TRADE FAIR TICKETS', {
+        const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+        
+        currentPage.drawText('EMS TRADE FAIR TICKETS - 2025', {
           x: margin,
           y: pageHeight - 30,
-          size: 14,
+          size: 16,
           font: titleFont,
-          color: rgb(0.02, 0.12, 0.35),
+          color: rgb(0.1, 0.3, 0.6),
         });
         
-        // Add current date
-        const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-        currentPage.drawText(`Generated: ${new Date().toLocaleDateString()}`, {
-          x: pageWidth - 150,
-          y: pageHeight - 30,
-          size: 8,
-          font: regularFont,
-          color: rgb(0.5, 0.5, 0.5),
-        });
+        // Customer info in header
+        if (tickets[i]) {
+          currentPage.drawText(`Customer: ${tickets[i].customerName}`, {
+            x: margin,
+            y: pageHeight - 45,
+            size: 10,
+            font: regularFont,
+            color: rgb(0.3, 0.3, 0.3),
+          });
+          
+          currentPage.drawText(`Generated: ${new Date().toLocaleString()}`, {
+            x: pageWidth - 150,
+            y: pageHeight - 30,
+            size: 8,
+            font: regularFont,
+            color: rgb(0.5, 0.5, 0.5),
+          });
+          
+          currentPage.drawText(`Total Tickets: ${tickets.length}`, {
+            x: pageWidth - 150,
+            y: pageHeight - 45,
+            size: 8,
+            font: regularFont,
+            color: rgb(0.5, 0.5, 0.5),
+          });
+        }
       }
       
       // Calculate position on current page
@@ -327,46 +450,35 @@ export class PDFTicketGenerator {
       const col = positionOnPage % ticketsPerRow;
       
       const x = margin + col * (ticketWidth + margin);
-      const y = pageHeight - margin - 50 - (row + 1) * (ticketHeight + margin);
+      const y = pageHeight - 80 - (row + 1) * (ticketHeight + margin);
       
       // Draw the ticket
       if (currentPage) {
         await this.drawSingleTicket(currentPage, pdfDoc, tickets[i], x, y);
         
-        // Add cut lines around ticket
-        const lineColor = rgb(0.8, 0.8, 0.8);
+        // Add subtle cut lines around ticket
+        const lineColor = rgb(0.9, 0.9, 0.9);
+        const dashArray = [3, 2];
         
-        // Top cut line
-        currentPage.drawLine({
-          start: { x: x - 5, y: y + ticketHeight + 5 },
-          end: { x: x + ticketWidth + 5, y: y + ticketHeight + 5 },
-          color: lineColor,
-          dashArray: [2, 2],
-        });
+        // Horizontal cut lines
+        if (row > 0) { // Top cut line (except for first row)
+          currentPage.drawLine({
+            start: { x: x - 5, y: y + ticketHeight + (margin/2) },
+            end: { x: x + ticketWidth + 5, y: y + ticketHeight + (margin/2) },
+            color: lineColor,
+            dashArray: dashArray,
+          });
+        }
         
-        // Bottom cut line
-        currentPage.drawLine({
-          start: { x: x - 5, y: y - 5 },
-          end: { x: x + ticketWidth + 5, y: y - 5 },
-          color: lineColor,
-          dashArray: [2, 2],
-        });
-        
-        // Left cut line
-        currentPage.drawLine({
-          start: { x: x - 5, y: y - 5 },
-          end: { x: x - 5, y: y + ticketHeight + 5 },
-          color: lineColor,
-          dashArray: [2, 2],
-        });
-        
-        // Right cut line
-        currentPage.drawLine({
-          start: { x: x + ticketWidth + 5, y: y - 5 },
-          end: { x: x + ticketWidth + 5, y: y + ticketHeight + 5 },
-          color: lineColor,
-          dashArray: [2, 2],
-        });
+        // Vertical cut lines
+        if (col > 0) { // Left cut line (except for first column)
+          currentPage.drawLine({
+            start: { x: x - (margin/2), y: y - 5 },
+            end: { x: x - (margin/2), y: y + ticketHeight + 5 },
+            color: lineColor,
+            dashArray: dashArray,
+          });
+        }
       }
     }
     

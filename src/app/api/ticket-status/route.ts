@@ -1,4 +1,4 @@
-// src/app/api/ticket-status/route.ts - Fixed for multiple tickets
+// src/app/api/ticket-status/route.ts - Fixed for multiple tickets with proper data structure
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
         where: { email: searchValue },
         include: {
           tickets: {
+            include: {
+              ticketType: true
+            },
             orderBy: { createdAt: 'desc' }
           },
           payment: true,
@@ -32,9 +35,13 @@ export async function POST(request: NextRequest) {
       const ticket = await prisma.ticket.findUnique({
         where: { ticketNumber: searchValue },
         include: {
+          ticketType: true,
           registration: {
             include: {
               tickets: {
+                include: {
+                  ticketType: true
+                },
                 orderBy: { createdAt: 'desc' }
               },
               payment: true,
@@ -70,8 +77,7 @@ export async function POST(request: NextRequest) {
       registrationStatus: registration.status,
       isEmsClient: registration.isEmsClient,
       createdAt: registration.createdAt,
-      customerName: registration.companyName,
-      emsCustomerId: registration.emsCustomerId,
+      customerName: registration.customerName, 
       panelInterest: registration.panelInterests.length > 0,
       
       // Primary ticket information
@@ -87,9 +93,20 @@ export async function POST(request: NextRequest) {
         eventDate: primaryTicket.eventDate,
         venue: primaryTicket.venue,
         boothLocation: primaryTicket.boothLocation,
-        accessType: primaryTicket.accessType,
-        sequence: primaryTicket.ticketSequence
+        sequence: primaryTicket.ticketSequence,
+        ticketType: primaryTicket.ticketType ? {
+          name: primaryTicket.ticketType.name,
+          description: primaryTicket.ticketType.description
+        } : null
       } : null,
+      
+      // Legacy fields for backward compatibility
+      ticketNumber: primaryTicket?.ticketNumber,
+      ticketStatus: primaryTicket?.status,
+      qrCode: primaryTicket?.qrCode,
+      pdfUrl: primaryTicket?.pdfUrl,
+      eventDate: primaryTicket?.eventDate,
+      venue: primaryTicket?.venue,
       
       // All tickets summary
       ticketsSummary: {
@@ -109,7 +126,11 @@ export async function POST(request: NextRequest) {
         sequence: ticket.ticketSequence,
         issuedAt: ticket.issuedAt,
         sentAt: ticket.sentAt,
-        collectedAt: ticket.collectedAt
+        collectedAt: ticket.collectedAt,
+        ticketType: ticket.ticketType ? {
+          name: ticket.ticketType.name,
+          description: ticket.ticketType.description
+        } : null
       })),
       
       // Payment information
@@ -168,9 +189,10 @@ export async function GET(request: NextRequest) {
     const searchType = email ? 'email' : 'ticket'
     const searchValue = email || ticketNumber || ''
     
-    // Call the same search logic (you could extract this to a shared function)
+    // Create a mock request body and call POST
+    const mockBody = { searchType, searchValue }
     const mockRequest = {
-      json: async () => ({ searchType, searchValue })
+      json: async () => mockBody
     } as NextRequest
     
     return await POST(mockRequest)

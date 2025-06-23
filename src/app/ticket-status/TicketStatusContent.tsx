@@ -1,4 +1,4 @@
-// src/app/ticket-status/TicketStatusContent.tsx - Main component without hydration issues
+// src/app/ticket-status/TicketStatusContent.tsx - Updated with proper download functionality
 'use client'
 
 import { useState } from 'react'
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Search, Mail, CheckCircle, Clock, CreditCard, Download, ArrowLeft, Calendar, MapPin, Building, Phone, AlertCircle } from 'lucide-react'
+import { Search, Mail, CheckCircle, Clock, CreditCard, Download, ArrowLeft, Calendar, MapPin, Building, Phone, AlertCircle, FileText } from 'lucide-react'
 
 interface TicketData {
   id: string
@@ -24,11 +24,31 @@ interface TicketData {
   ticketNumber?: string
   qrCode?: string
   pdfUrl?: string
-  eventDate: string
-  venue: string
+  eventDate?: string
+  venue?: string
   panelInterest?: boolean
   customerName?: string
-  emsCustomerId?: string
+  ticketsSummary?: {
+    total: number
+    generated: number
+    sent: number
+    collected: number
+    used: number
+    cancelled: number
+  }
+  allTickets?: Array<{
+    id: string
+    ticketNumber: string
+    status: string
+    sequence?: number
+    issuedAt: string
+    sentAt?: string
+    collectedAt?: string
+    ticketType?: {
+      name: string
+      description?: string
+    }
+  }>
 }
 
 export default function TicketStatusContent() {
@@ -37,6 +57,7 @@ export default function TicketStatusContent() {
   const [ticketData, setTicketData] = useState<TicketData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [downloadLoading, setDownloadLoading] = useState(false)
 
   // Handle search type change with clearing input
   const handleSearchTypeChange = (type: 'email' | 'ticket') => {
@@ -83,6 +104,46 @@ export default function TicketStatusContent() {
     }
   }
 
+  const handleDownloadTickets = async () => {
+    if (!ticketData?.id) return
+
+    setDownloadLoading(true)
+    try {
+      const response = await fetch(`/api/tickets/download?registrationId=${ticketData.id}`)
+      
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = url
+        
+        // Get filename from response headers or use default
+        const contentDisposition = response.headers.get('content-disposition')
+        let filename = 'tickets.pdf'
+        if (contentDisposition) {
+          const matches = /filename="([^"]*)"/.exec(contentDisposition)
+          if (matches != null && matches[1]) {
+            filename = matches[1]
+          }
+        }
+        
+        a.download = filename
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+      } else {
+        const errorData = await response.json()
+        setError(errorData.message || 'Failed to download tickets')
+      }
+    } catch (error) {
+      setError('Failed to download tickets. Please try again.')
+    } finally {
+      setDownloadLoading(false)
+    }
+  }
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'COMPLETED':
@@ -110,10 +171,18 @@ export default function TicketStatusContent() {
         return <Badge className="bg-green-500 hover:bg-green-600 text-white font-medium">Collected</Badge>
       case 'USED':
         return <Badge className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium">Used</Badge>
+      case 'CANCELLED':
+        return <Badge className="bg-red-500 hover:bg-red-600 text-white font-medium">Cancelled</Badge>
       default:
         return <Badge className="bg-gray-500 hover:bg-gray-600 text-white font-medium">{status}</Badge>
     }
   }
+
+  // Check if tickets can be downloaded
+  const canDownloadTickets = ticketData && 
+    ticketData.registrationStatus === 'COMPLETED' && 
+    ticketData.ticketsSummary && 
+    (ticketData.ticketsSummary.generated > 0 || ticketData.ticketsSummary.sent > 0)
 
   return (
     <div className="ticket-status-page min-h-screen bg-white relative overflow-hidden">
@@ -198,7 +267,7 @@ export default function TicketStatusContent() {
                   placeholder={
                     searchType === 'email' 
                       ? 'Enter your email address' 
-                      : 'Enter your ticket number (e.g., EMS-2025-001234)'
+                      : 'Enter your ticket number (e.g., TKT-123456-ABCDEF)'
                   }
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
@@ -280,46 +349,125 @@ export default function TicketStatusContent() {
                   </div>
                 </div>
 
-                {/* Ticket Status */}
-                <div className="p-5 border border-blue-200 rounded-lg bg-blue-50 shadow-sm">
-                  <h3 className="font-semibold mb-4 flex items-center gap-2 text-blue-800 text-lg">
-                    <CheckCircle className="h-5 w-5 text-blue-600" />
-                    Ticket Status
-                  </h3>
-                  <div className="space-y-3 text-sm">
-                    {ticketData.ticketNumber ? (
-                      <>
-                        <div className="flex justify-between items-center">
-                          <span className="text-blue-700">Ticket Number:</span>
-                          <span className="font-mono text-xs bg-white px-2 py-1 rounded border">{ticketData.ticketNumber}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-blue-700">Status:</span>
-                          {getTicketStatusBadge(ticketData.ticketStatus)}
-                        </div>
-                        {ticketData.pdfUrl && (
-                          <div className="flex justify-between items-center">
-                            <span className="text-blue-700">Ticket PDF:</span>
-                            <a 
-                              href={ticketData.pdfUrl} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center px-3 py-1 text-sm font-medium text-blue-700 bg-white border border-blue-300 rounded-md hover:bg-blue-100 transition-colors"
-                            >
-                              <Download className="mr-2 h-3 w-3" />
-                              Download
-                            </a>
+                {/* Tickets Summary */}
+                {ticketData.ticketsSummary && (
+                  <div className="p-5 border border-blue-200 rounded-lg bg-blue-50 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="font-semibold flex items-center gap-2 text-blue-800 text-lg">
+                        <CheckCircle className="h-5 w-5 text-blue-600" />
+                        Tickets ({ticketData.ticketsSummary.total})
+                      </h3>
+                      {canDownloadTickets && (
+                        <Button
+                          onClick={handleDownloadTickets}
+                          disabled={downloadLoading}
+                          size="sm"
+                          className="bg-blue-600 hover:bg-blue-700 text-white"
+                        >
+                          {downloadLoading ? (
+                            <>
+                              <Clock className="mr-2 h-4 w-4 animate-spin" />
+                              Downloading...
+                            </>
+                          ) : (
+                            <>
+                              <Download className="mr-2 h-4 w-4" />
+                              Download Tickets
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Ticket Status Summary */}
+                    <div className="grid grid-cols-2 gap-3 text-sm mb-4">
+                      <div className="flex justify-between">
+                        <span className="text-blue-700">Generated:</span>
+                        <span className="font-medium">{ticketData.ticketsSummary.generated}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-700">Sent:</span>
+                        <span className="font-medium">{ticketData.ticketsSummary.sent}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-700">Collected:</span>
+                        <span className="font-medium">{ticketData.ticketsSummary.collected}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-700">Used:</span>
+                        <span className="font-medium">{ticketData.ticketsSummary.used}</span>
+                      </div>
+                    </div>
+
+                    {/* Individual Tickets */}
+                    {ticketData.allTickets && ticketData.allTickets.length > 0 && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-blue-800 text-sm">Individual Tickets:</h4>
+                        {ticketData.allTickets.map((ticket, index) => (
+                          <div key={ticket.id} className="bg-white p-3 rounded border border-blue-200">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="font-mono text-xs bg-blue-100 px-2 py-1 rounded">
+                                {ticket.ticketNumber}
+                              </span>
+                              {getTicketStatusBadge(ticket.status)}
+                            </div>
+                            {ticket.ticketType && (
+                              <div className="text-xs text-blue-700">
+                                {ticket.ticketType.name}
+                                {ticket.ticketType.description && (
+                                  <span className="text-blue-600"> - {ticket.ticketType.description}</span>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </>
-                    ) : (
-                      <div className="text-orange-700 flex items-center gap-2">
-                        <Clock className="h-4 w-4" />
-                        Ticket not yet generated
+                        ))}
                       </div>
                     )}
                   </div>
-                </div>
+                )}
+
+                {/* Single Ticket Display (backward compatibility) */}
+                {ticketData.ticketNumber && !ticketData.ticketsSummary && (
+                  <div className="p-5 border border-blue-200 rounded-lg bg-blue-50 shadow-sm">
+                    <h3 className="font-semibold mb-4 flex items-center gap-2 text-blue-800 text-lg">
+                      <CheckCircle className="h-5 w-5 text-blue-600" />
+                      Ticket Status
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-blue-700">Ticket Number:</span>
+                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border">{ticketData.ticketNumber}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-blue-700">Status:</span>
+                        {getTicketStatusBadge(ticketData.ticketStatus)}
+                      </div>
+                      {canDownloadTickets && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-blue-700">Download:</span>
+                          <Button
+                            onClick={handleDownloadTickets}
+                            disabled={downloadLoading}
+                            size="sm"
+                            className="bg-blue-600 hover:bg-blue-700 text-white"
+                          >
+                            {downloadLoading ? (
+                              <>
+                                <Clock className="mr-2 h-4 w-4 animate-spin" />
+                                Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download className="mr-2 h-4 w-4" />
+                                Download
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Event Information */}
                 <div className="p-5 border border-purple-200 rounded-lg bg-purple-50 shadow-sm">
@@ -371,7 +519,7 @@ export default function TicketStatusContent() {
                   <div className="p-5 border border-blue-200 rounded-lg bg-blue-50 shadow-sm">
                     <h3 className="font-semibold mb-3 text-blue-800 text-lg">Payment Required</h3>
                     <p className="text-sm text-blue-700 mb-4">
-                      Complete your €50 payment to receive your ticket instantly.
+                      Complete your payment to receive your ticket instantly.
                     </p>
                     <Link href={`/payment?id=${ticketData.id}`} className="inline-block">
                       <Button className="bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white">
@@ -382,11 +530,21 @@ export default function TicketStatusContent() {
                   </div>
                 )}
 
-                {ticketData.registrationStatus === 'COMPLETED' && ticketData.ticketStatus === 'SENT' && (
+                {ticketData.registrationStatus === 'COMPLETED' && ticketData.ticketsSummary && ticketData.ticketsSummary.sent > 0 && (
                   <div className="p-5 border border-green-200 rounded-lg bg-green-50 shadow-sm">
                     <h3 className="font-semibold mb-3 text-green-800 text-lg">Ready for Event</h3>
                     <p className="text-sm text-green-700">
-                      Your ticket has been sent to your email. Present it at the event for access.
+                      Your {ticketData.ticketsSummary.total > 1 ? 'tickets have' : 'ticket has'} been generated and are ready for download. 
+                      Present {ticketData.ticketsSummary.total > 1 ? 'them' : 'it'} at the event for access.
+                    </p>
+                  </div>
+                )}
+
+                {ticketData.registrationStatus === 'REJECTED' && (
+                  <div className="p-5 border border-red-200 rounded-lg bg-red-50 shadow-sm">
+                    <h3 className="font-semibold mb-3 text-red-800 text-lg">Registration Rejected</h3>
+                    <p className="text-sm text-red-700">
+                      Unfortunately, we were unable to verify your EMS customer status. Please contact support for assistance.
                     </p>
                   </div>
                 )}

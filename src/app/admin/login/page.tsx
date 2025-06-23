@@ -1,5 +1,5 @@
 
-// src/app/admin/login/page.tsx (Fixed version)
+// src/app/admin/login/page.tsx - Updated login page
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -13,16 +13,15 @@ import { AuthService } from '@/lib/auth'
 import Link from 'next/link'
 
 export default function AdminLoginPage() {
-  const [email, setEmail] = useState('admin@ems-events.com')
-  const [password, setPassword] = useState('admin123')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isChecking, setIsChecking] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
-    // Check if already authenticated
-    const checkAuth = () => {
+    const checkAuth = async () => {
       try {
         const authService = AuthService.getInstance()
         if (authService.isAuthenticated()) {
@@ -35,7 +34,6 @@ export default function AdminLoginPage() {
       setIsChecking(false)
     }
 
-    // Small delay to ensure client-side hydration
     const timer = setTimeout(checkAuth, 100)
     return () => clearTimeout(timer)
   }, [router])
@@ -61,7 +59,7 @@ export default function AdminLoginPage() {
       if (result.success) {
         toast({
           title: "Login Successful",
-          description: "Welcome to the admin dashboard",
+          description: "Welcome to the EMS admin dashboard",
         })
         router.push('/admin')
       } else {
@@ -82,7 +80,6 @@ export default function AdminLoginPage() {
     }
   }
 
-  // Show loading while checking authentication
   if (isChecking) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
@@ -97,7 +94,6 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md space-y-4">
-        {/* Back to Home Link */}
         <Link href="/">
           <Button variant="ghost" className="mb-4">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -110,9 +106,9 @@ export default function AdminLoginPage() {
             <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
               <Lock className="h-6 w-6 text-blue-600" />
             </div>
-            <CardTitle className="text-2xl">Admin Login</CardTitle>
+            <CardTitle className="text-2xl">EMS Admin Portal</CardTitle>
             <CardDescription>
-              Access the EMS Event Management System
+              Access the Event Management System
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -121,7 +117,7 @@ export default function AdminLoginPage() {
                 <label className="text-sm font-medium mb-2 block">Email Address</label>
                 <Input 
                   type="email" 
-                  placeholder="admin@ems-events.com" 
+                  placeholder="your.email@ems.com.mt" 
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={isLoading}
@@ -166,20 +162,23 @@ export default function AdminLoginPage() {
                 {isLoading ? 'Signing In...' : 'Sign In'}
               </Button>
             </form>
-            
-            {/* Demo credentials info */}
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <h4 className="text-sm font-medium mb-2 text-blue-900">Demo Credentials:</h4>
-              <div className="text-xs text-blue-700 space-y-1">
-                <p><strong>Email:</strong> admin@ems-events.com</p>
-                <p><strong>Password:</strong> admin123</p>
-              </div>
-              <p className="text-xs text-blue-600 mt-2">
-                (Credentials are pre-filled for demo purposes)
-              </p>
-            </div>
           </CardContent>
         </Card>
+
+        {process.env.NODE_ENV === 'development' && (
+          <Card className="bg-amber-50 border-amber-200">
+            <CardContent className="pt-6">
+              <h4 className="text-sm font-medium mb-2 text-amber-900">Development Mode</h4>
+              <div className="text-xs text-amber-700 space-y-1">
+                <p><strong>Default Email:</strong> admin@ems-events.com</p>
+                <p><strong>Default Password:</strong> admin123</p>
+              </div>
+              <p className="text-xs text-amber-600 mt-2">
+                Change these credentials in production!
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   )

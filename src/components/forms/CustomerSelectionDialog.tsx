@@ -1,4 +1,5 @@
-// src/components/forms/CustomerSelectionDialog.tsx
+
+// src/components/forms/CustomerSelectionDialog.tsx - Updated to remove hardcoded price
 'use client'
 
 import { useState } from 'react'
@@ -75,7 +76,7 @@ export function CustomerSelectionDialog({ open, onCustomerTypeSelected }: Custom
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-bold text-green-600">FREE</p>
-                  <p className="text-xs text-gray-500">VIP Access</p>
+                  <p className="text-xs text-gray-500">All Tickets</p>
                 </div>
               </div>
             </CardHeader>
@@ -105,8 +106,8 @@ export function CustomerSelectionDialog({ open, onCustomerTypeSelected }: Custom
                   </CardDescription>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm font-bold text-blue-600">€50</p>
-                  <p className="text-xs text-gray-500">per ticket</p>
+                  <p className="text-sm font-bold text-blue-600">Varies</p>
+                  <p className="text-xs text-gray-500">by ticket type</p>
                 </div>
               </div>
             </CardHeader>

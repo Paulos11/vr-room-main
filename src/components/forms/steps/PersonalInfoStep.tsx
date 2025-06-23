@@ -1,3 +1,4 @@
+// src/components/forms/steps/PersonalInfoStep.tsx - Cleaned up version
 'use client'
 
 import { useState } from 'react'
@@ -19,15 +20,6 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
     setFieldErrors(prev => ({
       ...prev,
       [field]: validation.isValid ? '' : validation.error || ''
-    }))
-  }
-
-  const handleQuantityChange = (value: number) => {
-    onUpdate('quantity', value)
-    const validation = validateField('quantity', value)
-    setFieldErrors(prev => ({
-      ...prev,
-      quantity: validation.isValid ? '' : validation.error || ''
     }))
   }
 
@@ -54,7 +46,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
             placeholder="First name"
             value={formData.firstName}
             onChange={(e) => handleFieldChange('firstName', e.target.value)}
-            className={`${getFieldClasses('firstName')} placeholder-gray-500 opacity-50`} 
+            className={`${getFieldClasses('firstName')} placeholder-gray-500`} 
             required
           />
           {fieldErrors.firstName && (
@@ -72,7 +64,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
             placeholder="Last name"
             value={formData.lastName}
             onChange={(e) => handleFieldChange('lastName', e.target.value)}
-            className={`${getFieldClasses('lastName')} placeholder-gray-500 opacity-50`} 
+            className={`${getFieldClasses('lastName')} placeholder-gray-500`} 
             required
           />
           {fieldErrors.lastName && (
@@ -92,7 +84,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           placeholder="your@email.com"
           value={formData.email}
           onChange={(e) => handleFieldChange('email', e.target.value)}
-          className={`${getFieldClasses('email')} placeholder-gray-500 opacity-50`} 
+          className={`${getFieldClasses('email')} placeholder-gray-500`} 
           required
         />
         {fieldErrors.email && (
@@ -116,7 +108,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           placeholder="+356 1234 5678"
           value={formData.phone}
           onChange={(e) => handleFieldChange('phone', e.target.value)}
-          className={`${getFieldClasses('phone')} placeholder-gray-500 opacity-50`} 
+          className={`${getFieldClasses('phone')} placeholder-gray-500`} 
           required
         />
         {fieldErrors.phone && (
@@ -134,7 +126,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           placeholder="ID number"
           value={formData.idCardNumber}
           onChange={(e) => handleFieldChange('idCardNumber', e.target.value)}
-          className={`${getFieldClasses('idCardNumber')} placeholder-gray-500 opacity-50`} 
+          className={`${getFieldClasses('idCardNumber')} placeholder-gray-500`} 
           required
         />
         {fieldErrors.idCardNumber && (
@@ -150,43 +142,31 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
         )}
       </div>
 
-      {/* Quantity selection for non-EMS customers */}
-      {!formData.isEmsClient && (
-        <div>
-          <Label htmlFor="quantity" className="text-sm">Number of VIP Tickets *</Label>
-          <select
-            id="quantity"
-            value={formData.quantity || 1}
-            onChange={(e) => handleQuantityChange(parseInt(e.target.value))}
-            className={`w-full h-9 px-3 border rounded-md text-sm focus:outline-none focus:ring-2 ${
-              fieldErrors.quantity 
-                ? 'border-red-500 focus:ring-red-500' 
-                : 'border-gray-300 focus:ring-blue-500'
-            }`}
-            required
-          >
-            <option value={1}>1 Ticket - €50.00</option>
-            <option value={2}>2 Tickets - €100.00</option>
-            <option value={3}>3 Tickets - €150.00</option>
-            <option value={4}>4 Tickets - €200.00</option>
-            <option value={5}>5 Tickets - €250.00</option>
-            <option value={6}>6 Tickets - €300.00</option>
-            <option value={7}>7 Tickets - €350.00</option>
-            <option value={8}>8 Tickets - €400.00</option>
-            <option value={9}>9 Tickets - €450.00</option>
-            <option value={10}>10 Tickets - €500.00</option>
-          </select>
-          {fieldErrors.quantity && (
-            <div className="flex items-center gap-1 mt-1">
-              <AlertCircle className="h-3 w-3 text-red-500" />
-              <p className="text-xs text-red-500">{fieldErrors.quantity}</p>
+      {/* Summary of selected tickets - read-only display */}
+      {formData.selectedTickets.length > 0 && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="text-sm font-medium mb-2 text-blue-900">Selected Tickets:</h4>
+          <div className="space-y-1">
+            {formData.selectedTickets.map(ticket => (
+              <div key={ticket.ticketTypeId} className="flex justify-between text-sm">
+                <span>{ticket.name} × {ticket.quantity}</span>
+                <span className="font-medium">
+                  {formData.isEmsClient ? 'FREE' : `€${(ticket.priceInCents * ticket.quantity / 100).toFixed(2)}`}
+                </span>
+              </div>
+            ))}
+            <div className="border-t pt-1 mt-2">
+              <div className="flex justify-between font-bold text-sm">
+                <span>Total:</span>
+                <span className={formData.isEmsClient ? 'text-green-600' : 'text-blue-600'}>
+                  {formData.isEmsClient ? 'FREE' : `€${(formData.selectedTickets.reduce((sum, t) => sum + (t.priceInCents * t.quantity), 0) / 100).toFixed(2)}`}
+                </span>
+              </div>
             </div>
-          )}
-          {!fieldErrors.quantity && (
-            <p className="text-xs text-gray-500 mt-1">
-              All tickets will be under your name with unique ticket numbers
-            </p>
-          )}
+          </div>
+          <p className="text-xs text-blue-700 mt-2">
+            Need to change tickets? Go back to the previous step.
+          </p>
         </div>
       )}
     </div>

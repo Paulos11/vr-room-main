@@ -1,169 +1,278 @@
-// src/app/api/register/route.ts - Updated: NO tickets for EMS clients until approval
+// src/app/api/register/route.ts - Updated registration API
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { TicketService } from '@/lib/ticketService'
 import { z } from 'zod'
+import { TicketType } from '@prisma/client' // Import TicketType from Prisma client
 
-const RegistrationSchema = z.object({
-  firstName: z.string().min(2, 'First name must be at least 2 characters').max(50, 'First name too long'),
-  lastName: z.string().min(2, 'Last name must be at least 2 characters').max(50, 'Last name too long'),
-  email: z.string().email('Please enter a valid email address').max(255, 'Email too long'),
-  phone: z.string().min(8, 'Please enter a valid phone number').max(20, 'Phone number too long'),
-  idCardNumber: z.string().min(5, 'Please enter a valid ID card number').max(50, 'ID card number too long'),
-  isEmsClient: z.boolean(),
-  quantity: z.number().min(1, 'Quantity must be at least 1').max(10, 'Maximum 10 tickets per order').optional(),
-  customerName: z.string().max(100, 'Customer name too long').optional(),
-  emsCustomerId: z.string().max(50, 'Customer ID too long').optional(),
-  accountManager: z.string().max(100, 'Account manager name too long').optional(),
-  panelInterest: z.boolean().optional(),
-  acceptTerms: z.boolean().refine(val => val === true, 'You must accept the terms'),
-  acceptPrivacyPolicy: z.boolean().refine(val => val === true, 'You must accept the privacy policy')
+const SelectedTicketSchema = z.object({
+  ticketTypeId: z.string(),
+  name: z.string(),
+  priceInCents: z.number(),
+  quantity: z.number().min(1)
 })
+
+const RegisterSchema = z.object({
+  firstName: z.string().min(2).max(50),
+  lastName: z.string().min(2).max(50),
+  email: z.string().email(),
+  phone: z.string().min(8),
+  idCardNumber: z.string().min(3),
+  isEmsClient: z.boolean(),
+  selectedTickets: z.array(SelectedTicketSchema).min(1),
+  // Updated EMS customer fields
+  customerName: z.string().optional(),
+  orderNumber: z.string().optional(),
+  applicationNumber: z.string().optional(),
+  orderDate: z.string().optional(), // Will be converted to Date
+  panelInterest: z.boolean().default(false),
+  couponCode: z.string().optional(),
+  acceptTerms: z.boolean().refine(val => val === true, {
+    message: "Terms and conditions must be accepted"
+  }),
+  acceptPrivacyPolicy: z.boolean().refine(val => val === true, {
+    message: "Privacy policy must be accepted"
+  })
+})
+
+// Define a type for the entries in ticketValidations
+type TicketValidationEntry = {
+  ticketType: TicketType; // This type comes from Prisma client
+  selectedTicket: z.infer<typeof SelectedTicketSchema>; // Infer type from Zod schema
+  ticketPrice: number;
+  ticketTotal: number;
+};
+
 
 export async function POST(request: NextRequest) {
   try {
-    console.log('=== REGISTRATION API DEBUG ===')
-    
     const body = await request.json()
-    console.log('Raw request body:', JSON.stringify(body, null, 2))
-    
-    const validatedData = RegistrationSchema.parse(body)
-    console.log('Validated data:', JSON.stringify(validatedData, null, 2))
-    
-    // Set default quantity
-    const quantity = validatedData.isEmsClient ? 1 : (validatedData.quantity || 1)
-    console.log('Final quantity:', quantity)
-    
-    // Check for existing email
+    const validatedData = RegisterSchema.parse(body)
+
+    // Check for existing registration with same email
     const existingRegistration = await prisma.registration.findUnique({
       where: { email: validatedData.email }
     })
-    
+
     if (existingRegistration) {
-      console.log('ERROR: Email already exists:', validatedData.email)
       return NextResponse.json(
-        { success: false, message: 'An account with this email already exists' },
+        { success: false, message: 'Email already registered' },
         { status: 400 }
       )
     }
-    
-    // Check for existing ID card
-    const existingIdCard = await prisma.registration.findUnique({
-      where: { idCardNumber: validatedData.idCardNumber }
-    })
-    
-    if (existingIdCard) {
-      console.log('ERROR: ID card already exists:', validatedData.idCardNumber)
-      return NextResponse.json(
-        { success: false, message: 'This ID card number is already registered' },
-        { status: 400 }
-      )
-    }
-    
-    // Determine initial status
-    const initialStatus = validatedData.isEmsClient ? 'PENDING' : 'PAYMENT_PENDING'
-    console.log('Initial status:', initialStatus)
-    
-    // Create registration
-    const registration = await prisma.registration.create({
-      data: {
-        firstName: validatedData.firstName,
-        lastName: validatedData.lastName,
-        email: validatedData.email,
-        phone: validatedData.phone,
-        idCardNumber: validatedData.idCardNumber,
-        isEmsClient: validatedData.isEmsClient,
-        companyName: validatedData.customerName,
-        emsCustomerId: validatedData.emsCustomerId,
-        accountManager: validatedData.accountManager,
-        status: initialStatus
+
+    // Validate ticket availability and calculate pricing
+    let totalOriginalAmount = 0
+    let totalFinalAmount = 0
+    // Explicitly type the array
+    const ticketValidations: TicketValidationEntry[] = []
+
+    for (const selectedTicket of validatedData.selectedTickets) {
+      // Get current ticket type info
+      const ticketType = await prisma.ticketType.findUnique({
+        where: { id: selectedTicket.ticketTypeId }
+      })
+
+      if (!ticketType) {
+        return NextResponse.json(
+          { success: false, message: `Ticket type ${selectedTicket.name} not found` },
+          { status: 400 }
+        )
       }
-    })
-    
-    console.log('Registration created:', registration.id)
-    
-    // Create simplified panel interest if indicated
-    if (validatedData.panelInterest) {
-      await prisma.panelInterest.create({
-        data: {
-          registrationId: registration.id,
-          panelType: 'General Interest',
-          interestLevel: 'MEDIUM',
-          notes: 'Customer expressed interest in EMS solar panels during registration',
-          status: 'NEW'
+
+      if (!ticketType.isActive) {
+        return NextResponse.json(
+          { success: false, message: `Ticket type ${selectedTicket.name} is not available` },
+          { status: 400 }
+        )
+      }
+
+      if (ticketType.availableStock < selectedTicket.quantity) {
+        return NextResponse.json(
+          { success: false, message: `Insufficient stock for ${selectedTicket.name}` },
+          { status: 400 }
+        )
+      }
+
+      // Validate quantity limits
+      const maxQuantity = validatedData.isEmsClient ? 1 : ticketType.maxPerOrder
+      if (selectedTicket.quantity > maxQuantity) {
+        return NextResponse.json(
+          { success: false, message: `Maximum ${maxQuantity} tickets allowed for ${selectedTicket.name}` },
+          { status: 400 }
+        )
+      }
+
+      // Calculate pricing
+      const ticketPrice = validatedData.isEmsClient ? 0 : ticketType.priceInCents
+      const ticketTotal = ticketPrice * selectedTicket.quantity
+      
+      totalOriginalAmount += ticketTotal
+      totalFinalAmount += ticketTotal
+
+      ticketValidations.push({
+        ticketType,
+        selectedTicket,
+        ticketPrice,
+        ticketTotal
+      })
+    }
+
+    // Handle coupon if provided (for non-EMS customers)
+    let appliedCoupon = null
+    let discountAmount = 0
+
+    if (!validatedData.isEmsClient && validatedData.couponCode) {
+      const coupon = await prisma.coupon.findUnique({
+        where: { 
+          code: validatedData.couponCode.toUpperCase(),
+          isActive: true
         }
       })
-      console.log('Panel interest created')
-    }
-    
-    // IMPORTANT: Only create tickets for NON-EMS clients
-    const tickets = []
-    if (!validatedData.isEmsClient) {
-      console.log('Creating tickets for non-EMS client...')
-      for (let i = 0; i < quantity; i++) {
-        try {
-          const ticket = await TicketService.createTicket(registration.id, i + 1)
-          tickets.push(ticket)
-          console.log(`Ticket ${i + 1} created:`, ticket.ticketNumber)
-        } catch (error) {
-          console.error(`Failed to create ticket ${i + 1}:`, error)
-          // Continue with other tickets
+
+      if (coupon) {
+        // Validate coupon (simplified version)
+        const now = new Date()
+        const isValidTime = coupon.validFrom <= now && (!coupon.validTo || coupon.validTo >= now)
+        const hasUsageLeft = !coupon.maxUses || coupon.currentUses < coupon.maxUses
+        const meetsMinAmount = !coupon.minOrderAmount || totalOriginalAmount >= coupon.minOrderAmount
+
+        if (isValidTime && hasUsageLeft && meetsMinAmount) {
+          // Calculate discount
+          if (coupon.discountType === 'PERCENTAGE') {
+            discountAmount = Math.round((totalOriginalAmount * coupon.discountValue) / 100)
+          } else if (coupon.discountType === 'FIXED_AMOUNT') {
+            discountAmount = Math.min(coupon.discountValue, totalOriginalAmount)
+          }
+
+          totalFinalAmount = Math.max(0, totalOriginalAmount - discountAmount)
+          appliedCoupon = coupon
         }
       }
-    } else {
-      console.log('EMS client - NO tickets created. Waiting for admin approval.')
     }
-    
-    // Send appropriate email
-    const emailType = validatedData.isEmsClient ? 'REGISTRATION_CONFIRMATION' : 'PAYMENT_REQUIRED'
-    
-    // Log email (implement actual email sending later)
-    await prisma.emailLog.create({
-      data: {
-        registrationId: registration.id,
-        emailType,
-        subject: validatedData.isEmsClient 
-          ? 'Registration Received - Pending Admin Verification'
-          : `Complete Your Registration - Payment Required (${quantity} ticket${quantity > 1 ? 's' : ''})`,
-        recipient: registration.email,
-        status: 'SENT'
+
+    // Convert orderDate string to Date if provided
+    let orderDate = null
+    if (validatedData.orderDate) {
+      orderDate = new Date(validatedData.orderDate)
+    }
+
+    // Create registration in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create registration with updated field names
+      const registration = await tx.registration.create({
+        data: {
+          firstName: validatedData.firstName,
+          lastName: validatedData.lastName,
+          email: validatedData.email,
+          phone: validatedData.phone,
+          idCardNumber: validatedData.idCardNumber,
+          isEmsClient: validatedData.isEmsClient,
+          // Updated EMS customer fields
+          customerName: validatedData.customerName || null,
+          orderNumber: validatedData.orderNumber || null,
+          applicationNumber: validatedData.applicationNumber || null,
+          orderDate: orderDate,
+          originalAmount: totalOriginalAmount,
+          discountAmount: discountAmount,
+          finalAmount: totalFinalAmount,
+          appliedCouponCode: appliedCoupon?.code || null,
+          appliedCouponId: appliedCoupon?.id || null,
+          status: validatedData.isEmsClient ? 'PENDING' : 'PAYMENT_PENDING'
+        }
+      })
+
+      // Create tickets
+      const tickets = []
+      for (const validation of ticketValidations) {
+        for (let i = 0; i < validation.selectedTicket.quantity; i++) {
+          const ticketNumber = `TKT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+          const qrCode = `EMS-${registration.id}-${ticketNumber}`
+
+          const ticket = await tx.ticket.create({
+            data: {
+              registrationId: registration.id,
+              ticketTypeId: validation.selectedTicket.ticketTypeId,
+              ticketNumber,
+              qrCode,
+              purchasePrice: validation.ticketPrice,
+              eventDate: new Date('2025-07-26'), // Use your event date
+              venue: 'Malta Fairs and Conventions Centre',
+              boothLocation: 'EMS Booth - MFCC'
+            }
+          })
+
+          tickets.push(ticket)
+        }
+
+        // Update ticket type stock
+        await tx.ticketType.update({
+          where: { id: validation.selectedTicket.ticketTypeId },
+          data: {
+            availableStock: {
+              decrement: validation.selectedTicket.quantity
+            },
+            soldStock: {
+              increment: validation.selectedTicket.quantity
+            }
+          }
+        })
       }
+
+      // Create panel interest if applicable
+      if (validatedData.panelInterest) {
+        await tx.panelInterest.create({
+          data: {
+            registrationId: registration.id,
+            panelType: 'SOLAR_PANELS',
+            interestLevel: 'MEDIUM',
+            status: 'NEW'
+          }
+        })
+      }
+
+      // Update coupon usage if applied
+      if (appliedCoupon) {
+        await tx.coupon.update({
+          where: { id: appliedCoupon.id },
+          data: {
+            currentUses: {
+              increment: 1
+            }
+          }
+        })
+      }
+
+      return { registration, tickets }
     })
-    
-    console.log('Email logged')
-    console.log('=== REGISTRATION SUCCESS ===')
-    
+
     return NextResponse.json({
       success: true,
       message: 'Registration successful',
       data: {
-        id: registration.id,
-        email: registration.email,
-        isEmsClient: registration.isEmsClient,
-        status: registration.status,
-        quantity: quantity,
-        totalCost: validatedData.isEmsClient ? 0 : quantity * 5000, // in cents
-        ticketNumbers: tickets.map(t => t.ticketNumber),
-        pendingApproval: validatedData.isEmsClient // Indicate if waiting for approval
+        id: result.registration.id,
+        email: result.registration.email,
+        isEmsClient: result.registration.isEmsClient,
+        status: result.registration.status,
+        selectedTickets: validatedData.selectedTickets,
+        ticketNumbers: result.tickets.map(t => t.ticketNumber),
+        totalCostCents: totalFinalAmount,
+        savingsAmount: discountAmount,
+        pendingApproval: validatedData.isEmsClient
       }
     })
-    
+
   } catch (error: any) {
-    console.error('=== REGISTRATION ERROR ===')
-    console.error('Error type:', error.constructor.name)
-    console.error('Error message:', error.message)
-    console.error('Error stack:', error.stack)
+    console.error('Registration error:', error)
     
     if (error instanceof z.ZodError) {
-      console.error('Validation errors:', JSON.stringify(error.errors, null, 2))
       return NextResponse.json(
         { success: false, message: 'Invalid data provided', errors: error.errors },
         { status: 400 }
       )
     }
-    
+
     return NextResponse.json(
-      { success: false, message: 'Internal server error', error: error.message },
+      { success: false, message: 'Registration failed. Please try again.' },
       { status: 500 }
     )
   }

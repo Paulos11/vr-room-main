@@ -1,4 +1,4 @@
-// src/app/api/tickets/download/route.ts - Updated to handle payment completion
+// src/app/api/tickets/download/route.ts - Fixed with proper PDF generator
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
@@ -6,10 +6,10 @@ import Stripe from 'stripe'
 import { z } from 'zod'
 export const dynamic = 'force-dynamic'
 
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-05-28.basil', // Updated API version
 })
+
 const DownloadSchema = z.object({
   registrationId: z.string().optional(),
   ticketNumber: z.string().optional(),
@@ -41,7 +41,10 @@ export async function GET(request: NextRequest) {
       registration = await prisma.registration.findUnique({
         where: { id: registrationId },
         include: { 
-          tickets: { orderBy: { ticketSequence: 'asc' } },
+          tickets: { 
+            orderBy: { createdAt: 'asc' },
+            include: { ticketType: true }
+          },
           payment: true
         }
       })
@@ -51,7 +54,10 @@ export async function GET(request: NextRequest) {
         include: { 
           registration: { 
             include: { 
-              tickets: { orderBy: { ticketSequence: 'asc' } },
+              tickets: { 
+                orderBy: { createdAt: 'asc' },
+                include: { ticketType: true }
+              },
               payment: true
             } 
           } 
@@ -68,7 +74,10 @@ export async function GET(request: NextRequest) {
           include: { 
             registration: { 
               include: { 
-                tickets: { orderBy: { ticketSequence: 'asc' } },
+                tickets: { 
+                  orderBy: { createdAt: 'asc' },
+                  include: { ticketType: true }
+                },
                 payment: true
               } 
             } 
@@ -85,7 +94,10 @@ export async function GET(request: NextRequest) {
             where: { id: registration.id },
             data: { status: 'COMPLETED' },
             include: { 
-              tickets: { orderBy: { ticketSequence: 'asc' } },
+              tickets: { 
+                orderBy: { createdAt: 'asc' },
+                include: { ticketType: true }
+              },
               payment: true
             }
           })
@@ -146,14 +158,14 @@ export async function GET(request: NextRequest) {
       email: registration.email,
       phone: registration.phone,
       qrCode: ticket.qrCode,
-      sequence: ticket.ticketSequence || (index + 1),
+      sequence: index + 1,
       totalTickets: registration.tickets.length,
       isEmsClient: registration.isEmsClient
     }))
 
     console.log(`Generating PDF for ${ticketDataArray.length} ticket(s)`)
 
-    // Generate PDF
+    // Generate PDF using PDFTicketGenerator
     const pdfBuffer = await PDFTicketGenerator.generateAllTicketsPDF(ticketDataArray)
 
     // Determine filename

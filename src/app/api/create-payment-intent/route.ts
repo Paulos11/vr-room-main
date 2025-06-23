@@ -73,6 +73,7 @@ export async function POST(request: NextRequest) {
         registrationId,
         stripePaymentId: session.id,
         amount,
+        originalAmount: registration.originalAmount, // ADD THIS LINE
         currency,
         status: 'PENDING'
       }

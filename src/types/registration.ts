@@ -1,4 +1,4 @@
-// src/types/registration.ts - Updated with quantity support
+// src/types/registration.ts - Updated with order fields
 export interface RegistrationFormData {
   // Personal Information
   firstName: string
@@ -10,20 +10,48 @@ export interface RegistrationFormData {
   // Customer Type
   isEmsClient: boolean
   
-  // Quantity (for non-EMS customers)
-  quantity?: number
+  // Ticket Selection
+  selectedTickets: SelectedTicket[]
   
   // EMS Client Details (if applicable)
   customerName?: string
-  emsCustomerId?: string
-  accountManager?: string
   
-  // Simplified Panel Interest
+  // EMS Order Details (if applicable) - NEW FIELDS
+  orderNumber?: string
+  applicationNumber?: string
+  orderDate?: string
+  
+  // Panel Interest
   panelInterest: boolean
+  
+  // Coupon Support
+  couponCode?: string
   
   // Terms
   acceptTerms: boolean
   acceptPrivacyPolicy: boolean
+}
+
+export interface SelectedTicket {
+  ticketTypeId: string
+  name: string
+  priceInCents: number
+  quantity: number
+  maxPerOrder: number
+  minPerOrder: number
+}
+
+export interface TicketType {
+  id: string
+  name: string
+  priceInCents: number
+  availableStock: number
+  maxPerOrder: number
+  minPerOrder: number
+  isActive: boolean
+  formattedPrice: string
+  isAvailable: boolean
+  isFree: boolean
 }
 
 export interface StepProps {

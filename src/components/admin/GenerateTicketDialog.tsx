@@ -1,14 +1,29 @@
-// src/components/admin/GenerateTicketDialog.tsx - Compact and optimized
+// src/components/admin/GenerateTicketDialog.tsx - Enhanced ticket generation
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { toast } from '@/components/ui/use-toast'
-import { Loader2, Plus, Search, User, Building } from 'lucide-react'
+import { 
+  Loader2, 
+  Search, 
+  User, 
+  Mail, 
+  Phone, 
+  Building,
+  Ticket,
+  Plus,
+  UserPlus,
+  Users,
+  X
+} from 'lucide-react'
 
 interface GenerateTicketDialogProps {
   open: boolean
@@ -16,25 +31,76 @@ interface GenerateTicketDialogProps {
   onSuccess: () => void
 }
 
-interface RegistrationOption {
+interface Registration {
   id: string
   name: string
   email: string
+  phone: string
   isEmsClient: boolean
   status: string
-  ticketCount: number
+}
+
+interface TicketType {
+  id: string
+  name: string
+  priceInCents: number
+  availableStock: number
+  totalStock: number
+  soldStock: number
+  isActive: boolean
+}
+
+interface SelectedTicket {
+  ticketTypeId: string
+  name: string
+  quantity: number
+  maxStock: number
 }
 
 export function GenerateTicketDialog({ open, onOpenChange, onSuccess }: GenerateTicketDialogProps) {
-  const [registrationSearch, setRegistrationSearch] = useState('')
-  const [selectedRegistration, setSelectedRegistration] = useState<RegistrationOption | null>(null)
-  const [quantity, setQuantity] = useState(1)
-  const [generating, setGenerating] = useState(false)
-  const [searchResults, setSearchResults] = useState<RegistrationOption[]>([])
+  const [activeTab, setActiveTab] = useState<'existing' | 'quick'>('existing')
+  const [loading, setLoading] = useState(false)
   const [searching, setSearching] = useState(false)
+  
+  // Existing user tab
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<Registration[]>([])
+  const [selectedRegistration, setSelectedRegistration] = useState<Registration | null>(null)
+  
+  // Quick ticket tab
+  const [quickForm, setQuickForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    isEmsClient: false
+  })
+  
+  // Ticket selection
+  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([])
+  const [selectedTickets, setSelectedTickets] = useState<SelectedTicket[]>([])
+  
+  // Fetch ticket types
+  useEffect(() => {
+    if (open) {
+      fetchTicketTypes()
+    }
+  }, [open])
+
+  const fetchTicketTypes = async () => {
+    try {
+      const response = await fetch('/api/admin/ticket-types')
+      const result = await response.json()
+      if (result.success) {
+        setTicketTypes(result.data.ticketTypes || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch ticket types:', error)
+    }
+  }
 
   const searchRegistrations = useCallback(async (query: string) => {
-    if (!query || query.length < 2) {
+    if (!query.trim() || query.length < 2) {
       setSearchResults([])
       return
     }
@@ -43,326 +109,479 @@ export function GenerateTicketDialog({ open, onOpenChange, onSuccess }: Generate
     try {
       const response = await fetch(`/api/admin/registrations/search?q=${encodeURIComponent(query)}`)
       const result = await response.json()
-      
       if (result.success) {
-        setSearchResults(result.data.map((reg: any) => ({
-          id: reg.id,
-          name: `${reg.firstName} ${reg.lastName}`,
-          email: reg.email,
-          isEmsClient: reg.isEmsClient,
-          status: reg.status,
-          ticketCount: reg.ticketCount || 0
-        })))
+        setSearchResults(result.data || [])
       }
     } catch (error) {
-      console.error('Search error:', error)
+      console.error('Search failed:', error)
     } finally {
       setSearching(false)
     }
   }, [])
 
-  const handleGenerate = useCallback(async () => {
-    if (!selectedRegistration) {
+  // Debounced search
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      searchRegistrations(searchQuery)
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [searchQuery, searchRegistrations])
+
+  const addTicketType = (ticketType: TicketType) => {
+    const existing = selectedTickets.find(t => t.ticketTypeId === ticketType.id)
+    if (existing) {
+      if (existing.quantity < existing.maxStock) {
+        setSelectedTickets(prev => 
+          prev.map(t => 
+            t.ticketTypeId === ticketType.id 
+              ? { ...t, quantity: t.quantity + 1 }
+              : t
+          )
+        )
+      }
+    } else {
+      setSelectedTickets(prev => [...prev, {
+        ticketTypeId: ticketType.id,
+        name: ticketType.name,
+        quantity: 1,
+        maxStock: ticketType.availableStock
+      }])
+    }
+  }
+
+  const updateTicketQuantity = (ticketTypeId: string, quantity: number) => {
+    if (quantity <= 0) {
+      setSelectedTickets(prev => prev.filter(t => t.ticketTypeId !== ticketTypeId))
+    } else {
+      setSelectedTickets(prev => 
+        prev.map(t => 
+          t.ticketTypeId === ticketTypeId 
+            ? { ...t, quantity: Math.min(quantity, t.maxStock) }
+            : t
+        )
+      )
+    }
+  }
+
+  const removeTicketType = (ticketTypeId: string) => {
+    setSelectedTickets(prev => prev.filter(t => t.ticketTypeId !== ticketTypeId))
+  }
+
+  const generateTicketsForExisting = async () => {
+    if (!selectedRegistration || selectedTickets.length === 0) {
       toast({
-        title: "Error",
-        description: "Please select a registration",
+        title: "Missing Information",
+        description: "Please select a user and at least one ticket type",
         variant: "destructive",
       })
       return
     }
 
-    setGenerating(true)
+    setLoading(true)
     try {
       const response = await fetch('/api/admin/tickets/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           registrationId: selectedRegistration.id,
-          quantity,
+          tickets: selectedTickets,
           adminUser: 'Admin User'
-        }),
+        })
       })
 
       const result = await response.json()
-
       if (result.success) {
         toast({
           title: "Success",
-          description: `${quantity} ticket(s) generated successfully`,
+          description: `Generated ${selectedTickets.reduce((sum, t) => sum + t.quantity, 0)} tickets for ${selectedRegistration.name}`,
         })
-        
         onSuccess()
+        resetForm()
         onOpenChange(false)
-        
-        // Reset form
-        setSelectedRegistration(null)
-        setRegistrationSearch('')
-        setQuantity(1)
-        setSearchResults([])
       } else {
-        toast({
-          title: "Error",
-          description: result.message || "Failed to generate tickets",
-          variant: "destructive",
-        })
+        throw new Error(result.message)
       }
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to generate tickets",
+        description: error.message || "Failed to generate tickets",
         variant: "destructive",
       })
     } finally {
-      setGenerating(false)
+      setLoading(false)
     }
-  }, [selectedRegistration, quantity, onSuccess, onOpenChange])
-
-  const selectRegistration = (reg: RegistrationOption) => {
-    setSelectedRegistration(reg)
-    setRegistrationSearch(`${reg.name} (${reg.email})`)
-    setSearchResults([])
   }
 
-  const clearSelection = () => {
+  const generateQuickTickets = async () => {
+    if (!quickForm.firstName || !quickForm.lastName || !quickForm.phone || selectedTickets.length === 0) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in required fields and select ticket types",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setLoading(true)
+    try {
+      const response = await fetch('/api/admin/tickets/quick-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customer: quickForm,
+          tickets: selectedTickets,
+          adminUser: 'Admin User'
+        })
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: `Generated ${selectedTickets.reduce((sum, t) => sum + t.quantity, 0)} tickets for ${quickForm.firstName} ${quickForm.lastName}`,
+        })
+        onSuccess()
+        resetForm()
+        onOpenChange(false)
+      } else {
+        throw new Error(result.message)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to generate tickets",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const resetForm = () => {
+    setSearchQuery('')
+    setSearchResults([])
     setSelectedRegistration(null)
-    setRegistrationSearch('')
-    setSearchResults([])
+    setQuickForm({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      isEmsClient: false
+    })
+    setSelectedTickets([])
+    setActiveTab('existing')
   }
+
+  const totalTickets = selectedTickets.reduce((sum, t) => sum + t.quantity, 0)
+  const totalCost = selectedTickets.reduce((sum, t) => {
+    const ticketType = ticketTypes.find(tt => tt.id === t.ticketTypeId)
+    return sum + (ticketType ? ticketType.priceInCents * t.quantity : 0)
+  }, 0)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg border-0 bg-white shadow-2xl">
-        <DialogHeader className="pb-4">
-          <DialogTitle className="text-xl font-bold text-gray-800 flex items-center gap-2">
-            <div className="w-2 h-6 bg-gradient-to-b from-green-500 to-blue-500 rounded-full"></div>
-            Generate New Tickets
+    <Dialog open={open} onOpenChange={(open) => {
+      if (!open) resetForm()
+      onOpenChange(open)
+    }}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Ticket className="h-5 w-5 text-blue-600" />
+            Generate Tickets
           </DialogTitle>
-          <DialogDescription className="text-gray-600">
-            Create additional tickets for existing registrations
+          <DialogDescription>
+            Create tickets for existing customers or add new quick registrations
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Registration Search */}
-          <div>
-            <Label htmlFor="registration" className="text-sm font-medium text-gray-700">
-              Find Registration
-            </Label>
-            <div className="relative mt-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                id="registration"
-                placeholder="Search by name or email..."
-                value={registrationSearch}
-                onChange={(e) => {
-                  setRegistrationSearch(e.target.value)
-                  searchRegistrations(e.target.value)
-                }}
-                className="pl-10 h-10 border-2 border-gray-200 focus:border-green-400 focus:ring-green-400/20"
-              />
-              {searching && (
-                <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-green-500" />
-              )}
-              {registrationSearch && !searching && (
-                <button
-                  onClick={clearSelection}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-            
-            {/* Compact Search Results */}
-            {searchResults.length > 0 && (
-              <div className="mt-2 max-h-48 overflow-y-auto border-2 border-green-100 rounded-lg bg-white shadow-lg">
-                {searchResults.map((reg) => (
-                  <button
-                    key={reg.id}
-                    onClick={() => selectRegistration(reg)}
-                    className="w-full p-3 text-left hover:bg-green-50 border-b border-green-50 last:border-b-0 transition-colors"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="font-semibold text-sm text-gray-900 flex items-center gap-2">
-                          {reg.isEmsClient ? (
-                            <Building className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <User className="h-4 w-4 text-blue-600" />
-                          )}
-                          {reg.name}
-                        </div>
-                        <div className="text-xs text-gray-600">{reg.email}</div>
-                      </div>
-                      <div className="text-right">
-                        <div className={`px-2 py-1 rounded text-xs font-medium ${
-                          reg.isEmsClient 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {reg.isEmsClient ? 'EMS' : 'Public'}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {reg.ticketCount} existing
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'existing' | 'quick')}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="existing" className="flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Existing Customer
+            </TabsTrigger>
+            <TabsTrigger value="quick" className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4" />
+              Quick Ticket
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Selected Registration Display */}
-          {selectedRegistration && (
-            <div className="p-4 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg border border-green-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  {selectedRegistration.isEmsClient ? (
-                    <Building className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <User className="h-5 w-5 text-blue-600" />
+          {/* Existing Customer Tab */}
+          <TabsContent value="existing" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Search Registered Users</CardTitle>
+                <CardDescription>Find existing customers by name, email, or phone</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by name, email, or phone..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                  {searching && (
+                    <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
                   )}
+                </div>
+
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-2">
+                    {searchResults.map((registration) => (
+                      <div
+                        key={registration.id}
+                        onClick={() => setSelectedRegistration(registration)}
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedRegistration?.id === registration.id
+                            ? 'bg-blue-50 border-blue-300'
+                            : 'bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{registration.name}</span>
+                              <Badge variant={registration.isEmsClient ? "default" : "outline"} className="text-xs">
+                                {registration.isEmsClient ? 'EMS' : 'Public'}
+                              </Badge>
+                            </div>
+                            <div className="text-sm text-gray-600 space-y-1">
+                              <div className="flex items-center gap-2">
+                                <Mail className="h-3 w-3" />
+                                {registration.email}
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-3 w-3" />
+                                {registration.phone}
+                              </div>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {registration.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Selected User */}
+                {selectedRegistration && (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium text-green-900">Selected Customer</h4>
+                        <p className="text-green-700">{selectedRegistration.name}</p>
+                        <p className="text-sm text-green-600">{selectedRegistration.email}</p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedRegistration(null)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Quick Ticket Tab */}
+          <TabsContent value="quick" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Quick Customer Registration</CardTitle>
+                <CardDescription>Add new customer and generate tickets instantly</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <div className="font-semibold text-sm text-gray-900">
-                      {selectedRegistration.name}
-                    </div>
-                    <div className="text-xs text-gray-600">
-                      {selectedRegistration.email}
-                    </div>
+                    <Label htmlFor="firstName">First Name *</Label>
+                    <Input
+                      id="firstName"
+                      value={quickForm.firstName}
+                      onChange={(e) => setQuickForm(prev => ({ ...prev, firstName: e.target.value }))}
+                      placeholder="First name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="lastName">Last Name *</Label>
+                    <Input
+                      id="lastName"
+                      value={quickForm.lastName}
+                      onChange={(e) => setQuickForm(prev => ({ ...prev, lastName: e.target.value }))}
+                      placeholder="Last name"
+                    />
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className={`px-2 py-1 rounded text-xs font-medium ${
-                    selectedRegistration.isEmsClient 
-                      ? 'bg-green-100 text-green-800' 
-                      : 'bg-blue-100 text-blue-800'
-                  }`}>
-                    {selectedRegistration.isEmsClient ? 'EMS Customer' : 'General Public'}
+
+                <div>
+                  <Label htmlFor="email">Email (Optional)</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="email"
+                      type="email"
+                      value={quickForm.email}
+                      onChange={(e) => setQuickForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="pl-10"
+                      placeholder="customer@example.com"
+                    />
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    {selectedRegistration.ticketCount} existing tickets
+                </div>
+
+                <div>
+                  <Label htmlFor="phone">Phone Number *</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <Input
+                      id="phone"
+                      value={quickForm.phone}
+                      onChange={(e) => setQuickForm(prev => ({ ...prev, phone: e.target.value }))}
+                      className="pl-10"
+                      placeholder="+356 1234 5678"
+                    />
                   </div>
+                </div>
+
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div>
+                    <Label className="text-sm font-medium">EMS Customer</Label>
+                    <p className="text-xs text-gray-600">Free tickets for EMS customers</p>
+                  </div>
+                  <Button
+                    variant={quickForm.isEmsClient ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setQuickForm(prev => ({ ...prev, isEmsClient: !prev.isEmsClient }))}
+                  >
+                    {quickForm.isEmsClient ? (
+                      <><Building className="h-3 w-3 mr-1" />EMS</>
+                    ) : (
+                      <><Users className="h-3 w-3 mr-1" />Public</>
+                    )}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Ticket Selection */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Select Ticket Types</CardTitle>
+            <CardDescription>Choose ticket types and quantities</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Available Ticket Types */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {ticketTypes.filter(tt => tt.isActive && tt.availableStock > 0).map((ticketType) => (
+                <div
+                  key={ticketType.id}
+                  className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => addTicketType(ticketType)}
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-medium text-sm">{ticketType.name}</h4>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-green-600 font-medium">
+                          €{(ticketType.priceInCents / 100).toFixed(2)}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {ticketType.availableStock} available
+                        </span>
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline">
+                      <Plus className="h-3 w-3" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Selected Tickets */}
+            {selectedTickets.length > 0 && (
+              <div className="space-y-2 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h4 className="font-medium text-blue-900">Selected Tickets</h4>
+                {selectedTickets.map((selected) => (
+                  <div key={selected.ticketTypeId} className="flex items-center justify-between p-2 bg-white rounded border">
+                    <span className="font-medium text-sm">{selected.name}</span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateTicketQuantity(selected.ticketTypeId, selected.quantity - 1)}
+                        className="h-6 w-6 p-0"
+                      >
+                        -
+                      </Button>
+                      <span className="text-sm font-medium w-8 text-center">{selected.quantity}</span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => updateTicketQuantity(selected.ticketTypeId, selected.quantity + 1)}
+                        className="h-6 w-6 p-0"
+                        disabled={selected.quantity >= selected.maxStock}
+                      >
+                        +
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => removeTicketType(selected.ticketTypeId)}
+                        className="h-6 w-6 p-0 text-red-500 hover:text-red-700"
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="flex justify-between items-center pt-2 border-t">
+                  <span className="font-medium">Total: {totalTickets} tickets</span>
+                  <span className="font-medium text-green-600">
+                    €{(totalCost / 100).toFixed(2)}
+                  </span>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Quantity Selection */}
-          <div>
-            <Label htmlFor="quantity" className="text-sm font-medium text-gray-700">
-              Number of Tickets
-            </Label>
-            <Select 
-              value={quantity.toString()} 
-              onValueChange={(value) => setQuantity(parseInt(value))}
-            >
-              <SelectTrigger className="mt-1 h-10 border-2 border-gray-200 focus:border-blue-400">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Array.from({ length: 10 }, (_, i) => i + 1).map((num) => (
-                  <SelectItem key={num} value={num.toString()}>
-                    {num} ticket{num > 1 ? 's' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Generate Button */}
-          <div className="pt-2">
-            <Button 
-              onClick={handleGenerate}
-              disabled={!selectedRegistration || generating}
-              className="w-full h-11 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 font-semibold transition-all duration-200"
-            >
-              {generating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Generate {quantity} Ticket{quantity > 1 ? 's' : ''}
-                </>
-              )}
-            </Button>
-            
-            {!selectedRegistration && (
-              <p className="text-xs text-gray-500 text-center mt-2">
-                Please search and select a registration above
-              </p>
             )}
-          </div>
+          </CardContent>
+        </Card>
+
+        {/* Action Buttons */}
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={activeTab === 'existing' ? generateTicketsForExisting : generateQuickTickets}
+            disabled={loading || selectedTickets.length === 0 || 
+              (activeTab === 'existing' && !selectedRegistration) ||
+              (activeTab === 'quick' && (!quickForm.firstName || !quickForm.lastName || !quickForm.phone))
+            }
+            className="min-w-32"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Generating...
+              </>
+            ) : (
+              <>
+                <Ticket className="mr-2 h-4 w-4" />
+                Generate {totalTickets} Ticket{totalTickets !== 1 ? 's' : ''}
+              </>
+            )}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
   )
-}
-
-// src/app/api/admin/registrations/search/route.ts - Optimized search API
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-
-export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get('q')
-    
-    if (!query || query.length < 2) {
-      return NextResponse.json({
-        success: true,
-        data: []
-      })
-    }
-    
-    const registrations = await prisma.registration.findMany({
-      where: {
-        OR: [
-          { firstName: { contains: query, mode: 'insensitive' } },
-          { lastName: { contains: query, mode: 'insensitive' } },
-          { email: { contains: query, mode: 'insensitive' } },
-          { phone: { contains: query, mode: 'insensitive' } }
-        ],
-        status: {
-          in: ['COMPLETED', 'PENDING', 'PAYMENT_PENDING']
-        }
-      },
-      include: {
-        tickets: {
-          select: { id: true }
-        }
-      },
-      take: 10,
-      orderBy: [
-        { status: 'asc' }, // Prioritize COMPLETED registrations
-        { createdAt: 'desc' }
-      ]
-    })
-    
-    const formattedResults = registrations.map(reg => ({
-      id: reg.id,
-      firstName: reg.firstName,
-      lastName: reg.lastName,
-      email: reg.email,
-      isEmsClient: reg.isEmsClient,
-      status: reg.status,
-      ticketCount: reg.tickets.length,
-      createdAt: reg.createdAt
-    }))
-    
-    return NextResponse.json({
-      success: true,
-      data: formattedResults
-    })
-    
-  } catch (error: any) {
-    console.error('Search error:', error)
-    return NextResponse.json(
-      { success: false, message: 'Search failed', error: error.message },
-      { status: 500 }
-    )
-  }
 }

@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
       status: ticket.status,
-      accessType: ticket.accessType,
+      // Removed accessType as it's not in the Prisma schema
       sequence: ticket.ticketSequence,
       issuedAt: ticket.issuedAt,
       sentAt: ticket.sentAt,

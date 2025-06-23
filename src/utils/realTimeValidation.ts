@@ -1,60 +1,46 @@
-// src/utils/realTimeValidation.ts
-export interface ValidationResult {
-  isValid: boolean
-  error?: string
-}
 
-export const validateField = (field: string, value: any): ValidationResult => {
-  switch (field) {
+// src/utils/realTimeValidation.ts - Real-time field validation
+export function validateField(fieldName: string, value: any): { isValid: boolean; error?: string } {
+  switch (fieldName) {
     case 'firstName':
-      if (!value || value.trim().length < 2) {
-        return { isValid: false, error: 'First name must be at least 2 characters' }
-      }
-      if (value.trim().length > 50) {
-        return { isValid: false, error: 'First name is too long' }
-      }
-      return { isValid: true }
-
     case 'lastName':
-      if (!value || value.trim().length < 2) {
-        return { isValid: false, error: 'Last name must be at least 2 characters' }
+      if (!value || value.trim().length === 0) {
+        return { isValid: false, error: 'This field is required' }
+      }
+      if (value.trim().length < 2) {
+        return { isValid: false, error: 'Must be at least 2 characters' }
       }
       if (value.trim().length > 50) {
-        return { isValid: false, error: 'Last name is too long' }
+        return { isValid: false, error: 'Must be less than 50 characters' }
       }
       return { isValid: true }
 
     case 'email':
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-      if (!value || !emailRegex.test(value.trim())) {
-        return { isValid: false, error: 'Please enter a valid email address' }
+      if (!value || value.trim().length === 0) {
+        return { isValid: false, error: 'Email is required' }
       }
-      if (value.trim().length > 255) {
-        return { isValid: false, error: 'Email address is too long' }
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+      if (!emailRegex.test(value)) {
+        return { isValid: false, error: 'Please enter a valid email address' }
       }
       return { isValid: true }
 
     case 'phone':
-      if (!value || value.trim().length < 8) {
-        return { isValid: false, error: 'Phone number must be at least 8 characters' }
+      if (!value || value.trim().length === 0) {
+        return { isValid: false, error: 'Phone number is required' }
       }
-      if (value.trim().length > 20) {
-        return { isValid: false, error: 'Phone number is too long' }
+      const phoneRegex = /^[\+]?[\s\d\-\(\)]{8,}$/
+      if (!phoneRegex.test(value)) {
+        return { isValid: false, error: 'Please enter a valid phone number' }
       }
       return { isValid: true }
 
     case 'idCardNumber':
-      if (!value || value.trim().length < 5) {
-        return { isValid: false, error: 'ID card number must be at least 5 characters' }
+      if (!value || value.trim().length === 0) {
+        return { isValid: false, error: 'ID card number is required' }
       }
-      if (value.trim().length > 50) {
-        return { isValid: false, error: 'ID card number is too long' }
-      }
-      return { isValid: true }
-
-    case 'quantity':
-      if (!value || value < 1 || value > 10) {
-        return { isValid: false, error: 'Please select 1-10 tickets' }
+      if (value.trim().length < 3) {
+        return { isValid: false, error: 'ID card number too short' }
       }
       return { isValid: true }
 

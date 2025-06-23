@@ -1,13 +1,12 @@
-// src/app/api/create-checkout-session/route.ts - Fixed for new schema
+
+// src/app/api/create-checkout-session/route.ts - Fixed with dynamic pricing
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
-
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: '2025-05-28.basil', // Updated API version
 })
-
 const CheckoutSchema = z.object({
   registrationId: z.string(),
 })
@@ -21,12 +20,16 @@ export async function POST(request: NextRequest) {
     
     const { registrationId } = CheckoutSchema.parse(body)
 
-    // Get registration details with tickets (FIXED)
+    // Get registration details with tickets
     const registration = await prisma.registration.findUnique({
       where: { id: registrationId },
       include: { 
         panelInterests: true,
-        tickets: true,  // Changed from 'ticket' to 'tickets'
+        tickets: {
+          include: {
+            ticketType: true  // Include ticket type for pricing
+          }
+        },
         payment: true
       }
     })
@@ -45,30 +48,49 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Count tickets to determine quantity (FIXED)
-    const quantity = Math.max(registration.tickets.length, 1) // Use 'tickets' array
-    const totalAmount = quantity * 5000 // €50 per ticket in cents
+    // Calculate total from actual ticket prices
+    let totalAmount = 0
+    const lineItems = []
 
-    console.log(`Creating checkout for ${quantity} ticket(s), total: €${totalAmount/100}`)
+    // Group tickets by type
+    const ticketGroups = registration.tickets.reduce((groups, ticket) => {
+      const key = ticket.ticketType.id
+      if (!groups[key]) {
+        groups[key] = {
+          ticketType: ticket.ticketType,
+          count: 0
+        }
+      }
+      groups[key].count++
+      return groups
+    }, {} as Record<string, { ticketType: any, count: number }>)
+
+    // Create line items for each ticket type
+    for (const group of Object.values(ticketGroups)) {
+      const itemTotal = group.ticketType.priceInCents * group.count
+      totalAmount += itemTotal
+
+      lineItems.push({
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: `${group.ticketType.name}${group.count > 1 ? ` (${group.count} tickets)` : ''}`,
+            description: `EMS Trade Fair 2025 - ${group.ticketType.name}`,
+          },
+          unit_amount: group.ticketType.priceInCents,
+        },
+        quantity: group.count,
+      })
+    }
+
+    console.log(`Creating checkout for total: €${totalAmount/100}`)
 
     try {
       // Create new Stripe Checkout Session
       const session = await stripe.checkout.sessions.create({
         mode: 'payment',
         payment_method_types: ['card'],
-        line_items: [
-          {
-            price_data: {
-              currency: 'eur',
-              product_data: {
-                name: `EMS VIP Trade Fair Access 2025 ${quantity > 1 ? `(${quantity} Tickets)` : ''}`,
-                description: `VIP access to EMS Trade Fair at MFCC (June 26 - July 6, 2025)${quantity > 1 ? ` - ${quantity} tickets under the name ${registration.firstName} ${registration.lastName}` : ''}`,
-              },
-              unit_amount: 5000, // €50.00 per ticket in cents
-            },
-            quantity: quantity,
-          },
-        ],
+        line_items: lineItems,
         metadata: {
           registrationId,
           customerName: `${registration.firstName} ${registration.lastName}`,
@@ -76,8 +98,8 @@ export async function POST(request: NextRequest) {
           customerPhone: registration.phone,
           panelInterest: registration.panelInterests.length > 0 ? 'yes' : 'no',
           eventName: 'EMS Trade Fair 2025',
-          ticketQuantity: quantity.toString(),
-          totalTickets: quantity.toString()
+          ticketQuantity: registration.tickets.length.toString(),
+          totalTickets: registration.tickets.length.toString()
         },
         customer_email: registration.email,
         success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -93,12 +115,14 @@ export async function POST(request: NextRequest) {
         update: {
           stripePaymentId: session.id,
           amount: totalAmount,
+          originalAmount: totalAmount,  // Use calculated amount
           status: 'PENDING'
         },
         create: {
           registrationId,
           stripePaymentId: session.id,
           amount: totalAmount,
+          originalAmount: totalAmount,  // Use calculated amount
           currency: 'eur',
           status: 'PENDING'
         }
@@ -108,7 +132,7 @@ export async function POST(request: NextRequest) {
         success: true,
         sessionId: session.id,
         checkoutUrl: session.url,
-        quantity: quantity,
+        quantity: registration.tickets.length,
         totalAmount: totalAmount
       })
 

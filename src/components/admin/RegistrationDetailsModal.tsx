@@ -1,11 +1,10 @@
-
-// src/components/admin/RegistrationDetailsModal.tsx
+// src/components/admin/RegistrationDetailsModal.tsx - Updated with new field names
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { StatusBadge } from './StatusBadge'
-import { Users, Building, Zap, Ticket, Copy } from 'lucide-react'
+import { Users, Building, Zap, Ticket, Copy, Calendar, Hash } from 'lucide-react'
 import { toast } from '@/components/ui/use-toast'
 
 interface RegistrationDetailsModalProps {
@@ -92,7 +91,7 @@ export function RegistrationDetailsModal({
           <div className="space-y-3">
             <div className="flex items-center gap-2 font-medium">
               <Ticket className="h-4 w-4" />
-              Status & Ticket
+              Status & Tickets
             </div>
             <div className="space-y-2 text-sm bg-gray-50 p-3 rounded">
               <div className="flex justify-between">
@@ -103,42 +102,67 @@ export function RegistrationDetailsModal({
                 <span>Registered:</span>
                 <span>{new Date(registration.createdAt).toLocaleDateString()}</span>
               </div>
-              {registration.ticket && (
-                <>
-                  <div className="flex justify-between">
-                    <span>Ticket:</span>
-                    <span className="font-mono text-xs">{registration.ticket.ticketNumber}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Ticket Status:</span>
-                    <StatusBadge status={registration.ticket.status} compact />
-                  </div>
-                </>
+              <div className="flex justify-between">
+                <span>Tickets:</span>
+                <span className="font-medium">{registration.ticketCount || 0}</span>
+              </div>
+              {registration.lastTicket && (
+                <div className="flex justify-between">
+                  <span>Latest Ticket:</span>
+                  <span className="font-mono text-xs">{registration.lastTicket}</span>
+                </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* EMS Customer Info */}
+        {/* EMS Customer Info - Updated field names */}
         {registration.isEmsClient && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 font-medium">
               <Building className="h-4 w-4" />
               EMS Customer Information
             </div>
-            <div className="bg-green-50 p-3 rounded text-sm space-y-1">
+            <div className="bg-green-50 p-3 rounded text-sm space-y-2">
               {registration.customerName && (
-                <p><strong>Customer Name:</strong> {registration.customerName}</p>
+                <div className="flex justify-between">
+                  <span><strong>Customer Name:</strong></span>
+                  <span>{registration.customerName}</span>
+                </div>
               )}
-              {registration.emsCustomerId && (
-                <p><strong>Customer ID:</strong> {registration.emsCustomerId}</p>
+              {registration.orderNumber && (
+                <div className="flex justify-between items-center">
+                  <span><strong>Order Number:</strong></span>
+                  <div className="flex items-center gap-1">
+                    <Hash className="h-3 w-3" />
+                    <span className="font-mono text-xs">{registration.orderNumber}</span>
+                  </div>
+                </div>
+              )}
+              {registration.applicationNumber && (
+                <div className="flex justify-between items-center">
+                  <span><strong>Application Number:</strong></span>
+                  <div className="flex items-center gap-1">
+                    <Hash className="h-3 w-3" />
+                    <span className="font-mono text-xs">{registration.applicationNumber}</span>
+                  </div>
+                </div>
+              )}
+              {registration.orderDate && (
+                <div className="flex justify-between items-center">
+                  <span><strong>Order Date:</strong></span>
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3" />
+                    <span>{new Date(registration.orderDate).toLocaleDateString()}</span>
+                  </div>
+                </div>
               )}
             </div>
           </div>
         )}
 
         {/* Panel Interests */}
-        {registration.panelInterests.length > 0 && (
+        {registration.panelInterests?.length > 0 && (
           <div className="space-y-2">
             <div className="flex items-center gap-2 font-medium">
               <Zap className="h-4 w-4" />
@@ -156,6 +180,24 @@ export function RegistrationDetailsModal({
                   {interest.notes && (
                     <p className="text-gray-600 mt-1">{interest.notes}</p>
                   )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* All Tickets */}
+        {registration.tickets?.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 font-medium">
+              <Ticket className="h-4 w-4" />
+              All Tickets ({registration.tickets.length})
+            </div>
+            <div className="space-y-1 max-h-32 overflow-y-auto">
+              {registration.tickets.map((ticket: any) => (
+                <div key={ticket.id} className="flex justify-between items-center p-2 bg-purple-50 rounded text-sm">
+                  <span className="font-mono text-xs">{ticket.ticketNumber}</span>
+                  <StatusBadge status={ticket.status} compact />
                 </div>
               ))}
             </div>
@@ -181,7 +223,7 @@ export function RegistrationDetailsModal({
               disabled={processing}
               className="flex-1"
             >
-              {processing ? 'Processing...' : 'Approve & Generate Ticket'}
+              {processing ? 'Processing...' : 'Approve & Generate Tickets'}
             </Button>
             <Button 
               variant="destructive"

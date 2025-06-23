@@ -1,36 +1,18 @@
-// src/lib/auth.ts (Fixed version)
-'use client'
-
-export interface AdminUser {
-  id: string
-  email: string
-  role: string
-  firstName?: string
-  lastName?: string
+interface LoginResult {
+  success: boolean
+  message?: string
+  user?: {
+    id: string
+    email: string
+    role: string
+    firstName?: string
+    lastName?: string
+  }
 }
 
 export class AuthService {
   private static instance: AuthService
-  private currentUser: AdminUser | null = null
-
-  private constructor() {
-    // Only access localStorage on client side
-    if (typeof window !== 'undefined') {
-      this.loadFromStorage()
-    }
-  }
-
-  private loadFromStorage() {
-    try {
-      const stored = localStorage.getItem('admin_user')
-      if (stored) {
-        this.currentUser = JSON.parse(stored)
-      }
-    } catch (error) {
-      console.error('Error loading user from storage:', error)
-      localStorage.removeItem('admin_user')
-    }
-  }
+  private currentUser: any = null
 
   static getInstance(): AuthService {
     if (!AuthService.instance) {
@@ -39,47 +21,66 @@ export class AuthService {
     return AuthService.instance
   }
 
-  async login(email: string, password: string): Promise<{ success: boolean; message?: string; user?: AdminUser }> {
+  async login(email: string, password: string): Promise<LoginResult> {
     try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      // For demo purposes, use hardcoded credentials
-      if (email === 'admin@ems-events.com' && password === 'admin123') {
-        const user: AdminUser = {
-          id: '1',
-          email: 'admin@ems-events.com',
-          role: 'SUPER_ADMIN',
-          firstName: 'Admin',
-          lastName: 'User'
-        }
-        
-        this.currentUser = user
+      const response = await fetch('/api/admin/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      const result = await response.json()
+
+      if (result.success) {
+        this.currentUser = result.user
+        // Store user in localStorage for client-side persistence
         if (typeof window !== 'undefined') {
-          localStorage.setItem('admin_user', JSON.stringify(user))
+          localStorage.setItem('admin_user', JSON.stringify(result.user))
         }
-        
-        return { success: true, user }
-      } else {
-        return { success: false, message: 'Invalid email or password' }
       }
+
+      return result
     } catch (error) {
-      return { success: false, message: 'Login failed. Please try again.' }
+      return {
+        success: false,
+        message: 'Network error occurred'
+      }
     }
   }
 
-  logout(): void {
+  async logout(): Promise<void> {
+    try {
+      await fetch('/api/admin/auth/logout', {
+        method: 'POST',
+      })
+    } catch (error) {
+      console.error('Logout error:', error)
+    }
+
     this.currentUser = null
     if (typeof window !== 'undefined') {
       localStorage.removeItem('admin_user')
     }
   }
 
-  getCurrentUser(): AdminUser | null {
-    return this.currentUser
+  isAuthenticated(): boolean {
+    if (this.currentUser) return true
+
+    // Check localStorage
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('admin_user')
+      if (stored) {
+        this.currentUser = JSON.parse(stored)
+        return true
+      }
+    }
+
+    return false
   }
 
-  isAuthenticated(): boolean {
-    return this.currentUser !== null
+  getCurrentUser() {
+    return this.currentUser
   }
 }
