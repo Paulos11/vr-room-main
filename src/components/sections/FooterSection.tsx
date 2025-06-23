@@ -18,7 +18,7 @@ EMS delivers innovative energy solutions to reduce consumption in Malta and Gozo
           <div className="space-y-2 text-gray-400">
             <p><Calendar className="w-4 h-4 inline mr-2" />June 26 - July 6, 2025</p>
             <p><MapPin className="w-4 h-4 inline mr-2" />MFCC, Ta' Qali, Malta</p>
-            <p><Clock className="w-4 h-4 inline mr-2" />6:00 PM Onwards Daily</p>
+            <p><Clock className="w-4 h-4 inline mr-2" />6:00 PM Onwards</p>
           </div>
         </div>
         
