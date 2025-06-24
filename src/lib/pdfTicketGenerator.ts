@@ -1,4 +1,4 @@
-// COMPACT: src/lib/pdfTicketGenerator.ts - Simple ticket type display without price
+// COMPACT: src/lib/pdfTicketGenerator.ts - 6 tickets per page layout
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -343,21 +343,25 @@ export class PDFTicketGenerator {
     const pageWidth = 595;
     const pageHeight = 842;
     const ticketWidth = 260;
-    const ticketHeight = 180; // ✅ Updated height
+    const ticketHeight = 180;
     const margin = 15;
     
-    // Calculate layout - 2 tickets per row, multiple rows per page
+    // ✅ FIXED LAYOUT: Exactly 6 tickets per page (2 columns × 3 rows)
     const ticketsPerRow = 2;
-    const ticketsPerCol = Math.floor((pageHeight - 60) / (ticketHeight + margin));
-    const ticketsPerPage = ticketsPerRow * ticketsPerCol;
+    const ticketsPerCol = 3;
+    const ticketsPerPage = 6; // Fixed at 6
     
-    console.log(`Arranging ${tickets.length} tickets: ${ticketsPerRow} per row, ${ticketsPerCol} per column, ${ticketsPerPage} per page`);
+    // Calculate total pages needed
+    const totalPages = Math.ceil(tickets.length / ticketsPerPage);
+    
+    console.log(`🎫 Arranging ${tickets.length} tickets: ${ticketsPerPage} per page = ${totalPages} pages`);
     
     let currentPage: PDFPage | null = null;
     
     for (let i = 0; i < tickets.length; i++) {
-      // Create new page if needed
+      // Create new page every 6 tickets
       if (i % ticketsPerPage === 0) {
+        const pageNumber = Math.floor(i / ticketsPerPage) + 1;
         currentPage = pdfDoc.addPage([pageWidth, pageHeight]);
         
         // Page header
@@ -383,16 +387,24 @@ export class PDFTicketGenerator {
           });
           
           currentPage.drawText(`Generated: ${new Date().toLocaleString()}`, {
-            x: pageWidth - 150,
+            x: pageWidth - 200,
             y: pageHeight - 30,
             size: 8,
             font: regularFont,
             color: rgb(0.5, 0.5, 0.5),
           });
           
+          currentPage.drawText(`Page ${pageNumber} of ${totalPages}`, {
+            x: pageWidth - 200,
+            y: pageHeight - 40,
+            size: 8,
+            font: regularFont,
+            color: rgb(0.5, 0.5, 0.5),
+          });
+          
           currentPage.drawText(`Total Tickets: ${tickets.length}`, {
-            x: pageWidth - 150,
-            y: pageHeight - 45,
+            x: pageWidth - 200,
+            y: pageHeight - 50,
             size: 8,
             font: regularFont,
             color: rgb(0.5, 0.5, 0.5),
@@ -400,18 +412,26 @@ export class PDFTicketGenerator {
         }
       }
       
-      // Calculate position on current page
+      // Calculate position on current page (0-5 tickets per page)
       const positionOnPage = i % ticketsPerPage;
-      const row = Math.floor(positionOnPage / ticketsPerRow);
-      const col = positionOnPage % ticketsPerRow;
+      const row = Math.floor(positionOnPage / ticketsPerRow); // 0, 1, 2 (3 rows)
+      const col = positionOnPage % ticketsPerRow; // 0, 1 (2 columns)
       
-      const x = margin + col * (ticketWidth + margin);
-      const y = pageHeight - 80 - (row + 1) * (ticketHeight + margin);
+      // Calculate spacing to fit exactly 6 tickets nicely
+      const availableWidth = pageWidth - (2 * margin);
+      const availableHeight = pageHeight - 120; // Leave space for header and footer
+      
+      const ticketSpacingX = availableWidth / ticketsPerRow;
+      const ticketSpacingY = availableHeight / ticketsPerCol;
+      
+      const x = margin + col * ticketSpacingX + (ticketSpacingX - ticketWidth) / 2;
+      const y = pageHeight - 80 - (row + 1) * ticketSpacingY + (ticketSpacingY - ticketHeight) / 2;
       
       // Draw the ticket
       if (currentPage) {
-        console.log(`🎨 Drawing ticket ${i + 1}: ${tickets[i].ticketNumber}`)
-        console.log('  - Ticket type name:', tickets[i].ticketTypeName)
+        console.log(`🎨 Drawing ticket ${i + 1} on page ${Math.floor(i / ticketsPerPage) + 1}: ${tickets[i].ticketNumber}`)
+        console.log(`   Position: Row ${row + 1}, Column ${col + 1} (${positionOnPage + 1}/6 on page)`)
+        console.log('   Ticket type name:', tickets[i].ticketTypeName)
         
         await this.drawSingleTicket(currentPage, pdfDoc, tickets[i], x, y);
         
@@ -419,27 +439,29 @@ export class PDFTicketGenerator {
         const lineColor = rgb(0.9, 0.9, 0.9);
         const dashArray = [3, 2];
         
-        // Horizontal cut lines
+        // Horizontal cut lines (between rows)
         if (row > 0) {
           currentPage.drawLine({
-            start: { x: x - 5, y: y + ticketHeight + (margin/2) },
-            end: { x: x + ticketWidth + 5, y: y + ticketHeight + (margin/2) },
+            start: { x: x - 10, y: y + ticketHeight + (ticketSpacingY - ticketHeight) / 2 },
+            end: { x: x + ticketWidth + 10, y: y + ticketHeight + (ticketSpacingY - ticketHeight) / 2 },
             color: lineColor,
             dashArray: dashArray,
           });
         }
         
-        // Vertical cut lines
+        // Vertical cut lines (between columns)
         if (col > 0) {
           currentPage.drawLine({
-            start: { x: x - (margin/2), y: y - 5 },
-            end: { x: x - (margin/2), y: y + ticketHeight + 5 },
+            start: { x: x - (ticketSpacingX - ticketWidth) / 2, y: y - 10 },
+            end: { x: x - (ticketSpacingX - ticketWidth) / 2, y: y + ticketHeight + 10 },
             color: lineColor,
             dashArray: dashArray,
           });
         }
       }
     }
+    
+    console.log(`✅ PDF generated successfully: ${tickets.length} tickets across ${totalPages} pages`);
     
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
