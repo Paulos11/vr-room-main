@@ -1,13 +1,14 @@
-// src/app/api/webhooks/stripe/route.ts - Fixed webhook handler
+// src/app/api/webhooks/stripe/route.ts - Enhanced with email integration
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
 import { TicketService } from '@/lib/ticketService'
+import { EmailService, RegistrationEmailData } from '@/lib/emailService'
+import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil',
+  apiVersion: '2025-05-28.basil', // Updated API version
 })
-
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
 export async function POST(request: NextRequest) {
@@ -62,12 +63,15 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     console.log(`Processing successful payment for registration: ${registrationId}`)
 
     // Use transaction to ensure all updates happen atomically
-    await prisma.$transaction(async (tx) => {
-      // Get registration with coupon details
+    const result = await prisma.$transaction(async (tx) => {
+      // Get registration with all related data
       const registration = await tx.registration.findUnique({
         where: { id: registrationId },
         include: {
-          appliedCoupon: true
+          appliedCoupon: true,
+          tickets: {
+            orderBy: { ticketSequence: 'asc' }
+          }
         }
       })
 
@@ -100,42 +104,99 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         console.log(`Coupon ${registration.appliedCouponCode} usage incremented after payment completion`)
       }
 
-      // Handle ticket creation/update
-      let ticket = await tx.ticket.findFirst({
-        where: { registrationId: registrationId }
-      })
-
-      if (!ticket) {
-        console.log(`Creating new ticket for registration: ${registrationId}`)
-        ticket = await TicketService.createTicket(registrationId)
-        
-        if (!ticket) {
+      // Handle ticket creation if needed (tickets should already exist from registration)
+      let tickets = registration.tickets
+      if (tickets.length === 0) {
+        console.log(`No tickets found, creating tickets for registration: ${registrationId}`)
+        // This shouldn't happen in normal flow, but handle it just in case
+        const newTicket = await TicketService.createTicket(registrationId)
+        if (newTicket) {
+          tickets = [newTicket]
+        } else {
           throw new Error('Failed to create ticket - createTicket returned null/undefined')
         }
       }
 
-      // Update ticket status
-      await tx.ticket.update({
-        where: { id: ticket.id },
+      // Update all tickets status to SENT
+      await tx.ticket.updateMany({
+        where: { registrationId: registrationId },
         data: {
           status: 'SENT',
           sentAt: new Date()
         }
       })
 
-      // Log the ticket delivery email
-      await tx.emailLog.create({
-        data: {
-          registrationId,
-          emailType: 'TICKET_DELIVERY',
-          subject: 'Your EMS VIP Ticket is Ready!',
-          recipient: registration.email,
-          status: 'SENT'
-        }
-      })
+      return { registration, tickets }
     })
 
-    console.log(`Successfully processed payment for registration ${registrationId}`)
+    // 🎯 GENERATE PDF TICKETS AND SEND EMAIL
+    try {
+      const customerName = `${result.registration.firstName} ${result.registration.lastName}`
+      
+      // Use your existing PDF generator method - much cleaner!
+      console.log(`Generating PDF for ${result.tickets.length} tickets`)
+      const pdfBuffer = await PDFTicketGenerator.generateTicketsFromRegistration(result.registration)
+
+      // Prepare email data
+      const emailData: RegistrationEmailData = {
+        registrationId: result.registration.id,
+        customerName,
+        email: result.registration.email,
+        phone: result.registration.phone,
+        isEmsClient: result.registration.isEmsClient,
+        ticketCount: result.tickets.length,
+        finalAmount: result.registration.finalAmount,
+        appliedCouponCode: result.registration.appliedCouponCode || undefined,
+        tickets: result.tickets.map(ticket => ({
+          ticketNumber: ticket.ticketNumber,
+          customerName,
+          email: result.registration.email,
+          phone: result.registration.phone,
+          qrCode: ticket.qrCode,
+          sequence: ticket.ticketSequence || 1,
+          totalTickets: result.tickets.length,
+          isEmsClient: result.registration.isEmsClient
+        }))
+      }
+
+      // Send payment confirmation email with PDF attachment
+      console.log(`Sending payment confirmation email to: ${result.registration.email}`)
+      const emailSent = await EmailService.sendPaymentConfirmation(emailData, pdfBuffer)
+
+      // Log email activity
+      await prisma.emailLog.create({
+        data: {
+          registrationId,
+          emailType: 'PAYMENT_CONFIRMATION',
+          subject: '🎉 Payment Successful - Your EMS Tickets Are Ready!',
+          recipient: result.registration.email,
+          status: emailSent ? 'SENT' : 'FAILED',
+          errorMessage: emailSent ? null : 'Failed to send payment confirmation email'
+        }
+      })
+
+      console.log(`Payment success processing completed:`, {
+        registrationId,
+        emailSent,
+        ticketCount: result.tickets.length,
+        pdfGenerated: true
+      })
+
+    } catch (emailError: any) {
+      console.error('Error sending payment confirmation email:', emailError)
+      
+      // Log email failure but don't fail the webhook
+      await prisma.emailLog.create({
+        data: {
+          registrationId,
+          emailType: 'PAYMENT_CONFIRMATION',
+          subject: 'Failed to send payment confirmation',
+          recipient: result.registration.email,
+          status: 'FAILED',
+          errorMessage: `Email sending failed: ${emailError?.message || 'Unknown error'}`
+        }
+      })
+    }
 
   } catch (error: any) {
     console.error('Error handling payment success:', error.message)
@@ -146,7 +207,7 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         data: {
           emailType: 'TICKET_DELIVERY',
           subject: 'Failed to process payment webhook',
-          recipient: 'admin@ems-events.com',
+          recipient: 'info@ems.com.mt',
           status: 'FAILED',
           errorMessage: `Webhook processing failed: ${error.message}`
         }
@@ -174,7 +235,7 @@ async function handlePaymentExpired(session: Stripe.Checkout.Session) {
       data: { status: 'CANCELLED' }
     })
 
-    // Log payment expiration
+    // TODO: Optionally send payment expiration reminder email
     await prisma.emailLog.create({
       data: {
         registrationId,
@@ -213,7 +274,7 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
         data: { status: 'FAILED' }
       })
 
-      // Log payment failure
+      // TODO: Optionally send payment failure notification email
       await prisma.emailLog.create({
         data: {
           registrationId: payment.registrationId,
@@ -234,6 +295,7 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
 export async function GET() {
   return NextResponse.json({ 
     message: 'Stripe webhook endpoint is active',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    emailServiceEnabled: !!process.env.RESEND_API_KEY
   })
 }

@@ -1,4 +1,4 @@
-// src/lib/pdfTicketGenerator.ts - Fixed QR code to use verification URL
+// src/lib/pdfTicketGenerator.ts - Updated with correct QR code URLs
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -243,9 +243,12 @@ export class PDFTicketGenerator {
     const qrY = y + ticketHeight - 110;
     
     try {
-      // *** THIS IS THE KEY FIX ***
-      // Generate QR code with the verification URL instead of just the qrCode value
-      const verificationUrl = `https://emstickets.com/staff/verify/${ticketData.ticketNumber}`;
+      // 🔧 UPDATED QR CODE GENERATION
+      // Use the verification URL from your environment or fallback to production
+      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://emstickets.com';
+      const verificationUrl = `${baseUrl}/staff/verify/${ticketData.ticketNumber}`;
+      
+      console.log('Generating QR code for:', verificationUrl);
       
       const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
         width: 50,
@@ -325,8 +328,8 @@ export class PDFTicketGenerator {
       color: rgb(0.95, 0.95, 0.95),
     });
     
-    // Support contact
-    page.drawText('support@emstickets.com', {
+    // Support contact - Updated to your support email
+    page.drawText('info@ems.com.mt', {
       x: x + 12,
       y: y + 12,
       size: 6,
@@ -469,5 +472,26 @@ export class PDFTicketGenerator {
     
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
+  }
+
+  /**
+   * 🎯 NEW: Helper method to generate PDF tickets from registration data
+   * This integrates with your existing registration flow
+   */
+  static async generateTicketsFromRegistration(registration: any): Promise<Buffer> {
+    const customerName = `${registration.firstName} ${registration.lastName}`;
+    
+    const ticketDataArray = registration.tickets.map((ticket: any, index: number) => ({
+      ticketNumber: ticket.ticketNumber,
+      customerName,
+      email: registration.email,
+      phone: registration.phone,
+      qrCode: ticket.qrCode, // This will be updated with proper URL in drawSingleTicket
+      sequence: ticket.ticketSequence || (index + 1),
+      totalTickets: registration.tickets.length,
+      isEmsClient: registration.isEmsClient
+    }));
+
+    return await this.generateAllTicketsPDF(ticketDataArray);
   }
 }
