@@ -1,5 +1,4 @@
-
-// 2. Fixed checkout session route - src/app/api/create-checkout-session/route.ts
+// FIXED: src/app/api/create-checkout-session/route.ts - Use actual paid prices
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe' // Use centralized config
 import { prisma } from '@/lib/prisma'
@@ -27,7 +26,8 @@ export async function POST(request: NextRequest) {
         tickets: {
           include: {
             ticketType: true
-          }
+          },
+          orderBy: { ticketSequence: 'asc' }
         },
         payment: true
       }
@@ -49,6 +49,14 @@ export async function POST(request: NextRequest) {
 
     const totalAmount = registration.finalAmount || 0
 
+    console.log('Registration pricing details:', {
+      registrationId,
+      originalAmount: registration.originalAmount,
+      discountAmount: registration.discountAmount,
+      finalAmount: registration.finalAmount,
+      ticketCount: registration.tickets.length
+    })
+
     if (totalAmount <= 0) {
       return NextResponse.json(
         { success: false, message: 'Invalid payment amount' },
@@ -56,30 +64,70 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Build line items
+    // ✅ FIXED: Build line items using ACTUAL purchase prices from tickets
     const ticketGroups = registration.tickets.reduce((groups, ticket) => {
-      const key = ticket.ticketType.id
+      const key = `${ticket.ticketType.id}-${ticket.purchasePrice}` // Group by type AND price
       if (!groups[key]) {
         groups[key] = {
           ticketType: ticket.ticketType,
+          purchasePrice: ticket.purchasePrice, // ✅ Use actual price paid
           count: 0
         }
       }
       groups[key].count++
       return groups
-    }, {} as Record<string, { ticketType: any, count: number }>)
+    }, {} as Record<string, { ticketType: any, purchasePrice: number, count: number }>)
 
-    const lineItems = Object.values(ticketGroups).map(group => ({
-      price_data: {
-        currency: 'eur',
-        product_data: {
-          name: `${group.ticketType.name}${group.count > 1 ? ` (${group.count} tickets)` : ''}`,
-          description: `EMS Trade Fair 2025 - ${group.ticketType.name}`,
+    console.log('Ticket groups for Stripe:', Object.values(ticketGroups).map(group => ({
+      name: group.ticketType.name,
+      originalPrice: group.ticketType.priceInCents,
+      actualPrice: group.purchasePrice,
+      count: group.count,
+      total: group.purchasePrice * group.count
+    })))
+
+    const lineItems = Object.values(ticketGroups).map(group => {
+      const itemName = group.count > 1 
+        ? `${group.ticketType.name} (${group.count} tickets)`
+        : group.ticketType.name
+      
+      // ✅ Show tier discount in description if applicable
+      let description = `EMS Trade Fair 2025 - ${group.ticketType.name}`
+      if (group.purchasePrice < group.ticketType.priceInCents) {
+        const savedPerTicket = group.ticketType.priceInCents - group.purchasePrice
+        description += ` | Volume discount applied: Save €${(savedPerTicket / 100).toFixed(2)} per ticket`
+      }
+
+      return {
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: itemName,
+            description: description,
+          },
+          unit_amount: group.purchasePrice, // ✅ Use actual purchase price (includes tier discounts)
         },
-        unit_amount: group.ticketType.priceInCents,
-      },
-      quantity: group.count,
-    }))
+        quantity: group.count,
+      }
+    })
+
+    console.log('Stripe line items:', lineItems.map(item => ({
+      name: item.price_data.product_data.name,
+      unit_amount: item.price_data.unit_amount,
+      quantity: item.quantity,
+      total: item.price_data.unit_amount * item.quantity
+    })))
+
+    // Verify total matches registration
+    const calculatedTotal = lineItems.reduce((sum, item) => 
+      sum + (item.price_data.unit_amount * item.quantity), 0
+    )
+
+    console.log('Total verification:', {
+      registrationFinalAmount: totalAmount,
+      calculatedFromTickets: calculatedTotal,
+      matches: totalAmount === calculatedTotal
+    })
 
     // Create checkout session configuration
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
@@ -104,17 +152,20 @@ export async function POST(request: NextRequest) {
       expires_at: Math.floor(Date.now() / 1000) + (30 * 60),
     }
 
-    // Add discount if applicable
-    if (registration.discountAmount && registration.discountAmount > 0) {
+    // ✅ IMPROVED: Only add coupon discount if there's additional coupon savings beyond tier discounts
+    if (registration.discountAmount && registration.discountAmount > 0 && registration.appliedCouponCode) {
       try {
+        console.log('Creating Stripe coupon for additional discount:', registration.discountAmount)
+        
         const coupon = await stripe.coupons.create({
           amount_off: registration.discountAmount,
           currency: 'eur',
           duration: 'once',
-          name: registration.appliedCouponCode || 'Discount Applied',
+          name: `${registration.appliedCouponCode} - Additional Discount`,
           metadata: {
             registrationId: registrationId,
-            originalCouponCode: registration.appliedCouponCode || 'DISCOUNT'
+            originalCouponCode: registration.appliedCouponCode,
+            note: 'Additional discount beyond volume pricing'
           }
         })
 
@@ -122,16 +173,20 @@ export async function POST(request: NextRequest) {
           coupon: coupon.id
         }]
 
-        console.log('Created Stripe coupon:', coupon.id)
+        console.log('Created Stripe coupon:', coupon.id, 'for amount:', registration.discountAmount)
       } catch (couponError: any) {
         console.error('Failed to create discount coupon:', couponError.message)
-        // Continue without discount rather than failing completely
+        // Continue without coupon discount rather than failing completely
       }
     }
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
-    console.log('Stripe session created:', session.id)
+    console.log('Stripe session created successfully:', {
+      sessionId: session.id,
+      url: session.url,
+      amount_total: session.amount_total
+    })
 
     // Update payment record
     await prisma.payment.upsert({
@@ -151,6 +206,8 @@ export async function POST(request: NextRequest) {
         status: 'PENDING'
       }
     })
+
+    console.log('Payment record updated/created')
 
     return NextResponse.json({
       success: true,
