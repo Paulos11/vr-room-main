@@ -1,4 +1,4 @@
-// src/components/forms/steps/TicketSelectionStep.tsx - Removed Collapsible dependency
+// FIXED: src/components/forms/steps/TicketSelectionStep.tsx - Compact with quantity discounts
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -14,27 +14,11 @@ import {
   Tag, 
   Check, 
   X, 
-  Loader2
+  Loader2,
+  TrendingDown
 } from 'lucide-react'
-import { StepProps, TicketType, SelectedTicket } from '@/types/registration'
+import { StepProps, TicketType, SelectedTicket, RegistrationFormData, CouponValidationResult } from '@/types/registration'
 import { toast } from '@/components/ui/use-toast'
-
-interface CouponValidationResult {
-  isValid: boolean
-  coupon?: {
-    id: string
-    code: string
-    name: string
-    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
-    discountValue: number
-    minOrderAmount?: number
-    maxUsesPerUser?: number
-    currentUses?: number
-    maxUses?: number
-  }
-  discountAmount?: number
-  message?: string
-}
 
 export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const [availableTickets, setAvailableTickets] = useState<TicketType[]>([])
@@ -70,16 +54,18 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     try {
       setLoading(true)
       const response = await fetch(`/api/ticket-types/public?isEmsClient=${formData.isEmsClient}`)
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch: ${response.status}`)
+      }
+      
       const result = await response.json()
       
       if (result.success) {
+        console.log('Fetched tickets:', result.data.ticketTypes)
         setAvailableTickets(result.data.ticketTypes || [])
       } else {
-        toast({
-          title: "Error",
-          description: "Failed to load ticket types",
-          variant: "destructive",
-        })
+        throw new Error(result.message || 'Failed to load ticket types')
       }
     } catch (error) {
       console.error('Error fetching tickets:', error)
@@ -192,6 +178,52 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     return selected ? selected.quantity : 0
   }
 
+  // ✅ FIXED: Calculate price for quantity based on tiers
+  const calculatePriceForQuantity = (ticket: TicketType, quantity: number) => {
+    if (formData.isEmsClient || !ticket.hasTieredPricing || !ticket.pricingTiers) {
+      return {
+        priceInCents: formData.isEmsClient ? 0 : ticket.priceInCents * quantity,
+        savings: 0,
+        appliedTier: null
+      }
+    }
+
+    // Find the exact tier match or best applicable tier
+    let appliedTier = null
+    let finalPrice = ticket.priceInCents * quantity // Default to per-ticket pricing
+
+    // Sort tiers by ticket count (descending) to find best match
+    const sortedTiers = [...ticket.pricingTiers].sort((a, b) => b.ticketCount - a.ticketCount)
+    
+    for (const tier of sortedTiers) {
+      if (quantity === tier.ticketCount) {
+        // Exact match - use tier price
+        finalPrice = tier.priceInCents
+        appliedTier = tier
+        break
+      } else if (quantity > tier.ticketCount) {
+        // For quantities larger than tier, calculate mixed pricing
+        const completeTiers = Math.floor(quantity / tier.ticketCount)
+        const remainingTickets = quantity % tier.ticketCount
+        const mixedPrice = (completeTiers * tier.priceInCents) + (remainingTickets * ticket.priceInCents)
+        
+        if (mixedPrice < finalPrice) {
+          finalPrice = mixedPrice
+          appliedTier = tier
+        }
+      }
+    }
+
+    const regularPrice = ticket.priceInCents * quantity
+    const savings = regularPrice - finalPrice
+
+    return {
+      priceInCents: finalPrice,
+      savings: Math.max(0, savings),
+      appliedTier
+    }
+  }
+
   const updateTicketQuantity = (ticket: TicketType, newQuantity: number) => {
     const currentSelected = [...formData.selectedTickets]
     const existingIndex = currentSelected.findIndex(t => t.ticketTypeId === ticket.id)
@@ -201,10 +233,12 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         currentSelected.splice(existingIndex, 1)
       }
     } else {
+      const pricing = calculatePriceForQuantity(ticket, newQuantity)
+      
       const selectedTicket: SelectedTicket = {
         ticketTypeId: ticket.id,
         name: ticket.name,
-        priceInCents: formData.isEmsClient ? 0 : ticket.priceInCents,
+        priceInCents: pricing.priceInCents,
         quantity: formData.isEmsClient ? 1 : newQuantity,
         maxPerOrder: ticket.maxPerOrder,
         minPerOrder: ticket.minPerOrder
@@ -246,8 +280,10 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
 
   const getTotalCost = (): number => {
     if (formData.isEmsClient) return 0
+    
+    // ✅ FIXED: Use the actual calculated price from selected tickets (which includes tier discounts)
     return formData.selectedTickets.reduce((sum, ticket) => 
-      sum + (ticket.priceInCents * ticket.quantity), 0
+      sum + ticket.priceInCents, 0
     )
   }
 
@@ -263,27 +299,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
 
   const formatPrice = (cents: number): string => {
     return `€${(cents / 100).toFixed(2)}`
-  }
-
-  // ✅ SAFE: Check if properties exist before accessing
-  const hasDescription = (ticket: TicketType): boolean => {
-    return !!(ticket.description && ticket.description.trim())
-  }
-
-  const getDescription = (ticket: TicketType): string => {
-    return ticket.description || ''
-  }
-
-  const getParsedTags = (ticket: TicketType): string[] => {
-    if (ticket.parsedTags) return ticket.parsedTags
-    if (ticket.tags) {
-      try {
-        return JSON.parse(ticket.tags) || []
-      } catch {
-        return ticket.tags.split(',').map(tag => tag.trim()).filter(Boolean)
-      }
-    }
-    return []
   }
 
   if (loading) {
@@ -335,8 +350,9 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
             const selectedQty = getSelectedQuantity(ticket.id)
             const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
             const isSelected = selectedQty > 0
-            const hasDesc = hasDescription(ticket)
-            const parsedTags = getParsedTags(ticket)
+            
+            // Calculate current pricing and savings
+            const pricing = calculatePriceForQuantity(ticket, selectedQty)
             
             return (
               <div 
@@ -364,11 +380,12 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3 mb-2">
                         <span className={`text-sm font-bold ${
                           formData.isEmsClient ? 'text-green-600' : 'text-blue-600'
                         }`}>
                           {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents)}
+                          {!formData.isEmsClient && <span className="text-xs font-normal text-gray-500 ml-1">per ticket</span>}
                         </span>
                         <span className="text-xs text-gray-500">
                           {ticket.availableStock} available
@@ -380,30 +397,34 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         )}
                       </div>
                       
-                      {/* Description (always show if available) */}
-                      {hasDesc && (
-                        <div className="mt-2">
-                          <p className="text-xs text-gray-600 leading-relaxed">
-                            {getDescription(ticket)}
-                          </p>
-                          
-                          {/* Additional ticket info */}
-                          {(ticket.maxPerOrder < 10 || (parsedTags && parsedTags.length > 0)) && (
-                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                              {ticket.maxPerOrder < 10 && (
-                                <span>Max per order: {ticket.maxPerOrder}</span>
-                              )}
-                              {parsedTags && parsedTags.length > 0 && (
-                                <div className="flex gap-1">
-                                  {parsedTags.slice(0, 3).map((tag, idx) => (
-                                    <Badge key={idx} variant="outline" className="text-xs">
-                                      {tag}
-                                    </Badge>
-                                  ))}
+                      {/* Description */}
+                      {ticket.description && (
+                        <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed mb-2">
+                          {ticket.description}
+                        </p>
+                      )}
+
+                      {/* ✅ IMPROVED: Show ALL Tiered Pricing Offers */}
+                      {!formData.isEmsClient && ticket.hasTieredPricing && ticket.pricingTiers && ticket.pricingTiers.length > 0 && (
+                        <div className="text-xs bg-green-50 border border-green-200 rounded px-2 py-1 mb-2">
+                          <div className="flex items-center gap-1 text-green-700 mb-1">
+                            <TrendingDown className="h-3 w-3" />
+                            <span className="font-medium">Volume Discounts Available:</span>
+                          </div>
+                          <div className="space-y-0.5">
+                            {ticket.pricingTiers.map((tier, index) => {
+                              const regularPrice = ticket.priceInCents * tier.ticketCount
+                              const savings = regularPrice - tier.priceInCents
+                              return (
+                                <div key={index} className="text-green-600">
+                                  • {tier.ticketCount} tickets for €{(tier.priceInCents / 100).toFixed(2)}
+                                  {savings > 0 && (
+                                    <span className="text-green-700 font-medium"> (Save €{(savings / 100).toFixed(2)})</span>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          )}
+                              )
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -436,21 +457,50 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                     </div>
                   </div>
                   
-                  {/* Bottom Row - Subtotal */}
+                  {/* Subtotal with Savings */}
                   {isSelected && (
-                    <div className="flex justify-end mt-2 pt-2 border-t border-gray-200">
-                      {!formData.isEmsClient ? (
-                        <div className="text-xs">
-                          <span className="text-gray-600">Subtotal: </span>
-                          <span className="font-medium text-green-600">
-                            {formatPrice(ticket.priceInCents * selectedQty)}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="text-xs font-medium text-green-600">
-                          Complimentary
-                        </div>
-                      )}
+                    <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+                      <div className="flex gap-1">
+                        {ticket.parsedTags && ticket.parsedTags.length > 0 && 
+                          ticket.parsedTags.slice(0, 2).map((tag, idx) => (
+                            <Badge key={idx} variant="outline" className="text-xs">
+                              {tag}
+                            </Badge>
+                          ))
+                        }
+                      </div>
+                      
+                      <div className="text-right">
+                        {!formData.isEmsClient ? (
+                          <div className="text-xs">
+                            {pricing.savings > 0 && (
+                              <div className="text-green-600 font-medium mb-1">
+                                💰 You saved €{(pricing.savings / 100).toFixed(2)}!
+                                {pricing.appliedTier && (
+                                  <div className="text-green-700">
+                                    ({pricing.appliedTier.name} discount applied)
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            <div>
+                              <span className="text-gray-600">Total: </span>
+                              <span className="font-medium text-blue-600">
+                                {formatPrice(pricing.priceInCents)}
+                              </span>
+                              {pricing.savings > 0 && (
+                                <span className="text-gray-400 line-through ml-1 text-xs">
+                                  {formatPrice(ticket.priceInCents * selectedQty)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-xs font-medium text-green-600">
+                            Complimentary
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -547,7 +597,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
               <div key={ticket.ticketTypeId} className="flex justify-between text-xs">
                 <span className="truncate">{ticket.name} × {ticket.quantity}</span>
                 <span className="font-medium ml-2">
-                  {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents * ticket.quantity)}
+                  {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents)}
                 </span>
               </div>
             ))}

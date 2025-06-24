@@ -1,4 +1,4 @@
-// src/components/forms/EnhancedRegistrationForm.tsx - Complete with coupon support
+// FIXED: src/components/forms/EnhancedRegistrationForm.tsx - Tiered pricing support
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
@@ -34,7 +34,7 @@ export function EnhancedRegistrationForm() {
     acceptTerms: false,
     acceptPrivacyPolicy: false,
     couponCode: '',
-    appliedDiscount: 0, // Add discount tracking
+    appliedDiscount: 0,
     // EMS client fields
     customerName: '',
     orderNumber: '',
@@ -45,7 +45,7 @@ export function EnhancedRegistrationForm() {
   // Calculate total steps based on customer type
   const totalSteps = formData.isEmsClient ? 5 : 4 // EMS: 5 steps, Public: 4 steps
 
-  // Calculate totals with discount support
+  // Calculate totals with tiered pricing support
   const totalTickets = useMemo(() => {
     return formData.selectedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0)
   }, [formData.selectedTickets])
@@ -53,8 +53,9 @@ export function EnhancedRegistrationForm() {
   const totalCost = useMemo(() => {
     if (formData.isEmsClient) return 'Free'
     
+    // ✅ FIXED: Use the priceInCents from selectedTickets (which already includes tier calculations)
     const subtotal = formData.selectedTickets.reduce((sum, ticket) => 
-      sum + (ticket.priceInCents * ticket.quantity), 0
+      sum + ticket.priceInCents, 0  // ✅ This already includes tiered discounts from TicketSelectionStep
     )
     
     const discount = formData.appliedDiscount || 0
@@ -66,6 +67,30 @@ export function EnhancedRegistrationForm() {
     
     return `€${(finalAmount / 100).toFixed(2)}`
   }, [formData.selectedTickets, formData.isEmsClient, formData.appliedDiscount, formData.couponCode])
+
+  // ✅ NEW: Calculate savings from tiered pricing
+  const tierSavings = useMemo(() => {
+    if (formData.isEmsClient) return 0
+    
+    // Calculate how much was saved through tiered pricing
+    let totalRegularPrice = 0
+    let totalTierPrice = 0
+    
+    formData.selectedTickets.forEach(ticket => {
+      if (ticket.packageInfo) {
+        // This is a tiered/package ticket
+        const regularPrice = ticket.packageInfo.pricePerTicket * ticket.packageInfo.ticketCount * ticket.quantity
+        totalRegularPrice += regularPrice
+        totalTierPrice += ticket.priceInCents
+      } else {
+        // Regular ticket - no savings
+        totalRegularPrice += ticket.priceInCents
+        totalTierPrice += ticket.priceInCents
+      }
+    })
+    
+    return Math.max(0, totalRegularPrice - totalTierPrice)
+  }, [formData.selectedTickets, formData.isEmsClient])
 
   const handleCustomerTypeSelected = useCallback((isEmsClient: boolean) => {
     // Reset all form data when customer type changes
@@ -81,7 +106,7 @@ export function EnhancedRegistrationForm() {
       acceptTerms: false,
       acceptPrivacyPolicy: false,
       couponCode: '',
-      appliedDiscount: 0, // Reset discount
+      appliedDiscount: 0,
       // EMS client fields
       customerName: '',
       orderNumber: '',
@@ -140,6 +165,7 @@ export function EnhancedRegistrationForm() {
     setIsSubmitting(true)
 
     try {
+      // ✅ FIXED: Prepare data with proper ticket pricing (already calculated with tiers)
       const cleanedData = {
         ...formData,
         firstName: formData.firstName.trim(),
@@ -148,12 +174,21 @@ export function EnhancedRegistrationForm() {
         phone: formData.phone.trim(),
         idCardNumber: formData.idCardNumber.trim(),
         couponCode: formData.couponCode || undefined,
-        appliedDiscount: formData.appliedDiscount || 0, // Include applied discount
-        // Ensure optional EMS client fields are set to undefined if empty strings
+        appliedDiscount: formData.appliedDiscount || 0,
+        // Clean up EMS fields
         customerName: formData.customerName || undefined,
         orderNumber: formData.orderNumber || undefined,
         applicationNumber: formData.applicationNumber || undefined,
         orderDate: formData.orderDate || undefined,
+        // ✅ FIXED: Send tickets with correct pricing and quantity
+        selectedTickets: formData.selectedTickets.map(ticket => ({
+          ticketTypeId: ticket.originalTicketId || ticket.ticketTypeId, // Use original ID if package
+          name: ticket.name,
+          priceInCents: ticket.priceInCents, // Total price for this selection (includes tier discounts)
+          quantity: ticket.packageInfo ? ticket.packageInfo.ticketCount * ticket.quantity : ticket.quantity, // Total number of individual tickets
+          maxPerOrder: ticket.maxPerOrder,
+          minPerOrder: ticket.minPerOrder
+        }))
       }
 
       const response = await fetch('/api/register', {
@@ -196,7 +231,6 @@ export function EnhancedRegistrationForm() {
   }, [formData, router])
 
   const renderStepContent = useCallback(() => {
-    // Debug logging
     console.log('Rendering step:', currentStep, 'isEmsClient:', formData.isEmsClient)
     
     switch (currentStep) {
@@ -208,19 +242,15 @@ export function EnhancedRegistrationForm() {
         if (formData.isEmsClient) {
           return <EmsCustomerStep formData={formData} onUpdate={handleInputChange} />
         } else {
-          // Panel Interest Step for Public Customers
           return <PanelInterestStep formData={formData} onUpdate={handleInputChange} />
         }
       case 4:
         if (formData.isEmsClient) {
-          // Panel Interest Step for EMS Customers (Step 4 for EMS)
           return <PanelInterestStep formData={formData} onUpdate={handleInputChange} />
         } else {
-          // Terms Step for Public Customers (Step 4 for Public)
           return <TermsStep formData={formData} onUpdate={handleInputChange} />
         }
       case 5:
-        // This case should only be reachable by EMS clients for Terms Step
         if (formData.isEmsClient) {
           return <TermsStep formData={formData} onUpdate={handleInputChange} />
         } else {
@@ -254,14 +284,30 @@ export function EnhancedRegistrationForm() {
             </CardTitle>
             <CardDescription className="text-sm text-gray-600">
               {totalTickets > 0 ? (
-                <span>
-                  {totalTickets} ticket{totalTickets > 1 ? 's' : ''} - {totalCost}
-                  {(formData.appliedDiscount || 0) > 0 && !formData.isEmsClient && (
-                    <span className="block text-green-600 text-xs mt-1">
-                      💰 Saved €{((formData.appliedDiscount || 0) / 100).toFixed(2)}
-                    </span>
+                <div>
+                  <span>{totalTickets} ticket{totalTickets > 1 ? 's' : ''} - {totalCost}</span>
+                  
+                  {/* ✅ NEW: Show tier savings */}
+                  {tierSavings > 0 && !formData.isEmsClient && (
+                    <div className="text-green-600 text-xs mt-1">
+                      💰 Tier savings: €{(tierSavings / 100).toFixed(2)}
+                    </div>
                   )}
-                </span>
+                  
+                  {/* Show coupon savings */}
+                  {(formData.appliedDiscount || 0) > 0 && !formData.isEmsClient && (
+                    <div className="text-green-600 text-xs mt-1">
+                      🎫 Coupon savings: €{((formData.appliedDiscount || 0) / 100).toFixed(2)}
+                    </div>
+                  )}
+                  
+                  {/* Show total savings */}
+                  {(tierSavings > 0 || (formData.appliedDiscount || 0) > 0) && !formData.isEmsClient && (
+                    <div className="text-green-700 text-xs font-medium mt-1">
+                      Total saved: €{((tierSavings + (formData.appliedDiscount || 0)) / 100).toFixed(2)}
+                    </div>
+                  )}
+                </div>
               ) : (
                 formData.isEmsClient ? 'Select your complimentary tickets' : 'Select your tickets'
               )}
@@ -337,7 +383,6 @@ export function EnhancedRegistrationForm() {
               variant="ghost" 
               size="sm"
               onClick={() => {
-                // Reset to step 1 when changing customer type
                 setCurrentStep(1)
                 setShowCustomerDialog(true)
               }}

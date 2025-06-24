@@ -1,4 +1,5 @@
-// src/components/admin/ticket-types/TicketTypeCard.tsx
+// STEP 5: Enhanced src/components/admin/ticket-types/TicketTypeCard.tsx
+
 'use client'
 
 import { Button } from '@/components/ui/button'
@@ -12,11 +13,20 @@ import {
   Users, 
   Calendar,
   Tag,
-  AlertTriangle
+  AlertTriangle,
+  Layers,
+  Calculator,
+  Star,
+  TrendingUp
 } from 'lucide-react'
+import { TicketType } from '@/types/ticket'
 
-// Import shared types
-import { TicketTypeCardProps } from '@/types/ticket'
+interface TicketTypeCardProps {
+  ticket: TicketType
+  onEdit: (ticket: TicketType) => void
+  onToggleStatus: (id: string, currentStatus: boolean) => void
+  onDelete?: (id: string) => void
+}
 
 export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: TicketTypeCardProps) {
   const formatPrice = (cents: number) => {
@@ -35,6 +45,26 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
   const isLowStock = ticket.availableStock <= 10 && ticket.availableStock > 0
   const isOutOfStock = ticket.availableStock === 0
 
+  // Calculate statistics for tiered pricing
+  const getTieredStats = () => {
+    if (!ticket.pricingTiers || ticket.pricingTiers.length === 0) return null
+
+    const avgSavings = ticket.pricingTiers.reduce((sum, tier) => sum + tier.savingsPercent, 0) / ticket.pricingTiers.length
+    const maxSavings = Math.max(...ticket.pricingTiers.map(tier => tier.savingsPercent))
+    const minPrice = Math.min(...ticket.pricingTiers.map(tier => tier.pricePerTicket))
+    const maxTickets = Math.max(...ticket.pricingTiers.map(tier => tier.ticketCount))
+
+    return {
+      avgSavings,
+      maxSavings,
+      minPrice,
+      maxTickets,
+      tierCount: ticket.pricingTiers.length
+    }
+  }
+
+  const tieredStats = getTieredStats()
+
   return (
     <Card className={`transition-all duration-200 ${
       ticket.isActive 
@@ -48,7 +78,14 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
               {ticket.name}
               {ticket.featured && (
                 <Badge variant="secondary" className="text-xs">
+                  <Star className="w-3 h-3 mr-1" />
                   Featured
+                </Badge>
+              )}
+              {ticket.pricingType === 'TIERED' && (
+                <Badge variant="outline" className="text-xs">
+                  <Layers className="w-3 h-3 mr-1" />
+                  Tiered
                 </Badge>
               )}
             </CardTitle>
@@ -59,8 +96,32 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
               </p>
             )}
             
-            <div className="text-2xl font-bold text-green-600 mt-2">
-              {formatPrice(ticket.priceInCents)}
+            {/* Pricing Display */}
+            <div className="mt-2">
+              {ticket.pricingType === 'FIXED' ? (
+                <div className="text-2xl font-bold text-green-600">
+                  {formatPrice(ticket.priceInCents)}
+                </div>
+              ) : tieredStats ? (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-bold text-blue-600">
+                      {formatPrice(tieredStats.minPrice)} - {formatPrice(ticket.priceInCents)}
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {tieredStats.tierCount} tiers
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-green-600 flex items-center gap-1">
+                    <TrendingUp className="w-3 h-3" />
+                    Up to {tieredStats.maxSavings.toFixed(1)}% savings • Max {tieredStats.maxTickets} tickets
+                  </div>
+                </div>
+              ) : (
+                <div className="text-2xl font-bold text-orange-600">
+                  Tiered Pricing
+                </div>
+              )}
             </div>
           </div>
           
@@ -101,6 +162,43 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
                 {tag}
               </Badge>
             ))}
+          </div>
+        )}
+
+        {/* Pricing Tiers Display */}
+        {ticket.pricingType === 'TIERED' && ticket.pricingTiers && ticket.pricingTiers.length > 0 && (
+          <div className="mt-3 p-2 bg-blue-50 rounded-lg">
+            <div className="flex items-center gap-1 text-xs text-blue-700 mb-2">
+              <Calculator className="w-3 h-3" />
+              <span className="font-medium">Pricing Tiers</span>
+            </div>
+            <div className="space-y-1">
+              {ticket.pricingTiers.slice(0, 3).map((tier, index) => (
+                <div key={tier.id} className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="font-medium">{tier.name}</span>
+                    {tier.isPopular && (
+                      <Star className="w-3 h-3 text-yellow-600" />
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <div className="text-blue-600 font-medium">
+                      {formatPrice(tier.priceInCents)} → {tier.ticketCount} tickets
+                    </div>
+                    {tier.savingsPercent > 0 && (
+                      <div className="text-green-600">
+                        {tier.savingsPercent.toFixed(1)}% off
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {ticket.pricingTiers.length > 3 && (
+                <div className="text-xs text-blue-600 text-center">
+                  +{ticket.pricingTiers.length - 3} more tiers...
+                </div>
+              )}
+            </div>
           </div>
         )}
       </CardHeader>
@@ -170,6 +268,11 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
           <div className="text-lg font-bold text-green-600">
             {formatPrice(ticket.soldStock * ticket.priceInCents)}
           </div>
+          {ticket.pricingType === 'TIERED' && tieredStats && (
+            <div className="text-xs text-gray-500 mt-1">
+              Avg. savings: {tieredStats.avgSavings.toFixed(1)}% per customer
+            </div>
+          )}
         </div>
 
         {/* Availability Dates */}
@@ -205,6 +308,15 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
             <div className="flex items-center gap-1 text-sm text-red-700">
               <AlertTriangle className="w-4 h-4" />
               <span>Out of stock - customers cannot purchase</span>
+            </div>
+          </div>
+        )}
+
+        {ticket.pricingType === 'TIERED' && (!ticket.pricingTiers || ticket.pricingTiers.length === 0) && (
+          <div className="mb-4 p-2 bg-orange-50 border border-orange-200 rounded-lg">
+            <div className="flex items-center gap-1 text-sm text-orange-700">
+              <AlertTriangle className="w-4 h-4" />
+              <span>No pricing tiers configured</span>
             </div>
           </div>
         )}
@@ -262,6 +374,7 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
 
         {/* Metadata */}
         <div className="mt-3 text-xs text-gray-500 border-t pt-2">
+          <div>Type: {ticket.pricingType === 'TIERED' ? 'Tiered Pricing' : 'Fixed Price'}</div>
           <div>Created: {formatDate(ticket.createdAt)}</div>
           <div>Updated: {formatDate(ticket.updatedAt)}</div>
           <div>Sort Order: {ticket.sortOrder}</div>

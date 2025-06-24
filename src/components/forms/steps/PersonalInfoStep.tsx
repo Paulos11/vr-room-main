@@ -1,10 +1,10 @@
-// src/components/forms/steps/PersonalInfoStep.tsx - Updated with discount display
+// FIXED: src/components/forms/steps/PersonalInfoStep.tsx - Tiered pricing support
 'use client'
 
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { User, AlertCircle, Tag } from 'lucide-react'
+import { User, AlertCircle, Tag, TrendingDown } from 'lucide-react'
 import { StepProps } from '@/types/registration'
 import { validateField } from '@/utils/realTimeValidation'
 
@@ -28,22 +28,43 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
     return `h-9 ${hasError ? 'border-red-500 focus:ring-red-500' : ''}`
   }
 
-  // Calculate pricing with discount
+  // ✅ FIXED: Calculate pricing with tiered pricing support
   const calculatePricing = () => {
     if (formData.isEmsClient) {
-      return { original: 0, discount: 0, final: 0, showFree: true }
+      return { 
+        original: 0, 
+        tierSavings: 0,
+        couponDiscount: 0, 
+        final: 0, 
+        showFree: true 
+      }
     }
 
-    const originalTotal = formData.selectedTickets.reduce((sum, ticket) => 
-      sum + (ticket.priceInCents * ticket.quantity), 0
-    )
+    // Calculate original prices vs tiered prices
+    let originalTotal = 0
+    let tierDiscountedTotal = 0
     
-    const discount = formData.appliedDiscount || 0
-    const finalTotal = Math.max(0, originalTotal - discount)
+    formData.selectedTickets.forEach(ticket => {
+      if (ticket.packageInfo) {
+        // This is a package/tier ticket
+        const regularPrice = ticket.packageInfo.pricePerTicket * ticket.packageInfo.ticketCount * ticket.quantity
+        originalTotal += regularPrice
+        tierDiscountedTotal += ticket.priceInCents
+      } else {
+        // Regular single ticket
+        originalTotal += ticket.priceInCents
+        tierDiscountedTotal += ticket.priceInCents
+      }
+    })
+    
+    const tierSavings = Math.max(0, originalTotal - tierDiscountedTotal)
+    const couponDiscount = formData.appliedDiscount || 0
+    const finalTotal = Math.max(0, tierDiscountedTotal - couponDiscount)
 
     return {
       original: originalTotal,
-      discount: discount,
+      tierSavings: tierSavings,
+      couponDiscount: couponDiscount,
       final: finalTotal,
       showFree: false
     }
@@ -166,7 +187,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
         )}
       </div>
 
-      {/* Enhanced Ticket Summary with Discount Display */}
+      {/* ✅ ENHANCED: Ticket Summary with Tiered Pricing Support */}
       {formData.selectedTickets.length > 0 && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <h4 className="text-sm font-medium mb-2 text-blue-900 flex items-center gap-2">
@@ -175,34 +196,72 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           </h4>
           
           <div className="space-y-2">
-            {/* Ticket Details */}
+            {/* ✅ IMPROVED: Ticket Details with Package Info */}
             <div className="space-y-1">
               {formData.selectedTickets.map(ticket => (
-                <div key={ticket.ticketTypeId} className="flex justify-between text-sm">
-                  <span className="text-gray-700">{ticket.name} × {ticket.quantity}</span>
-                  <span className="font-medium">
-                    {pricing.showFree ? 'FREE' : formatPrice(ticket.priceInCents * ticket.quantity)}
-                  </span>
+                <div key={ticket.ticketTypeId} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700">
+                      {ticket.name} × {ticket.quantity}
+                      {ticket.packageInfo && (
+                        <span className="text-green-600 text-xs block">
+                          ({ticket.packageInfo.ticketCount * ticket.quantity} tickets total)
+                        </span>
+                      )}
+                    </span>
+                    <span className="font-medium">
+                      {pricing.showFree ? 'FREE' : formatPrice(ticket.priceInCents)}
+                    </span>
+                  </div>
+                  
+                  {/* Show package savings */}
+                  {ticket.packageInfo && ticket.packageInfo.savingsAmount > 0 && (
+                    <div className="text-xs text-green-600 flex items-center gap-1 ml-2">
+                      <TrendingDown className="h-3 w-3" />
+                      Package discount: €{((ticket.packageInfo.savingsAmount * ticket.quantity) / 100).toFixed(2)}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
 
-            {/* Pricing Breakdown */}
+            {/* ✅ ENHANCED: Pricing Breakdown with Tier Savings */}
             {!pricing.showFree && (
               <div className="border-t pt-2 mt-2 space-y-1">
+                {/* Show original price if there are tier savings */}
+                {pricing.tierSavings > 0 && (
+                  <div className="flex justify-between text-sm text-gray-500">
+                    <span>Regular price:</span>
+                    <span className="line-through">{formatPrice(pricing.original)}</span>
+                  </div>
+                )}
+                
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span>{formatPrice(pricing.original)}</span>
+                  <span className="text-gray-600">
+                    {pricing.tierSavings > 0 ? 'After volume discounts:' : 'Subtotal:'}
+                  </span>
+                  <span>{formatPrice(pricing.original - pricing.tierSavings)}</span>
                 </div>
                 
-                {/* Show discount if applied */}
-                {pricing.discount > 0 && formData.couponCode && (
+                {/* Show tier savings */}
+                {pricing.tierSavings > 0 && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span className="flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" />
+                      Volume savings:
+                    </span>
+                    <span className="font-medium">-{formatPrice(pricing.tierSavings)}</span>
+                  </div>
+                )}
+                
+                {/* Show coupon discount */}
+                {pricing.couponDiscount > 0 && formData.couponCode && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span className="flex items-center gap-1">
                       <Tag className="h-3 w-3" />
-                      Discount ({formData.couponCode}):
+                      Coupon ({formData.couponCode}):
                     </span>
-                    <span className="font-medium">-{formatPrice(pricing.discount)}</span>
+                    <span className="font-medium">-{formatPrice(pricing.couponDiscount)}</span>
                   </div>
                 )}
                 
@@ -213,12 +272,18 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
                   </span>
                 </div>
 
-                {/* Savings highlight */}
-                {pricing.discount > 0 && (
+                {/* ✅ ENHANCED: Combined Savings Highlight */}
+                {(pricing.tierSavings > 0 || pricing.couponDiscount > 0) && (
                   <div className="text-center p-2 bg-green-100 border border-green-300 rounded mt-2">
                     <p className="text-sm font-medium text-green-800">
-                      🎉 You saved {formatPrice(pricing.discount)}!
+                      🎉 Total saved: {formatPrice(pricing.tierSavings + pricing.couponDiscount)}!
                     </p>
+                    {pricing.tierSavings > 0 && pricing.couponDiscount > 0 && (
+                      <p className="text-xs text-green-700 mt-1">
+                        Volume: €{(pricing.tierSavings / 100).toFixed(2)} + 
+                        Coupon: €{(pricing.couponDiscount / 100).toFixed(2)}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

@@ -1,4 +1,4 @@
-// src/app/api/register/route.ts - Complete with email integration
+// FIXED: src/app/api/register/route.ts - Store tiered pricing correctly
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
@@ -10,7 +10,7 @@ import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 const SelectedTicketSchema = z.object({
   ticketTypeId: z.string(),
   name: z.string(),
-  priceInCents: z.number(),
+  priceInCents: z.number(), // ✅ This now contains the final calculated price (including tiers)
   quantity: z.number().min(1)
 });
 
@@ -41,7 +41,7 @@ const RegisterSchema = z.object({
 interface TicketValidationDetail {
   ticketType: TicketType;
   selectedTicket: z.infer<typeof SelectedTicketSchema>;
-  ticketPrice: number;
+  effectivePrice: number; // ✅ NEW: The actual price to charge (including tier discounts)
   ticketTotal: number;
 }
 
@@ -49,6 +49,13 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const validatedData = RegisterSchema.parse(body)
+
+    console.log('Registration request:', {
+      email: validatedData.email,
+      isEmsClient: validatedData.isEmsClient,
+      selectedTickets: validatedData.selectedTickets,
+      appliedDiscount: validatedData.appliedDiscount
+    })
 
     // Check for existing registrations to prevent duplicates
     const [existingEmailRegistration, existingIdRegistration] = await Promise.all([
@@ -70,7 +77,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate tickets, check stock, and calculate pricing
+    // ✅ FIXED: Validate tickets and use the pricing sent from frontend (which includes tier calculations)
     let totalOriginalAmount = 0;
     const ticketValidations: TicketValidationDetail[] = [];
 
@@ -93,17 +100,27 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const ticketPrice = validatedData.isEmsClient ? 0 : ticketType.priceInCents;
-      const ticketTotal = ticketPrice * selectedTicket.quantity;
+      // ✅ FIXED: Use the price sent from frontend (already includes tier discounts)
+      const effectivePrice = validatedData.isEmsClient ? 0 : selectedTicket.priceInCents;
+      const ticketTotal = effectivePrice; // This is already the total for all tickets in the selection
       totalOriginalAmount += ticketTotal;
+
+      console.log(`Ticket validation for ${selectedTicket.name}:`, {
+        originalPrice: ticketType.priceInCents,
+        effectivePrice: effectivePrice,
+        quantity: selectedTicket.quantity,
+        ticketTotal: ticketTotal
+      })
 
       ticketValidations.push({
         ticketType,
         selectedTicket,
-        ticketPrice,
+        effectivePrice,
         ticketTotal
       });
     }
+
+    console.log('Total original amount:', totalOriginalAmount)
 
     // Handle coupon validation and discount calculation
     let appliedCoupon = null;
@@ -125,32 +142,16 @@ export async function POST(request: NextRequest) {
         const meetsMinAmount = !coupon.minOrderAmount || totalOriginalAmount >= coupon.minOrderAmount;
 
         if (isValidTime && hasUsageLeft && meetsMinAmount) {
-          let calculatedDiscount = 0;
-          if (coupon.discountType === 'PERCENTAGE') {
-            calculatedDiscount = Math.round((totalOriginalAmount * coupon.discountValue) / 100);
-          } else if (coupon.discountType === 'FIXED_AMOUNT') {
-            calculatedDiscount = Math.min(coupon.discountValue, totalOriginalAmount);
-          }
-
-          discountAmount = calculatedDiscount;
+          // ✅ FIXED: Use the discount amount sent from frontend (already calculated correctly)
           totalFinalAmount = Math.max(0, totalOriginalAmount - discountAmount);
           appliedCoupon = coupon;
 
           console.log('Coupon validation successful:', {
             code: coupon.code,
-            currentUses: coupon.currentUses,
-            maxUses: coupon.maxUses,
-            discountAmount
+            discountAmount,
+            finalAmount: totalFinalAmount
           });
         } else {
-          console.log('Coupon validation failed:', {
-            isValidTime,
-            hasUsageLeft,
-            meetsMinAmount,
-            currentUses: coupon.currentUses,
-            maxUses: coupon.maxUses
-          });
-          
           return NextResponse.json(
             { success: false, message: 'Coupon is no longer valid or has reached its usage limit' },
             { status: 400 }
@@ -163,6 +164,12 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+
+    console.log('Final pricing:', {
+      originalAmount: totalOriginalAmount,
+      discountAmount,
+      finalAmount: totalFinalAmount
+    })
 
     // Create all database records within a single transaction
     const result = await prisma.$transaction(async (tx) => {
@@ -184,15 +191,18 @@ export async function POST(request: NextRequest) {
           finalAmount: totalFinalAmount,
           appliedCouponCode: appliedCoupon?.code || null,
           appliedCouponId: appliedCoupon?.id || null,
-          status: validatedData.isEmsClient ? 'PENDING' : 'PAYMENT_PENDING' // EMS clients need admin approval
+          status: validatedData.isEmsClient ? 'PENDING' : 'PAYMENT_PENDING'
         }
       });
 
-      // 2. Create individual tickets for the registration
+      // 2. ✅ FIXED: Create individual tickets with the correct calculated price
       const tickets = [];
       let ticketSequence = 1;
       
       for (const validation of ticketValidations) {
+        // ✅ IMPORTANT: Calculate price per individual ticket
+        const pricePerIndividualTicket = Math.round(validation.effectivePrice / validation.selectedTicket.quantity);
+        
         for (let i = 0; i < validation.selectedTicket.quantity; i++) {
           const ticketNumber = `EMS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
           const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/staff/verify/${ticketNumber}`;
@@ -204,11 +214,11 @@ export async function POST(request: NextRequest) {
               ticketNumber,
               ticketSequence: ticketSequence++,
               qrCode,
-              purchasePrice: validation.ticketPrice,
+              purchasePrice: pricePerIndividualTicket, // ✅ FIXED: Store actual price paid per ticket
               eventDate: new Date('2025-06-26'),
               venue: 'Malta Fairs and Conventions Centre',
               boothLocation: 'EMS Booth - MFCC',
-              status: validatedData.isEmsClient ? 'GENERATED' : 'GENERATED' // Will be updated to SENT after email
+              status: validatedData.isEmsClient ? 'GENERATED' : 'GENERATED'
             }
           });
           tickets.push(ticket);
@@ -248,7 +258,7 @@ export async function POST(request: NextRequest) {
       return { registration, tickets };
     });
 
-    // 6. 🎯 EMAIL INTEGRATION - Send emails after successful registration
+    // 6. EMAIL INTEGRATION - Send emails after successful registration
     const customerName = `${validatedData.firstName} ${validatedData.lastName}`;
     let emailSent = false;
     
@@ -264,7 +274,7 @@ export async function POST(request: NextRequest) {
           phone: validatedData.phone,
           isEmsClient: true,
           ticketCount: result.tickets.length,
-          finalAmount: 0, // Free for EMS customers
+          finalAmount: 0,
           appliedCouponCode: appliedCoupon?.code,
           tickets: result.tickets.map(ticket => ({
             ticketNumber: ticket.ticketNumber,
@@ -275,16 +285,14 @@ export async function POST(request: NextRequest) {
             sequence: ticket.ticketSequence || 1,
             totalTickets: result.tickets.length,
             isEmsClient: true,
-            ticketTypeName: 'VIP Access', // Default for EMS customers
+            ticketTypeName: 'VIP Access',
             ticketTypePrice: 0
           }))
         };
 
-        // Send registration confirmation - NO PDF tickets yet (pending approval)
         emailSent = await EmailService.sendRegistrationConfirmation(emailData);
         console.log('EMS customer registration confirmation sent:', emailSent);
         
-        // Log email activity
         await prisma.emailLog.create({
           data: {
             registrationId: result.registration.id,
@@ -322,7 +330,6 @@ export async function POST(request: NextRequest) {
         emailSent = await EmailService.sendRegistrationConfirmation(emailData);
         console.log('Public customer registration email sent:', emailSent);
         
-        // Log email activity
         await prisma.emailLog.create({
           data: {
             registrationId: result.registration.id,
@@ -336,7 +343,6 @@ export async function POST(request: NextRequest) {
       }
     } catch (emailError: any) {
       console.error('Email sending failed during registration:', emailError);
-      // Don't fail the registration if email fails - log the error
       await prisma.emailLog.create({
         data: {
           registrationId: result.registration.id,
@@ -348,6 +354,12 @@ export async function POST(request: NextRequest) {
         }
       });
     }
+
+    console.log('Registration completed successfully:', {
+      registrationId: result.registration.id,
+      finalAmount: totalFinalAmount,
+      ticketCount: result.tickets.length
+    })
 
     // Return success response
     return NextResponse.json({
