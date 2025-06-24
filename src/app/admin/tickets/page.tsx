@@ -1,4 +1,4 @@
-// src/app/admin/tickets/page.tsx - Clean main page
+// UPDATED: src/app/admin/tickets/page.tsx - Include ticket type filter
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -8,16 +8,24 @@ import { TicketsFilters } from '@/components/tickets/TicketsFilters'
 import { TicketsTable } from '@/components/tickets/TicketsTable'
 import { GenerateTicketDialog } from '@/components/admin/GenerateTicketDialog'
 
+// ✅ UPDATED: Enhanced TicketData interface with ticket type
 export interface TicketData {
   id: string
   ticketNumber: string
   status: string
-  accessType: string
   sequence: number
   issuedAt: string
   sentAt?: string
   collectedAt?: string
   collectedBy?: string
+  // ✅ NEW: Ticket type information
+  ticketType: {
+    id: string
+    name: string
+    description?: string
+    category?: string
+    priceInCents: number
+  }
   customer: {
     id: string
     name: string
@@ -33,12 +41,21 @@ export interface TicketData {
   }
 }
 
+// ✅ NEW: Ticket type interface
+interface TicketType {
+  id: string
+  name: string
+  category?: string
+}
+
 export default function AdminTicketsPage() {
   const [tickets, setTickets] = useState<TicketData[]>([])
   const [filteredTickets, setFilteredTickets] = useState<TicketData[]>([])
+  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([]) // ✅ NEW: Ticket types state
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [ticketTypeFilter, setTicketTypeFilter] = useState('all') // ✅ NEW: Ticket type filter state
   const [processingAction, setProcessingAction] = useState<string | null>(null)
   const [showGenerateDialog, setShowGenerateDialog] = useState(false)
 
@@ -52,6 +69,7 @@ export default function AdminTicketsPage() {
       
       if (result.success) {
         setTickets(result.data.tickets || [])
+        setTicketTypes(result.data.ticketTypes || []) // ✅ NEW: Set ticket types
       } else {
         toast({
           title: "Error",
@@ -71,7 +89,7 @@ export default function AdminTicketsPage() {
     }
   }, [])
 
-  // Filter tickets locally for instant search
+  // ✅ UPDATED: Filter tickets locally for instant search (including ticket type filter)
   useEffect(() => {
     let filtered = tickets
 
@@ -82,7 +100,8 @@ export default function AdminTicketsPage() {
         ticket.ticketNumber.toLowerCase().includes(searchLower) ||
         ticket.customer.name.toLowerCase().includes(searchLower) ||
         ticket.customer.email.toLowerCase().includes(searchLower) ||
-        ticket.customer.phone.includes(search)
+        ticket.customer.phone.includes(search) ||
+        ticket.ticketType.name.toLowerCase().includes(searchLower) // ✅ NEW: Search by ticket type
       )
     }
 
@@ -91,8 +110,13 @@ export default function AdminTicketsPage() {
       filtered = filtered.filter(ticket => ticket.status === statusFilter)
     }
 
+    // ✅ NEW: Apply ticket type filter
+    if (ticketTypeFilter !== 'all') {
+      filtered = filtered.filter(ticket => ticket.ticketType.id === ticketTypeFilter)
+    }
+
     setFilteredTickets(filtered)
-  }, [tickets, search, statusFilter])
+  }, [tickets, search, statusFilter, ticketTypeFilter])
 
   useEffect(() => {
     fetchTickets()
@@ -146,8 +170,7 @@ export default function AdminTicketsPage() {
   const getNewStatus = (action: string) => {
     const statusMap: Record<string, string> = {
       'SEND': 'SENT',
-      'COLLECT': 'COLLECTED',
-      'USE': 'USED',
+      'USE': 'USED', // ✅ UPDATED: Direct from SENT to USED (no COLLECT step)
       'CANCEL': 'CANCELLED',
       'REGENERATE': 'GENERATED'
     }
@@ -156,30 +179,33 @@ export default function AdminTicketsPage() {
 
   const getTimestampField = (action: string) => {
     const fieldMap: Record<string, string> = {
-      'SEND': 'sentAt',
-      'COLLECT': 'collectedAt'
+      'SEND': 'sentAt'
+      // ✅ REMOVED: 'COLLECT': 'collectedAt' (no longer used)
     }
     return fieldMap[action] || 'issuedAt'
   }
 
   return (
     <div className="space-y-4 p-8">
-<TicketsHeader 
-  tickets={tickets}
-  filteredCount={filteredTickets.length}  // <-- Add this line
-  onRefresh={fetchTickets}
-  onGenerateTickets={() => setShowGenerateDialog(true)}
-  loading={loading}
-/>
+      <TicketsHeader 
+        tickets={tickets}
+        filteredCount={filteredTickets.length}
+        onRefresh={fetchTickets}
+        onGenerateTickets={() => setShowGenerateDialog(true)}
+        loading={loading}
+      />
 
-
+      {/* ✅ UPDATED: Pass ticket type filter props */}
       <TicketsFilters
         search={search}
         statusFilter={statusFilter}
+        ticketTypeFilter={ticketTypeFilter}
         onSearchChange={setSearch}
         onStatusChange={setStatusFilter}
+        onTicketTypeChange={setTicketTypeFilter}
         resultCount={filteredTickets.length}
         totalCount={tickets.length}
+        ticketTypes={ticketTypes}
       />
 
       <TicketsTable

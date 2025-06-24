@@ -1,7 +1,7 @@
+// FIXED: src/app/api/admin/tickets/download/[id]/route.ts - Production URL fix
 import { prisma } from "@/lib/prisma"
 import { NextRequest, NextResponse } from "next/server"
 
-// src/app/api/admin/tickets/download/[id]/route.ts - Admin ticket download
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -12,7 +12,8 @@ export async function GET(
     const ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
       include: {
-        registration: true
+        registration: true,
+        ticketType: true // ✅ Include ticket type for PDF generation
       }
     })
     
@@ -23,12 +24,20 @@ export async function GET(
       )
     }
     
-    // Redirect to the download API with registration ID
-    const downloadUrl = `/api/tickets/download?registrationId=${ticket.registrationId}`
-    return NextResponse.redirect(new URL(downloadUrl, request.url))
+    // ✅ FIXED: Create proper absolute URL for production
+    const protocol = request.headers.get('x-forwarded-proto') || 'https'
+    const host = request.headers.get('host') || request.nextUrl.host
+    const baseUrl = `${protocol}://${host}`
+    
+    // Create the download URL with the correct base URL
+    const downloadUrl = new URL(`/api/tickets/download?registrationId=${ticket.registrationId}`, baseUrl)
+    
+    console.log('🔗 Redirecting to download URL:', downloadUrl.toString())
+    
+    return NextResponse.redirect(downloadUrl)
     
   } catch (error: any) {
-    console.error('Error downloading ticket:', error)
+    console.error('❌ Error downloading ticket:', error)
     return NextResponse.json(
       { success: false, message: 'Failed to download ticket', error: error.message },
       { status: 500 }

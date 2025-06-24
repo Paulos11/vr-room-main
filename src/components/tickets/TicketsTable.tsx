@@ -1,4 +1,4 @@
-// src/components/tickets/TicketsTable.tsx - Enhanced with download, confirmations, and no tooltips
+// UPDATED: src/components/tickets/TicketsTable.tsx - Show ticket type and hide collected
 import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -8,11 +8,43 @@ import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle
 } from '@/components/ui/dialog'
 import { 
-  Ticket, Plus, Download, Send, Package, CheckCircle, X, RotateCcw, RefreshCw,
-  Building, Users, Copy, Phone, Mail, AlertTriangle
+  Ticket, Plus, Download, Send, CheckCircle, X, RotateCcw, RefreshCw,
+  Building, Users, Copy, Phone, Mail, AlertTriangle, Tag
 } from 'lucide-react'
-import { TicketData } from '@/app/admin/tickets/page'
 import { toast } from '@/components/ui/use-toast'
+
+// ✅ UPDATED: Enhanced TicketData interface with ticket type
+export interface TicketData {
+  id: string
+  ticketNumber: string
+  status: string
+  sequence: number
+  issuedAt: string
+  sentAt?: string
+  collectedAt?: string
+  collectedBy?: string
+  // ✅ NEW: Ticket type information
+  ticketType: {
+    id: string
+    name: string
+    description?: string
+    category?: string
+    priceInCents: number
+  }
+  customer: {
+    id: string
+    name: string
+    email: string
+    phone: string
+    isEmsClient: boolean
+    registrationStatus: string
+  }
+  lastCheckIn?: {
+    checkedInAt: string
+    checkedInBy: string
+    location: string
+  }
+}
 
 interface TicketsTableProps {
   tickets: TicketData[]
@@ -22,12 +54,12 @@ interface TicketsTableProps {
   onGenerateTickets: () => void
 }
 
-// Status Badge Component
+// Status Badge Component - ✅ REMOVED: COLLECTED status
 const StatusBadge = ({ status }: { status: string }) => {
   const config = {
     GENERATED: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-300', label: 'Generated', icon: '●' },
     SENT: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-300', label: 'Sent', icon: '●' },
-    COLLECTED: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-300', label: 'Collected', icon: '●' },
+    // ✅ REMOVED: COLLECTED status completely
     USED: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-300', label: 'Used', icon: '●' },
     EXPIRED: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-300', label: 'Expired', icon: '●' },
     CANCELLED: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-300', label: 'Cancelled', icon: '●' },
@@ -118,7 +150,7 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
   }
 
   const handleDownload = () => {
-    // Create download link for ticket PDF
+    // ✅ FIXED: Use relative URL for production compatibility
     const downloadUrl = `/api/admin/tickets/download/${ticket.id}`
     const link = document.createElement('a')
     link.href = downloadUrl
@@ -165,7 +197,7 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
   return (
     <>
       <TableRow className={`h-14 ${rowBg} hover:bg-blue-50/30 transition-colors group`}>
-        {/* Ticket Number */}
+        {/* Ticket Number & Type */}
         <TableCell className="py-2">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -179,8 +211,14 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
                 <Copy className="h-3 w-3" />
               </button>
             </div>
-            <div className="text-xs text-gray-500">
-              Seq: #{ticket.sequence}
+            {/* ✅ NEW: Show sequence and ticket type on same line */}
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <span>Seq: #{ticket.sequence}</span>
+              <span className="text-gray-300">|</span>
+              <div className="flex items-center gap-1">
+                <Tag className="h-3 w-3 text-purple-500" />
+                <span className="text-purple-600 font-medium">{ticket.ticketType.name}</span>
+              </div>
             </div>
           </div>
         </TableCell>
@@ -228,7 +266,7 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
           </div>
         </TableCell>
 
-        {/* Delivery Status */}
+        {/* Delivery Status - ✅ UPDATED: Remove collected status */}
         <TableCell className="py-2">
           <div className="space-y-1">
             {ticket.sentAt && (
@@ -236,18 +274,14 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
                 Sent: {new Date(ticket.sentAt).toLocaleDateString()}
               </div>
             )}
-            {ticket.collectedAt && (
-              <div className="text-xs text-purple-600">
-                Collected: {new Date(ticket.collectedAt).toLocaleDateString()}
-              </div>
-            )}
-            {!ticket.sentAt && !ticket.collectedAt && (
+            {/* ✅ REMOVED: collectedAt display */}
+            {!ticket.sentAt && (
               <span className="text-xs text-gray-400 italic">Not delivered</span>
             )}
           </div>
         </TableCell>
 
-        {/* Actions */}
+        {/* Actions - ✅ UPDATED: Remove collect button, only show Send and Use */}
         <TableCell className="py-2">
           <div className="flex gap-1">
             {/* Download Button */}
@@ -273,21 +307,10 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
               </Button>
             )}
 
-            {/* Collect Button */}
-            {ticket.status === 'SENT' && (
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => onAction(ticket.id, 'COLLECT')}
-                disabled={processing}
-                className="h-7 px-2 text-xs bg-purple-500 hover:bg-purple-600 text-white"
-              >
-                {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Package className="h-3 w-3" />}
-              </Button>
-            )}
+            {/* ✅ REMOVED: Collect Button (no longer needed) */}
 
-            {/* Check-in Button */}
-            {(ticket.status === 'COLLECTED' || ticket.status === 'SENT') && (
+            {/* Check-in Button - ✅ UPDATED: Allow direct check-in from SENT status */}
+            {ticket.status === 'SENT' && (
               <Button
                 size="sm"
                 variant="default"
@@ -298,8 +321,6 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
                 {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
               </Button>
             )}
-
-
 
             {/* Cancel Button */}
             {ticket.status !== 'USED' && ticket.status !== 'CANCELLED' && (
@@ -344,7 +365,7 @@ export const TicketsTable = React.memo(function TicketsTable({
         <Table>
           <TableHeader>
             <TableRow className="bg-gradient-to-r from-green-50 via-blue-50 to-purple-50 border-b-2 border-green-200">
-              <TableHead className="py-3 text-xs font-semibold text-gray-700">Ticket #</TableHead>
+              <TableHead className="py-3 text-xs font-semibold text-gray-700">Ticket # & Type</TableHead>
               <TableHead className="py-3 text-xs font-semibold text-gray-700">Customer</TableHead>
               <TableHead className="py-3 text-xs font-semibold text-gray-700">Status</TableHead>
               <TableHead className="py-3 text-xs font-semibold text-gray-700">Generated</TableHead>
