@@ -40,7 +40,7 @@ export const EventInfoSection = () => (
             <CardTitle className="text-sm font-bold">Hours</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <p className="text-sm font-bold text-gray-800">6:00 PM Onwards</p>
+            <p className="text-sm font-bold text-gray-800">6:30 PM Onwards</p>
           </CardContent>
         </Card>
       </div>

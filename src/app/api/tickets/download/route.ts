@@ -1,4 +1,4 @@
-// src/app/api/tickets/download/route.ts - Fixed with proper PDF generator
+// FINAL FIX: src/app/api/tickets/download/route.ts - Include ticket type names in PDF
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
@@ -7,7 +7,7 @@ import { z } from 'zod'
 export const dynamic = 'force-dynamic'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil', // Updated API version
+  apiVersion: '2025-05-28.basil',
 })
 
 const DownloadSchema = z.object({
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const ticketNumber = searchParams.get('ticketNumber')
     const sessionId = searchParams.get('sessionId')
 
-    console.log('Ticket download request:', { registrationId, ticketNumber, sessionId })
+    console.log('🎫 Ticket download request:', { registrationId, ticketNumber, sessionId })
 
     // Validate input
     const validatedData = DownloadSchema.parse({
@@ -38,17 +38,29 @@ export async function GET(request: NextRequest) {
 
     // Find registration by different methods
     if (registrationId) {
+      console.log('🔍 Finding registration by ID:', registrationId)
       registration = await prisma.registration.findUnique({
         where: { id: registrationId },
         include: { 
           tickets: { 
             orderBy: { createdAt: 'asc' },
-            include: { ticketType: true }
+            include: { 
+              ticketType: { // ✅ CRITICAL: Include full ticket type data
+                select: {
+                  id: true,
+                  name: true,
+                  description: true,
+                  priceInCents: true,
+                  category: true
+                }
+              }
+            }
           },
           payment: true
         }
       })
     } else if (ticketNumber) {
+      console.log('🔍 Finding registration by ticket number:', ticketNumber)
       const ticket = await prisma.ticket.findUnique({
         where: { ticketNumber },
         include: { 
@@ -56,7 +68,17 @@ export async function GET(request: NextRequest) {
             include: { 
               tickets: { 
                 orderBy: { createdAt: 'asc' },
-                include: { ticketType: true }
+                include: { 
+                  ticketType: { // ✅ CRITICAL: Include full ticket type data
+                    select: {
+                      id: true,
+                      name: true,
+                      description: true,
+                      priceInCents: true,
+                      category: true
+                    }
+                  }
+                }
               },
               payment: true
             } 
@@ -65,6 +87,7 @@ export async function GET(request: NextRequest) {
       })
       registration = ticket?.registration
     } else if (sessionId) {
+      console.log('🔍 Finding registration by session ID:', sessionId)
       // If using sessionId, verify with Stripe first
       const session = await stripe.checkout.sessions.retrieve(sessionId)
       
@@ -76,7 +99,17 @@ export async function GET(request: NextRequest) {
               include: { 
                 tickets: { 
                   orderBy: { createdAt: 'asc' },
-                  include: { ticketType: true }
+                  include: { 
+                    ticketType: { // ✅ CRITICAL: Include full ticket type data
+                      select: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        priceInCents: true,
+                        category: true
+                      }
+                    }
+                  }
                 },
                 payment: true
               } 
@@ -88,7 +121,7 @@ export async function GET(request: NextRequest) {
         
         // If payment is successful but registration not completed, update it
         if (registration && registration.status === 'PAYMENT_PENDING') {
-          console.log('Payment successful, updating registration status to COMPLETED')
+          console.log('💳 Payment successful, updating registration status to COMPLETED')
           
           registration = await prisma.registration.update({
             where: { id: registration.id },
@@ -96,7 +129,17 @@ export async function GET(request: NextRequest) {
             include: { 
               tickets: { 
                 orderBy: { createdAt: 'asc' },
-                include: { ticketType: true }
+                include: { 
+                  ticketType: { // ✅ CRITICAL: Include full ticket type data after update
+                    select: {
+                      id: true,
+                      name: true,
+                      description: true,
+                      priceInCents: true,
+                      category: true
+                    }
+                  }
+                }
               },
               payment: true
             }
@@ -120,7 +163,7 @@ export async function GET(request: NextRequest) {
             }
           })
           
-          console.log('Registration and tickets updated successfully')
+          console.log('✅ Registration and tickets updated successfully')
         }
       }
     }
@@ -139,8 +182,18 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // 🔍 DEBUG: Log ticket data to verify ticket type info
+    console.log('📋 Found tickets with type data:')
+    registration.tickets.forEach((ticket: any, index: number) => {
+      console.log(`  🎫 Ticket ${index + 1}:`)
+      console.log(`    - Number: ${ticket.ticketNumber}`)
+      console.log(`    - Type ID: ${ticket.ticketType?.id}`)
+      console.log(`    - Type Name: "${ticket.ticketType?.name}"`)
+      console.log(`    - Purchase Price: ${ticket.purchasePrice}`)
+      console.log(`    - Original Price: ${ticket.ticketType?.priceInCents}`)
+    })
+
     // For paid registrations, allow download even if status is PAYMENT_PENDING
-    // as long as payment is successful
     const isPaymentSuccessful = registration.payment?.status === 'SUCCEEDED' || 
                                (sessionId && await isStripePaymentSuccessful(sessionId))
     
@@ -151,30 +204,44 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Prepare ticket data for PDF generation
-    const ticketDataArray = registration.tickets.map((ticket, index) => ({
-      ticketNumber: ticket.ticketNumber,
-      customerName: `${registration.firstName} ${registration.lastName}`,
-      email: registration.email,
-      phone: registration.phone,
-      qrCode: ticket.qrCode,
-      sequence: index + 1,
-      totalTickets: registration.tickets.length,
-      isEmsClient: registration.isEmsClient
-    }))
+    // ✅ FIXED: Prepare ticket data with proper ticket type information
+    const ticketDataArray = registration.tickets.map((ticket: any, index: number) => {
+      const ticketData = {
+        ticketNumber: ticket.ticketNumber,
+        customerName: `${registration.firstName} ${registration.lastName}`,
+        email: registration.email,
+        phone: registration.phone,
+        qrCode: ticket.qrCode,
+        sequence: index + 1,
+        totalTickets: registration.tickets.length,
+        isEmsClient: registration.isEmsClient,
+        // ✅ CRITICAL: Include ticket type information
+        ticketTypeName: ticket.ticketType?.name || 'General Admission',
+        ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0
+      }
 
-    console.log(`Generating PDF for ${ticketDataArray.length} ticket(s)`)
+      console.log(`📝 Prepared ticket data ${index + 1}:`, {
+        ticketNumber: ticketData.ticketNumber,
+        ticketTypeName: ticketData.ticketTypeName,
+        ticketTypePrice: ticketData.ticketTypePrice,
+        isEmsClient: ticketData.isEmsClient
+      })
 
-    // Generate PDF using PDFTicketGenerator
+      return ticketData
+    })
+
+    console.log(`🎨 Generating PDF for ${ticketDataArray.length} ticket(s) with type information`)
+
+    // Generate PDF using PDFTicketGenerator with ticket type data
     const pdfBuffer = await PDFTicketGenerator.generateAllTicketsPDF(ticketDataArray)
 
     // Determine filename
     const customerName = `${registration.firstName}_${registration.lastName}`.replace(/[^a-zA-Z0-9]/g, '_')
     const filename = registration.tickets.length === 1 
-      ? `EMS_VIP_Ticket_${registration.tickets[0].ticketNumber}.pdf`
-      : `EMS_VIP_Tickets_${customerName}_${registration.tickets.length}tickets.pdf`
+      ? `EMS_Ticket_${registration.tickets[0].ticketNumber}.pdf`
+      : `EMS_Tickets_${customerName}_${registration.tickets.length}tickets.pdf`
 
-    console.log(`Generated PDF: ${filename}`)
+    console.log(`📁 Generated PDF: ${filename}`)
 
     // Return PDF as response
     return new NextResponse(pdfBuffer, {
@@ -183,11 +250,14 @@ export async function GET(request: NextRequest) {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,
         'Content-Length': pdfBuffer.length.toString(),
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
       },
     })
 
   } catch (error: any) {
-    console.error('Error generating ticket PDF:', error)
+    console.error('❌ Error generating ticket PDF:', error)
     
     if (error instanceof z.ZodError) {
       return NextResponse.json(
