@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { TicketService } from '@/lib/ticketService'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil', // Updated API version
+  apiVersion: '2025-05-28.basil',
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -24,35 +24,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
     }
 
-    console.log(`Received webhook: ${event.type}`)
+    console.log('Processing Stripe webhook event:', event.type)
 
-    // Handle different event types
     switch (event.type) {
       case 'checkout.session.completed':
         await handlePaymentSuccess(event.data.object as Stripe.Checkout.Session)
         break
-      
       case 'checkout.session.expired':
         await handlePaymentExpired(event.data.object as Stripe.Checkout.Session)
         break
-
-      case 'payment_intent.succeeded':
-        console.log('Payment intent succeeded:', event.data.object.id)
-        break
-
       case 'payment_intent.payment_failed':
         await handlePaymentFailed(event.data.object as Stripe.PaymentIntent)
         break
-
       default:
         console.log(`Unhandled event type: ${event.type}`)
     }
 
     return NextResponse.json({ received: true })
-
   } catch (error: any) {
-    console.error('Webhook error:', error.message)
-    return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
+    console.error('Webhook processing error:', error)
+    return NextResponse.json(
+      { error: 'Webhook processing failed' },
+      { status: 500 }
+    )
   }
 }
 
@@ -67,59 +61,81 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
 
     console.log(`Processing successful payment for registration: ${registrationId}`)
 
-    // Update payment status
-    const payment = await prisma.payment.update({
-      where: { stripePaymentId: session.id },
-      data: {
-        status: 'SUCCEEDED',
-        paidAt: new Date()
+    // Use transaction to ensure all updates happen atomically
+    await prisma.$transaction(async (tx) => {
+      // Get registration with coupon details
+      const registration = await tx.registration.findUnique({
+        where: { id: registrationId },
+        include: {
+          appliedCoupon: true
+        }
+      })
+
+      if (!registration) {
+        throw new Error(`Registration ${registrationId} not found`)
       }
-    })
 
-    // Update registration status
-    const registration = await prisma.registration.update({
-      where: { id: registrationId },
-      data: { status: 'COMPLETED' }
-    })
+      // Update payment status
+      await tx.payment.update({
+        where: { stripePaymentId: session.id },
+        data: {
+          status: 'SUCCEEDED',
+          paidAt: new Date()
+        }
+      })
 
-    // Query for existing tickets using registrationId
-    let ticket = await prisma.ticket.findFirst({
-      where: { registrationId: registrationId }
-    })
+      // Update registration status
+      await tx.registration.update({
+        where: { id: registrationId },
+        data: { status: 'COMPLETED' }
+      })
 
-    // Handle ticket creation/update with proper null checking
-    if (!ticket) {
-      // If no ticket exists, create a new one
-      console.log(`Creating new ticket for registration: ${registrationId}`)
-      ticket = await TicketService.createTicket(registrationId)
-      
-      // Verify ticket was actually created
+      // CRITICAL: Increment coupon usage for public customers after payment
+      if (registration.appliedCouponId && !registration.isEmsClient) {
+        await tx.coupon.update({
+          where: { id: registration.appliedCouponId },
+          data: { currentUses: { increment: 1 } }
+        })
+        
+        console.log(`Coupon ${registration.appliedCouponCode} usage incremented after payment completion`)
+      }
+
+      // Handle ticket creation/update
+      let ticket = await tx.ticket.findFirst({
+        where: { registrationId: registrationId }
+      })
+
       if (!ticket) {
-        throw new Error('Failed to create ticket - createTicket returned null/undefined')
+        console.log(`Creating new ticket for registration: ${registrationId}`)
+        ticket = await TicketService.createTicket(registrationId)
+        
+        if (!ticket) {
+          throw new Error('Failed to create ticket - createTicket returned null/undefined')
+        }
       }
-    }
 
-    // Now we can safely update the ticket since we've verified it exists
-    const updatedTicket = await prisma.ticket.update({
-      where: { id: ticket.id },
-      data: {
-        status: 'SENT',
-        sentAt: new Date()
-      }
+      // Update ticket status
+      await tx.ticket.update({
+        where: { id: ticket.id },
+        data: {
+          status: 'SENT',
+          sentAt: new Date()
+        }
+      })
+
+      // Log the ticket delivery email
+      await tx.emailLog.create({
+        data: {
+          registrationId,
+          emailType: 'TICKET_DELIVERY',
+          subject: 'Your EMS VIP Ticket is Ready!',
+          recipient: registration.email,
+          status: 'SENT'
+        }
+      })
     })
 
-    // Log the ticket delivery email
-    await prisma.emailLog.create({
-      data: {
-        registrationId,
-        emailType: 'TICKET_DELIVERY',
-        subject: 'Your EMS VIP Ticket is Ready!',
-        recipient: registration.email,
-        status: 'SENT'
-      }
-    })
-
-    console.log(`Successfully processed payment for registration ${registrationId}, ticket: ${updatedTicket.ticketNumber}`)
+    console.log(`Successfully processed payment for registration ${registrationId}`)
 
   } catch (error: any) {
     console.error('Error handling payment success:', error.message)

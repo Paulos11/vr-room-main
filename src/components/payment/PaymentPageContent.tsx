@@ -1,4 +1,4 @@
-// src/components/payment/PaymentPageContent.tsx - Separated content component
+// src/components/payment/PaymentPageContent.tsx - Fixed with real pricing and discount display
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket } from 'lucide-react'
+import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket, Tag } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
@@ -20,7 +20,18 @@ interface RegistrationData {
   isEmsClient: boolean
   panelInterest: boolean
   quantity: number
-  totalCost: number
+  originalAmount: number
+  discountAmount: number
+  finalAmount: number
+  appliedCouponCode?: string
+  tickets: Array<{
+    id: string
+    ticketNumber: string
+    ticketType: {
+      name: string
+      priceInCents: number
+    }
+  }>
 }
 
 export function PaymentPageContent() {
@@ -48,10 +59,6 @@ export function PaymentPageContent() {
       if (result.success) {
         const data = result.data
         
-        // Count tickets to determine quantity
-        const ticketCount = data.tickets ? data.tickets.length : 1
-        const totalCost = ticketCount * 50 // €50 per ticket
-        
         setRegistration({
           id: data.id,
           firstName: data.firstName,
@@ -61,8 +68,12 @@ export function PaymentPageContent() {
           status: data.status,
           isEmsClient: data.isEmsClient,
           panelInterest: data.panelInterests && data.panelInterests.length > 0,
-          quantity: ticketCount,
-          totalCost: totalCost
+          quantity: data.tickets ? data.tickets.length : 0,
+          originalAmount: data.originalAmount || 0,
+          discountAmount: data.discountAmount || 0,
+          finalAmount: data.finalAmount || 0,
+          appliedCouponCode: data.appliedCouponCode,
+          tickets: data.tickets || []
         })
 
         // Redirect if payment not needed
@@ -125,6 +136,8 @@ export function PaymentPageContent() {
     }
   }
 
+  const formatPrice = (cents: number) => `€${(cents / 100).toFixed(2)}`
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -183,7 +196,7 @@ export function PaymentPageContent() {
               Secure Payment
             </CardTitle>
             <CardDescription className="text-sm">
-              Complete your VIP registration with Stripe
+              Complete your registration with Stripe
             </CardDescription>
           </CardHeader>
           
@@ -202,7 +215,7 @@ export function PaymentPageContent() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tickets:</span>
-                  <span className="font-medium">{registration.quantity} VIP ticket{registration.quantity > 1 ? 's' : ''}</span>
+                  <span className="font-medium">{registration.quantity} ticket{registration.quantity > 1 ? 's' : ''}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
@@ -211,31 +224,73 @@ export function PaymentPageContent() {
               </div>
             </div>
 
-            {/* Price Display */}
-            <div className="p-4 border-2 border-blue-200 rounded-lg bg-blue-50 text-center">
-              <div className="text-3xl font-bold text-blue-900">€{registration.totalCost.toFixed(2)}</div>
-              <div className="text-sm text-blue-700">
-                {registration.quantity} VIP Ticket{registration.quantity > 1 ? 's' : ''} × €50.00
+            {/* Ticket Details */}
+            <div className="p-3 border rounded-lg bg-blue-50">
+              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
+                <Ticket className="h-4 w-4" />
+                Ticket Details
+              </h3>
+              <div className="space-y-1">
+                {registration.tickets.map((ticket, index) => (
+                  <div key={ticket.id} className="flex justify-between text-xs">
+                    <span className="text-gray-700">{ticket.ticketType.name}</span>
+                    <span className="font-medium">{formatPrice(ticket.ticketType.priceInCents)}</span>
+                  </div>
+                ))}
               </div>
-              {registration.quantity > 1 && (
-                <div className="text-xs text-blue-600 mt-1">
-                  All tickets under {registration.firstName} {registration.lastName}
+            </div>
+
+            {/* Price Breakdown */}
+            <div className="p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span>{formatPrice(registration.originalAmount)}</span>
                 </div>
-              )}
+                
+                {/* Show discount if applied */}
+                {registration.discountAmount > 0 && registration.appliedCouponCode && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span className="flex items-center gap-1">
+                      <Tag className="h-3 w-3" />
+                      Discount ({registration.appliedCouponCode}):
+                    </span>
+                    <span className="font-medium">-{formatPrice(registration.discountAmount)}</span>
+                  </div>
+                )}
+                
+                <div className="border-t pt-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-lg">Total:</span>
+                    <span className="font-bold text-2xl text-blue-900">
+                      {formatPrice(registration.finalAmount)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Savings highlight */}
+                {registration.discountAmount > 0 && (
+                  <div className="text-center p-2 bg-green-100 border border-green-300 rounded mt-2">
+                    <p className="text-sm font-medium text-green-800">
+                      🎉 You saved {formatPrice(registration.discountAmount)}!
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* VIP Benefits */}
             <div className="p-3 border rounded-lg bg-green-50">
               <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-green-600" />
-                VIP Benefits (Per Ticket)
+                What's Included
               </h3>
               <ul className="space-y-1 text-xs text-green-800">
-                <li>• Exclusive VIP areas & lounges</li>
-                <li>• Complimentary refreshments</li>
-                <li>• Priority access to demonstrations</li>
+                <li>• Access to EMS Trade Fair 2025</li>
+                <li>• Malta Fairs and Conventions Centre</li>
+                <li>• Event dates: June 26 - July 6, 2025</li>
                 <li>• Direct consultation with EMS experts</li>
-                <li>• VIP networking opportunities</li>
+                <li>• Product demonstrations and displays</li>
               </ul>
             </div>
 
@@ -276,7 +331,7 @@ export function PaymentPageContent() {
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Pay €{registration.totalCost.toFixed(2)} with Stripe
+                  Pay {formatPrice(registration.finalAmount)} with Stripe
                 </>
               )}
             </Button>

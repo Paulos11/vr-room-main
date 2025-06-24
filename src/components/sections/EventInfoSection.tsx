@@ -41,7 +41,6 @@ export const EventInfoSection = () => (
           </CardHeader>
           <CardContent className="pt-0">
             <p className="text-sm font-bold text-gray-800">6:00 PM Onwards</p>
-            <p className="text-gray-600 text-xs">Daily</p>
           </CardContent>
         </Card>
       </div>

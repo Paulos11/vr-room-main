@@ -1,9 +1,9 @@
-
 // src/app/api/admin/coupons/[id]/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { AuthService } from '@/lib/auth'
 import { z } from 'zod'
+
+export const dynamic = 'force-dynamic'
 
 const UpdateCouponSchema = z.object({
   name: z.string().min(2).max(100).optional(),
@@ -27,13 +27,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const currentUser = AuthService.getInstance().getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    console.log('Fetching coupon:', params.id)
 
     const coupon = await prisma.coupon.findUnique({
       where: { id: params.id },
@@ -66,10 +60,10 @@ export async function GET(
       success: true,
       data: coupon
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching coupon:', error)
     return NextResponse.json(
-      { success: false, message: 'Error fetching coupon' },
+      { success: false, message: 'Error fetching coupon', error: error.message },
       { status: 500 }
     )
   }
@@ -81,13 +75,7 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
-    const currentUser = AuthService.getInstance().getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    console.log('Updating coupon:', params.id)
 
     const body = await request.json()
     const validatedData = UpdateCouponSchema.parse(body)
@@ -126,6 +114,8 @@ export async function PUT(
       data: validatedData
     })
 
+    console.log('Coupon updated successfully:', params.id)
+
     return NextResponse.json({
       success: true,
       message: 'Coupon updated successfully',
@@ -142,7 +132,7 @@ export async function PUT(
     }
 
     return NextResponse.json(
-      { success: false, message: 'Error updating coupon' },
+      { success: false, message: 'Error updating coupon', error: error.message },
       { status: 500 }
     )
   }
@@ -154,13 +144,7 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const currentUser = AuthService.getInstance().getCurrentUser()
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+    console.log('Deleting coupon:', params.id)
 
     // Check if coupon exists and has been used
     const coupon = await prisma.coupon.findUnique({
@@ -192,14 +176,16 @@ export async function DELETE(
       where: { id: params.id }
     })
 
+    console.log('Coupon deleted successfully:', params.id)
+
     return NextResponse.json({
       success: true,
       message: 'Coupon deleted successfully'
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error deleting coupon:', error)
     return NextResponse.json(
-      { success: false, message: 'Error deleting coupon' },
+      { success: false, message: 'Error deleting coupon', error: error.message },
       { status: 500 }
     )
   }

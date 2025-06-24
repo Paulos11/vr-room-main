@@ -1,4 +1,4 @@
-// src/lib/pdfTicketGenerator.ts - Improved design with proper layout and information
+// src/lib/pdfTicketGenerator.ts - Fixed QR code to use verification URL
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -52,7 +52,7 @@ export class PDFTicketGenerator {
     // Header section background
     page.drawRectangle({
       x: x,
-      y: y + ticketHeight - 35,
+      y: y + ticketHeight - 40,
       width: ticketWidth,
       height: 35,
       color: primaryBlue,
@@ -62,7 +62,7 @@ export class PDFTicketGenerator {
     page.drawText('EMS TICKETS', {
       x: x + 12,
       y: y + ticketHeight - 20,
-      size: 14,
+      size: 12,
       font: boldFont,
       color: white,
     });
@@ -71,33 +71,14 @@ export class PDFTicketGenerator {
     page.drawText('MFCC, Malta 2025', {
       x: x + 12,
       y: y + ticketHeight - 32,
-      size: 8,
+      size: 7,
       font: regularFont,
       color: rgb(0.8, 0.8, 0.8),
     });
     
-    // Status badge (VIP/COMP)
-    const statusText = ticketData.isEmsClient ? 'COMP' : 'VIP';
-    const statusBg = ticketData.isEmsClient ? gold : rgb(0.2, 0.7, 0.2);
-    
-    page.drawRectangle({
-      x: x + ticketWidth - 50,
-      y: y + ticketHeight - 28,
-      width: 38,
-      height: 16,
-      color: statusBg,
-    });
-    
-    page.drawText(statusText, {
-      x: x + ticketWidth - 43,
-      y: y + ticketHeight - 22,
-      size: 8,
-      font: boldFont,
-      color: white,
-    });
-    
+
     // Content area starts here - more compact spacing
-    let currentY = y + ticketHeight - 45;
+    let currentY = y + ticketHeight - 50;
     
     // Ticket Number Section
     page.drawText('TICKET NUMBER:', {
@@ -112,8 +93,8 @@ export class PDFTicketGenerator {
     page.drawRectangle({
       x: x + 12,
       y: currentY - 2,
-      width: ticketWidth - 80, // Leave space for QR code
-      height: 14,
+      width: ticketWidth - 100, // Leave space for QR code
+      height: 12,
       color: lightBlue,
       borderColor: primaryBlue,
       borderWidth: 1,
@@ -262,7 +243,11 @@ export class PDFTicketGenerator {
     const qrY = y + ticketHeight - 110;
     
     try {
-      const qrCodeDataUrl = await QRCode.toDataURL(ticketData.qrCode, {
+      // *** THIS IS THE KEY FIX ***
+      // Generate QR code with the verification URL instead of just the qrCode value
+      const verificationUrl = `https://emstickets.com/staff/verify/${ticketData.ticketNumber}`;
+      
+      const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
         width: 50,
         margin: 1,
         color: {
@@ -408,7 +393,7 @@ export class PDFTicketGenerator {
         const titleFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
         const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
         
-        currentPage.drawText('EMS TRADE FAIR TICKETS - 2025', {
+        currentPage.drawText('EMS TICKETS - 2025', {
           x: margin,
           y: pageHeight - 30,
           size: 16,

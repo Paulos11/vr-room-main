@@ -1,4 +1,4 @@
-// src/app/api/registrations/[id]/route.ts - Fixed database query
+// src/app/api/registrations/[id]/route.ts - Add this endpoint to fetch registration details
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
@@ -7,35 +7,30 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    console.log('Fetching registration:', params.id)
-
     const registration = await prisma.registration.findUnique({
       where: { id: params.id },
       include: {
-        panelInterests: true,
-        payment: true,
         tickets: {
-          orderBy: {
-            createdAt: "asc"  // Fixed: Use 'createdAt' instead of 'ticketSequence'
+          include: {
+            ticketType: {
+              select: {
+                name: true,
+                priceInCents: true
+              }
+            }
           }
-        }
+        },
+        panelInterests: true,
+        payment: true
       }
     })
 
     if (!registration) {
-      console.log('Registration not found:', params.id)
       return NextResponse.json(
         { success: false, message: 'Registration not found' },
         { status: 404 }
       )
     }
-
-    console.log('Registration found:', {
-      id: registration.id,
-      email: registration.email,
-      status: registration.status,
-      ticketCount: registration.tickets.length
-    })
 
     return NextResponse.json({
       success: true,
@@ -43,11 +38,9 @@ export async function GET(
     })
 
   } catch (error: any) {
-    console.error('Error fetching registration:', error.message)
-    console.error('Error details:', error)
-    
+    console.error('Error fetching registration:', error)
     return NextResponse.json(
-      { success: false, message: 'Error fetching registration', error: error.message },
+      { success: false, message: 'Failed to fetch registration' },
       { status: 500 }
     )
   }

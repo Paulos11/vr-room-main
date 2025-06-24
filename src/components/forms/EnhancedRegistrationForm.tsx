@@ -1,7 +1,7 @@
-// src/components/forms/EnhancedRegistrationForm.tsx - Updated to include panel interest for public customers
+// src/components/forms/EnhancedRegistrationForm.tsx - Complete with coupon support
 'use client'
 
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ import { PersonalInfoStep } from './steps/PersonalInfoStep'
 import { EmsCustomerStep } from './steps/EmsCustomerStep'
 import { PanelInterestStep } from './steps/PanelInterestStep'
 import { TermsStep } from './steps/TermsStep'
-import { RegistrationFormData } from '@/types/registration' // Assuming this type is correctly defined
+import { RegistrationFormData } from '@/types/registration'
 import { validateStep, validateAllFields } from '@/utils/formValidation'
 
 export function EnhancedRegistrationForm() {
@@ -34,7 +34,8 @@ export function EnhancedRegistrationForm() {
     acceptTerms: false,
     acceptPrivacyPolicy: false,
     couponCode: '',
-    // Updated EMS client fields - ensure these match RegistrationFormData
+    appliedDiscount: 0, // Add discount tracking
+    // EMS client fields
     customerName: '',
     orderNumber: '',
     applicationNumber: '',
@@ -44,18 +45,27 @@ export function EnhancedRegistrationForm() {
   // Calculate total steps based on customer type
   const totalSteps = formData.isEmsClient ? 5 : 4 // EMS: 5 steps, Public: 4 steps
 
-  // Calculate totals
+  // Calculate totals with discount support
   const totalTickets = useMemo(() => {
     return formData.selectedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0)
   }, [formData.selectedTickets])
 
   const totalCost = useMemo(() => {
     if (formData.isEmsClient) return 'Free'
-    const totalCents = formData.selectedTickets.reduce((sum, ticket) => 
+    
+    const subtotal = formData.selectedTickets.reduce((sum, ticket) => 
       sum + (ticket.priceInCents * ticket.quantity), 0
     )
-    return `€${(totalCents / 100).toFixed(2)}`
-  }, [formData.selectedTickets, formData.isEmsClient])
+    
+    const discount = formData.appliedDiscount || 0
+    const finalAmount = Math.max(0, subtotal - discount)
+    
+    if (discount > 0) {
+      return `€${(finalAmount / 100).toFixed(2)} (${formData.couponCode} applied)`
+    }
+    
+    return `€${(finalAmount / 100).toFixed(2)}`
+  }, [formData.selectedTickets, formData.isEmsClient, formData.appliedDiscount, formData.couponCode])
 
   const handleCustomerTypeSelected = useCallback((isEmsClient: boolean) => {
     // Reset all form data when customer type changes
@@ -71,11 +81,12 @@ export function EnhancedRegistrationForm() {
       acceptTerms: false,
       acceptPrivacyPolicy: false,
       couponCode: '',
-      // EMS client fields - **REMOVE emsCustomerId and accountManager**
+      appliedDiscount: 0, // Reset discount
+      // EMS client fields
       customerName: '',
-      orderNumber: '',       // Initialize optional fields as empty string or undefined
-      applicationNumber: '', // Initialize optional fields as empty string or undefined
-      orderDate: ''          // Initialize optional fields as empty string or undefined
+      orderNumber: '',
+      applicationNumber: '',
+      orderDate: ''
     })
     
     // Reset to step 1
@@ -137,11 +148,12 @@ export function EnhancedRegistrationForm() {
         phone: formData.phone.trim(),
         idCardNumber: formData.idCardNumber.trim(),
         couponCode: formData.couponCode || undefined,
+        appliedDiscount: formData.appliedDiscount || 0, // Include applied discount
         // Ensure optional EMS client fields are set to undefined if empty strings
         customerName: formData.customerName || undefined,
         orderNumber: formData.orderNumber || undefined,
         applicationNumber: formData.applicationNumber || undefined,
-        orderDate: formData.orderDate || undefined, // Keep as string for API, conversion happens there
+        orderDate: formData.orderDate || undefined,
       }
 
       const response = await fetch('/api/register', {
@@ -242,7 +254,14 @@ export function EnhancedRegistrationForm() {
             </CardTitle>
             <CardDescription className="text-sm text-gray-600">
               {totalTickets > 0 ? (
-                `${totalTickets} ticket${totalTickets > 1 ? 's' : ''} - ${totalCost}`
+                <span>
+                  {totalTickets} ticket{totalTickets > 1 ? 's' : ''} - {totalCost}
+                  {(formData.appliedDiscount || 0) > 0 && !formData.isEmsClient && (
+                    <span className="block text-green-600 text-xs mt-1">
+                      💰 Saved €{((formData.appliedDiscount || 0) / 100).toFixed(2)}
+                    </span>
+                  )}
+                </span>
               ) : (
                 formData.isEmsClient ? 'Select your complimentary tickets' : 'Select your tickets'
               )}

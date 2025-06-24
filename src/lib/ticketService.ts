@@ -1,10 +1,10 @@
-// src/lib/ticketService.ts - Fixed version
+// src/lib/ticketService.ts - Updated to use URL-based QR codes
 import { TicketGenerator } from './ticketGenerator'
 import { prisma } from '@/lib/prisma'
 
 export class TicketService {
   /**
-   * Create a new ticket for a registration with random ticket number
+   * Create a new ticket for a registration with URL-based QR code
    */
   static async createTicket(registrationId: string, sequence: number = 1): Promise<any> {
     try {
@@ -18,36 +18,33 @@ export class TicketService {
         throw new Error('Registration not found')
       }
 
-      // Generate random ticket details
+      // Generate ticket with URL-based QR code
       const ticketData = await TicketGenerator.generateTicket({
         registrationId,
         isEmsClient: registration.isEmsClient
       })
 
-      console.log(`Generated random ticket number: ${ticketData.ticketNumber}`)
+      console.log(`Generated ticket: ${ticketData.ticketNumber}`)
+      console.log(`QR Code URL: ${ticketData.qrCode}`)
+      console.log(`Verification URL: ${ticketData.verificationUrl}`)
 
-      // You need to determine the actual ticketTypeId and purchasePrice here
-      // For instance, you might fetch it from the TicketType based on some logic,
-      // or derive it from the registration's selectedTickets if this is for an individual ticket.
-      // For now, I'll use placeholders as a direct fix for the type error,
-      // but you MUST replace these with actual logic.
-      const defaultTicketTypeId = 'clx2h32u60000r3v5897tq4u2' // REPLACE with a real ID from your TicketType model
-      const defaultPurchasePrice = 0 // REPLACE with actual price (e.g., from registration.finalAmount or selectedTickets)
+      // Get default ticket type and price (you should implement proper logic here)
+      const defaultTicketTypeId = 'clx2h32u60000r3v5897tq4u2' // REPLACE with actual logic
+      const defaultPurchasePrice = registration.isEmsClient ? 0 : 50 // Example pricing
 
-      // Create ticket in database
+      // Create ticket in database with URL-based QR code
       const ticket = await prisma.ticket.create({
         data: {
           registrationId,
           ticketNumber: ticketData.ticketNumber,
-          qrCode: ticketData.qrCode,
-          eventDate: new Date('2025-06-26'), // Start date of the event
+          qrCode: ticketData.qrCode, // This now contains the full verification URL
+          eventDate: new Date('2025-06-26'),
           venue: 'Malta Fairs and Conventions Centre',
           boothLocation: 'EMS Booth - MFCC',
           status: 'GENERATED',
           ticketSequence: sequence,
-          // These two fields are required by your schema
-          ticketTypeId: defaultTicketTypeId, // Provide actual ticket type ID
-          purchasePrice: defaultPurchasePrice, // Provide actual purchase price
+          ticketTypeId: defaultTicketTypeId,
+          purchasePrice: defaultPurchasePrice,
         }
       })
 
@@ -59,11 +56,11 @@ export class TicketService {
   }
 
   /**
-   * Create multiple tickets with random numbers for a registration
+   * Create multiple tickets with URL-based QR codes for a registration
    */
   static async createMultipleTickets(registrationId: string, quantity: number): Promise<any[]> {
     try {
-      console.log(`Creating ${quantity} tickets with random numbers for registration ${registrationId}`)
+      console.log(`Creating ${quantity} tickets with URL-based QR codes for registration ${registrationId}`)
       
       const tickets = []
       
@@ -71,9 +68,10 @@ export class TicketService {
         const ticket = await this.createTicket(registrationId, i)
         tickets.push(ticket)
         console.log(`Created ticket ${i}/${quantity}: ${ticket.ticketNumber}`)
+        console.log(`QR Code: ${ticket.qrCode}`)
       }
       
-      console.log(`Successfully created ${tickets.length} tickets with random numbers`)
+      console.log(`Successfully created ${tickets.length} tickets with URL-based QR codes`)
       return tickets
     } catch (error) {
       console.error('Error creating multiple tickets:', error)
@@ -153,10 +151,21 @@ export class TicketService {
   }
 
   /**
-   * Verify ticket by ticket number
+   * Verify ticket by ticket number or QR code URL
    */
-  static async verifyTicket(ticketNumber: string): Promise<any> {
-    // First validate the format
+  static async verifyTicket(ticketNumberOrUrl: string): Promise<any> {
+    let ticketNumber = ticketNumberOrUrl
+
+    // If it's a URL, extract the ticket number
+    if (ticketNumberOrUrl.startsWith('https://')) {
+      const extractedNumber = TicketGenerator.extractTicketNumberFromUrl(ticketNumberOrUrl)
+      if (!extractedNumber) {
+        return { valid: false, message: 'Invalid verification URL format' }
+      }
+      ticketNumber = extractedNumber
+    }
+
+    // Validate the ticket number format
     if (!TicketGenerator.validateTicketNumber(ticketNumber)) {
       return { valid: false, message: 'Invalid ticket number format' }
     }
@@ -184,11 +193,13 @@ export class TicketService {
       return { valid: false, message: 'Registration not completed' }
     }
 
-    // Basic ticket validation without QR verification for now
-    // You can add QR verification back once you implement the decodeQRCode method
     return {
       valid: true,
-      ticket,
+      ticket: {
+        ...ticket,
+        verificationUrl: TicketGenerator.getVerificationUrl(ticket.ticketNumber),
+        ticketType: TicketGenerator.getTicketType(ticket.ticketNumber)
+      },
       message: 'Ticket is valid'
     }
   }
@@ -235,6 +246,48 @@ export class TicketService {
     })
 
     return checkIn
+  }
+
+  /**
+   * Regenerate a ticket with new ticket number and URL-based QR code
+   */
+  static async regenerateTicket(ticketId: string): Promise<any> {
+    try {
+      // Get the existing ticket
+      const existingTicket = await prisma.ticket.findUnique({
+        where: { id: ticketId },
+        include: { registration: true }
+      })
+
+      if (!existingTicket) {
+        throw new Error('Ticket not found')
+      }
+
+      // Generate new ticket data with URL-based QR code
+      const newTicketData = await TicketGenerator.generateTicket({
+        registrationId: existingTicket.registrationId,
+        isEmsClient: existingTicket.registration.isEmsClient
+      })
+
+      console.log(`Regenerating ticket: ${existingTicket.ticketNumber} -> ${newTicketData.ticketNumber}`)
+      console.log(`New QR Code URL: ${newTicketData.qrCode}`)
+
+      // Update the existing ticket with new data
+      const regeneratedTicket = await prisma.ticket.update({
+        where: { id: ticketId },
+        data: {
+          ticketNumber: newTicketData.ticketNumber,
+          qrCode: newTicketData.qrCode, // Now contains full verification URL
+          status: 'GENERATED',
+          updatedAt: new Date()
+        }
+      })
+
+      return regeneratedTicket
+    } catch (error) {
+      console.error('Error regenerating ticket:', error)
+      throw error
+    }
   }
 
   /**

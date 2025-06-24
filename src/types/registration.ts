@@ -1,4 +1,5 @@
 // src/types/registration.ts - Updated with order fields
+// src/types/registration.ts - Add appliedDiscount field
 export interface RegistrationFormData {
   // Personal Information
   firstName: string
@@ -15,8 +16,6 @@ export interface RegistrationFormData {
   
   // EMS Client Details (if applicable)
   customerName?: string
-  
-  // EMS Order Details (if applicable) - NEW FIELDS
   orderNumber?: string
   applicationNumber?: string
   orderDate?: string
@@ -26,11 +25,15 @@ export interface RegistrationFormData {
   
   // Coupon Support
   couponCode?: string
+  appliedDiscount?: number // ADD THIS LINE
   
   // Terms
   acceptTerms: boolean
   acceptPrivacyPolicy: boolean
 }
+
+// ... rest of the types remain the same
+
 
 export interface SelectedTicket {
   ticketTypeId: string

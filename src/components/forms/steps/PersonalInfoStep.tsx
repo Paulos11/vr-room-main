@@ -1,10 +1,10 @@
-// src/components/forms/steps/PersonalInfoStep.tsx - Cleaned up version
+// src/components/forms/steps/PersonalInfoStep.tsx - Updated with discount display
 'use client'
 
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { User, AlertCircle } from 'lucide-react'
+import { User, AlertCircle, Tag } from 'lucide-react'
 import { StepProps } from '@/types/registration'
 import { validateField } from '@/utils/realTimeValidation'
 
@@ -27,6 +27,30 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
     const hasError = fieldErrors[fieldName]
     return `h-9 ${hasError ? 'border-red-500 focus:ring-red-500' : ''}`
   }
+
+  // Calculate pricing with discount
+  const calculatePricing = () => {
+    if (formData.isEmsClient) {
+      return { original: 0, discount: 0, final: 0, showFree: true }
+    }
+
+    const originalTotal = formData.selectedTickets.reduce((sum, ticket) => 
+      sum + (ticket.priceInCents * ticket.quantity), 0
+    )
+    
+    const discount = formData.appliedDiscount || 0
+    const finalTotal = Math.max(0, originalTotal - discount)
+
+    return {
+      original: originalTotal,
+      discount: discount,
+      final: finalTotal,
+      showFree: false
+    }
+  }
+
+  const pricing = calculatePricing()
+  const formatPrice = (cents: number) => `€${(cents / 100).toFixed(2)}`
 
   return (
     <div className="space-y-3">
@@ -142,28 +166,75 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
         )}
       </div>
 
-      {/* Summary of selected tickets - read-only display */}
+      {/* Enhanced Ticket Summary with Discount Display */}
       {formData.selectedTickets.length > 0 && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <h4 className="text-sm font-medium mb-2 text-blue-900">Selected Tickets:</h4>
-          <div className="space-y-1">
-            {formData.selectedTickets.map(ticket => (
-              <div key={ticket.ticketTypeId} className="flex justify-between text-sm">
-                <span>{ticket.name} × {ticket.quantity}</span>
-                <span className="font-medium">
-                  {formData.isEmsClient ? 'FREE' : `€${(ticket.priceInCents * ticket.quantity / 100).toFixed(2)}`}
-                </span>
-              </div>
-            ))}
-            <div className="border-t pt-1 mt-2">
-              <div className="flex justify-between font-bold text-sm">
-                <span>Total:</span>
-                <span className={formData.isEmsClient ? 'text-green-600' : 'text-blue-600'}>
-                  {formData.isEmsClient ? 'FREE' : `€${(formData.selectedTickets.reduce((sum, t) => sum + (t.priceInCents * t.quantity), 0) / 100).toFixed(2)}`}
-                </span>
-              </div>
+          <h4 className="text-sm font-medium mb-2 text-blue-900 flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Order Summary for {formData.firstName || 'Customer'}
+          </h4>
+          
+          <div className="space-y-2">
+            {/* Ticket Details */}
+            <div className="space-y-1">
+              {formData.selectedTickets.map(ticket => (
+                <div key={ticket.ticketTypeId} className="flex justify-between text-sm">
+                  <span className="text-gray-700">{ticket.name} × {ticket.quantity}</span>
+                  <span className="font-medium">
+                    {pricing.showFree ? 'FREE' : formatPrice(ticket.priceInCents * ticket.quantity)}
+                  </span>
+                </div>
+              ))}
             </div>
+
+            {/* Pricing Breakdown */}
+            {!pricing.showFree && (
+              <div className="border-t pt-2 mt-2 space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Subtotal:</span>
+                  <span>{formatPrice(pricing.original)}</span>
+                </div>
+                
+                {/* Show discount if applied */}
+                {pricing.discount > 0 && formData.couponCode && (
+                  <div className="flex justify-between text-sm text-green-600">
+                    <span className="flex items-center gap-1">
+                      <Tag className="h-3 w-3" />
+                      Discount ({formData.couponCode}):
+                    </span>
+                    <span className="font-medium">-{formatPrice(pricing.discount)}</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between font-bold text-base border-t pt-1">
+                  <span>Total:</span>
+                  <span className="text-blue-600">
+                    {formatPrice(pricing.final)}
+                  </span>
+                </div>
+
+                {/* Savings highlight */}
+                {pricing.discount > 0 && (
+                  <div className="text-center p-2 bg-green-100 border border-green-300 rounded mt-2">
+                    <p className="text-sm font-medium text-green-800">
+                      🎉 You saved {formatPrice(pricing.discount)}!
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* EMS Customer Total */}
+            {pricing.showFree && (
+              <div className="border-t pt-2 mt-2">
+                <div className="flex justify-between font-bold text-base">
+                  <span>Total:</span>
+                  <span className="text-green-600">FREE</span>
+                </div>
+              </div>
+            )}
           </div>
+
           <p className="text-xs text-blue-700 mt-2">
             Need to change tickets? Go back to the previous step.
           </p>

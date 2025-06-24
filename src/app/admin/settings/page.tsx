@@ -268,107 +268,11 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
         <p className="mt-2 text-gray-600">
-          Configure ticket pricing and manage admin users
+         Manage admin users
         </p>
       </div>
 
-      {/* Ticket Pricing */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Euro className="h-5 w-5 text-green-600" />
-            Ticket Pricing
-          </CardTitle>
-          <CardDescription>
-            Set pricing for general public tickets • EMS customers always get free tickets
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <Label htmlFor="price" className="text-sm font-medium">General Public Ticket Price</Label>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="relative flex-1">
-                  <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 text-sm">
-                    {ticketPricing.currency === 'EUR' ? '€' : ticketPricing.currency === 'USD' ? '$' : '£'}
-                  </span>
-                  <Input
-                    id="price"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={ticketPricing.generalPrice || ''}
-                    onChange={(e) => handlePriceChange(e.target.value)}
-                    placeholder="Enter price"
-                    className="pl-8 text-lg font-medium"
-                  />
-                </div>
-                <Select 
-                  value={ticketPricing.currency} 
-                  onValueChange={(value) => setTicketPricing(prev => ({
-                    ...prev,
-                    currency: value
-                  }))}
-                >
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="EUR">EUR</SelectItem>
-                    <SelectItem value="USD">USD</SelectItem>
-                    <SelectItem value="GBP">GBP</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                Amount charged to general public customers
-              </p>
-            </div>
-            
-            <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-              <h4 className="font-medium text-green-800 flex items-center gap-2">
-                <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                EMS Customer Benefits
-              </h4>
-              <ul className="text-sm text-green-700 mt-2 space-y-1">
-                <li>• Free VIP tickets</li>
-                <li>• Priority event access</li>
-                <li>• Dedicated booth support</li>
-              </ul>
-            </div>
-          </div>
-          
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div>
-              <p className="font-medium">Current Pricing Structure</p>
-              <p className="text-sm text-gray-600">
-                General Public: <strong>
-                  {ticketPricing.generalPrice > 0 
-                    ? `${ticketPricing.generalPrice} ${ticketPricing.currency}` 
-                    : 'Not set'
-                  }
-                </strong> per ticket
-                {' • '}
-                EMS Customers: <strong className="text-green-600">Free</strong>
-              </p>
-            </div>
-            
-            <Button onClick={saveTicketPricing} disabled={saving}>
-              {saving ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Save Pricing
-                </>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+    
 
       {/* Admin Users */}
       <Card>

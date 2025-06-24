@@ -1,22 +1,61 @@
-
-// src/components/forms/steps/TicketSelectionStep.tsx - More compact version
+// src/components/forms/steps/TicketSelectionStep.tsx - Updated to pass email for per-user validation
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Ticket, Plus, Minus, AlertTriangle } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Ticket, Plus, Minus, AlertTriangle, Tag, Check, X, Loader2 } from 'lucide-react'
 import { StepProps, TicketType, SelectedTicket } from '@/types/registration'
 import { toast } from '@/components/ui/use-toast'
+
+interface CouponValidationResult {
+  isValid: boolean
+  coupon?: {
+    id: string
+    code: string
+    name: string
+    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
+    discountValue: number
+    minOrderAmount?: number
+    maxUsesPerUser?: number
+    currentUses?: number
+    maxUses?: number
+  }
+  discountAmount?: number
+  message?: string
+}
 
 export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const [availableTickets, setAvailableTickets] = useState<TicketType[]>([])
   const [loading, setLoading] = useState(true)
+  const [couponCode, setCouponCode] = useState(formData.couponCode || '')
+  const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null)
+  const [validatingCoupon, setValidatingCoupon] = useState(false)
+  const [couponTouched, setCouponTouched] = useState(false)
 
   useEffect(() => {
     fetchAvailableTickets()
   }, [formData.isEmsClient])
+
+  // Debounced coupon validation
+  useEffect(() => {
+    if (!couponCode.trim()) {
+      setCouponValidation(null)
+      onUpdate('couponCode', '')
+      onUpdate('appliedDiscount', 0)
+      return
+    }
+
+    if (couponTouched && couponCode.length >= 3) {
+      const timeoutId = setTimeout(() => {
+        validateCoupon(couponCode)
+      }, 800)
+      
+      return () => clearTimeout(timeoutId)
+    }
+  }, [couponCode, couponTouched, formData.email]) // Add formData.email as dependency
 
   const fetchAvailableTickets = async () => {
     try {
@@ -45,6 +84,105 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     }
   }
 
+  const validateCoupon = async (code: string) => {
+    if (!code.trim() || formData.isEmsClient) return
+
+    setValidatingCoupon(true)
+    try {
+      const totalAmount = getTotalCost()
+      
+      // Include customer email for per-user validation if available
+      const validationData = {
+        code: code.toUpperCase(),
+        orderAmount: totalAmount,
+        isEmsClient: formData.isEmsClient,
+        ...(formData.email && { customerEmail: formData.email }) // Add email if available
+      }
+
+      const response = await fetch('/api/coupons/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(validationData)
+      })
+
+      const result = await response.json()
+      
+      if (result.success && result.data.isValid) {
+        const discount = result.data.discountAmount || 0
+        setCouponValidation(result.data)
+        onUpdate('couponCode', code.toUpperCase())
+        onUpdate('appliedDiscount', discount)
+        
+        toast({
+          title: "Coupon Applied!",
+          description: `You saved €${(discount / 100).toFixed(2)}`,
+        })
+      } else {
+        setCouponValidation({
+          isValid: false,
+          message: result.message || 'Invalid coupon code'
+        })
+        onUpdate('couponCode', '')
+        onUpdate('appliedDiscount', 0)
+        
+        // Show specific error message
+        toast({
+          title: "Coupon Error",
+          description: result.message || 'Invalid coupon code',
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      setCouponValidation({
+        isValid: false,
+        message: 'Failed to validate coupon'
+      })
+      onUpdate('appliedDiscount', 0)
+      
+      toast({
+        title: "Error",
+        description: 'Failed to validate coupon',
+        variant: "destructive",
+      })
+    } finally {
+      setValidatingCoupon(false)
+    }
+  }
+
+  const handleCouponChange = (value: string) => {
+    setCouponCode(value.toUpperCase())
+    setCouponTouched(true)
+    
+    // Clear validation immediately when user types
+    if (couponValidation) {
+      setCouponValidation(null)
+      onUpdate('appliedDiscount', 0)
+    }
+  }
+
+  const handleCouponBlur = () => {
+    // Validate immediately when user leaves the field
+    if (couponCode.trim() && couponCode.length >= 3) {
+      validateCoupon(couponCode)
+    }
+  }
+
+  const handleCouponKeyPress = (e: React.KeyboardEvent) => {
+    // Validate when user presses Enter
+    if (e.key === 'Enter' && couponCode.trim() && couponCode.length >= 3) {
+      e.preventDefault()
+      validateCoupon(couponCode)
+    }
+  }
+
+  const removeCoupon = () => {
+    setCouponCode('')
+    setCouponValidation(null)
+    setCouponTouched(false)
+    onUpdate('couponCode', '')
+    onUpdate('appliedDiscount', 0)
+  }
+
   const getSelectedQuantity = (ticketTypeId: string): number => {
     const selected = formData.selectedTickets.find(t => t.ticketTypeId === ticketTypeId)
     return selected ? selected.quantity : 0
@@ -55,7 +193,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     const existingIndex = currentSelected.findIndex(t => t.ticketTypeId === ticket.id)
     
     if (newQuantity === 0) {
-      // Remove ticket if quantity is 0
       if (existingIndex !== -1) {
         currentSelected.splice(existingIndex, 1)
       }
@@ -63,8 +200,8 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
       const selectedTicket: SelectedTicket = {
         ticketTypeId: ticket.id,
         name: ticket.name,
-        priceInCents: formData.isEmsClient ? 0 : ticket.priceInCents, // Free for EMS clients
-        quantity: formData.isEmsClient ? 1 : newQuantity, // Force quantity 1 for EMS clients
+        priceInCents: formData.isEmsClient ? 0 : ticket.priceInCents,
+        quantity: formData.isEmsClient ? 1 : newQuantity,
         maxPerOrder: ticket.maxPerOrder,
         minPerOrder: ticket.minPerOrder
       }
@@ -77,6 +214,11 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     }
     
     onUpdate('selectedTickets', currentSelected)
+    
+    // Re-validate coupon if applied when tickets change
+    if (couponValidation?.isValid && couponCode) {
+      setTimeout(() => validateCoupon(couponCode), 100)
+    }
   }
 
   const increaseQuantity = (ticket: TicketType) => {
@@ -104,6 +246,16 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     return formData.selectedTickets.reduce((sum, ticket) => 
       sum + (ticket.priceInCents * ticket.quantity), 0
     )
+  }
+
+  const getAppliedDiscount = (): number => {
+    return formData.appliedDiscount || 0
+  }
+
+  const getFinalCost = (): number => {
+    const total = getTotalCost()
+    const discount = getAppliedDiscount()
+    return Math.max(0, total - discount)
   }
 
   const formatPrice = (cents: number): string => {
@@ -146,7 +298,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         </div>
       )}
 
-      {/* Available Tickets - Compact Cards */}
+      {/* Available Tickets */}
       <div className="space-y-2">
         {availableTickets.length === 0 ? (
           <div className="text-center py-6 text-gray-600">
@@ -167,7 +319,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  {/* Ticket Info */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="text-sm font-medium truncate">{ticket.name}</h4>
@@ -189,7 +340,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                     </div>
                   </div>
                   
-                  {/* Quantity Controls */}
                   <div className="flex items-center gap-1 ml-2">
                     <Button
                       variant="outline"
@@ -217,7 +367,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                   </div>
                 </div>
                 
-                {/* Subtotal for selected tickets */}
                 {isSelected && !formData.isEmsClient && (
                   <div className="mt-2 pt-2 border-t border-blue-200">
                     <div className="flex justify-between text-xs">
@@ -234,7 +383,81 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         )}
       </div>
 
-      {/* Selection Summary - Compact */}
+      {/* Coupon Code Section - Only for Public Customers */}
+      {!formData.isEmsClient && formData.selectedTickets.length > 0 && (
+        <div className="p-3 border border-gray-200 rounded-lg bg-gray-50">
+          <Label className="text-sm font-medium mb-2 flex items-center gap-1">
+            <Tag className="h-3 w-3" />
+            Coupon Code (Optional)
+          </Label>
+          
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Input
+                value={couponCode}
+                onChange={(e) => handleCouponChange(e.target.value)}
+                onBlur={handleCouponBlur}
+                onKeyPress={handleCouponKeyPress}
+                placeholder="Enter code and press Enter"
+                className="h-8 text-sm pr-8"
+                disabled={validatingCoupon}
+              />
+              {validatingCoupon && (
+                <Loader2 className="absolute right-2 top-2 h-4 w-4 animate-spin text-gray-400" />
+              )}
+              {couponValidation?.isValid && (
+                <Check className="absolute right-2 top-2 h-4 w-4 text-green-500" />
+              )}
+              {couponValidation && !couponValidation.isValid && (
+                <X className="absolute right-2 top-2 h-4 w-4 text-red-500" />
+              )}
+            </div>
+            
+            {couponValidation?.isValid && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={removeCoupon}
+                className="h-8 px-2"
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          
+          {/* Coupon Status Messages */}
+          {couponValidation && (
+            <div className={`mt-2 text-xs flex items-center gap-1 ${
+              couponValidation.isValid ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {couponValidation.isValid ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  <span>
+                    {couponValidation.coupon?.name} applied! 
+                    {getAppliedDiscount() > 0 && ` Save ${formatPrice(getAppliedDiscount())}`}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <X className="h-3 w-3" />
+                  <span>{couponValidation.message}</span>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Email Warning */}
+          {!formData.email && couponCode && (
+            <div className="mt-2 text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
+              <AlertTriangle className="h-3 w-3 inline mr-1" />
+              Enter your email in the next step for accurate coupon validation
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Selection Summary */}
       {formData.selectedTickets.length > 0 && (
         <div className="p-3 border-2 border-blue-200 bg-blue-50 rounded-lg">
           <div className="flex items-center justify-between mb-2">
@@ -252,14 +475,37 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
               </div>
             ))}
             
-            <div className="border-t pt-1 mt-1">
-              <div className="flex justify-between font-bold text-sm">
-                <span>Total:</span>
-                <span className={formData.isEmsClient ? 'text-green-600' : 'text-blue-600'}>
-                  {formData.isEmsClient ? 'FREE' : formatPrice(getTotalCost())}
-                </span>
+            {!formData.isEmsClient && (
+              <div className="border-t pt-1 mt-1 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span>Subtotal:</span>
+                  <span>{formatPrice(getTotalCost())}</span>
+                </div>
+                
+                {getAppliedDiscount() > 0 && (
+                  <div className="flex justify-between text-xs text-green-600">
+                    <span>Discount ({formData.couponCode}):</span>
+                    <span>-{formatPrice(getAppliedDiscount())}</span>
+                  </div>
+                )}
+                
+                <div className="flex justify-between font-bold text-sm border-t pt-1">
+                  <span>Total:</span>
+                  <span className="text-blue-600">
+                    {formatPrice(getFinalCost())}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
+            
+            {formData.isEmsClient && (
+              <div className="border-t pt-1 mt-1">
+                <div className="flex justify-between font-bold text-sm">
+                  <span>Total:</span>
+                  <span className="text-green-600">FREE</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
