@@ -1,4 +1,4 @@
-// src/app/api/admin/tickets/route.ts - Tickets management API
+// ENHANCED: src/app/api/admin/tickets/route.ts - Include ticket type names
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { TicketService } from '@/lib/ticketService'
@@ -11,6 +11,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const status = searchParams.get('status')
     const search = searchParams.get('search')
+    const ticketType = searchParams.get('ticketType') // ✅ NEW: Ticket type filter
     
     const skip = (page - 1) * limit
     
@@ -19,6 +20,11 @@ export async function GET(request: NextRequest) {
     
     if (status && status !== 'all') {
       where.status = status
+    }
+    
+    // ✅ NEW: Ticket type filter
+    if (ticketType && ticketType !== 'all') {
+      where.ticketTypeId = ticketType
     }
     
     if (search) {
@@ -31,11 +37,15 @@ export async function GET(request: NextRequest) {
             { email: { contains: search, mode: 'insensitive' } },
             { phone: { contains: search, mode: 'insensitive' } }
           ]
+        }},
+        // ✅ NEW: Search by ticket type name
+        { ticketType: { 
+          name: { contains: search, mode: 'insensitive' }
         }}
       ]
     }
     
-    // Get tickets with registration details
+    // Get tickets with registration details and ticket type
     const tickets = await prisma.ticket.findMany({
       where,
       include: {
@@ -49,6 +59,16 @@ export async function GET(request: NextRequest) {
             isEmsClient: true,
             status: true,
             createdAt: true
+          }
+        },
+        // ✅ NEW: Include ticket type information
+        ticketType: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            priceInCents: true,
+            category: true
           }
         },
         checkIns: {
@@ -76,18 +96,30 @@ export async function GET(request: NextRequest) {
       total: totalStats,
       generated: stats.find(s => s.status === 'GENERATED')?._count.id || 0,
       sent: stats.find(s => s.status === 'SENT')?._count.id || 0,
-      collected: stats.find(s => s.status === 'COLLECTED')?._count.id || 0,
+      // ✅ REMOVED: collected from stats (hidden from UI)
       used: stats.find(s => s.status === 'USED')?._count.id || 0,
       expired: stats.find(s => s.status === 'EXPIRED')?._count.id || 0,
       cancelled: stats.find(s => s.status === 'CANCELLED')?._count.id || 0
     }
+    
+    // ✅ NEW: Get ticket types for filter dropdown
+    const ticketTypes = await prisma.ticketType.findMany({
+      select: {
+        id: true,
+        name: true,
+        category: true
+      },
+      where: {
+        isActive: true
+      },
+      orderBy: { name: 'asc' }
+    })
     
     // Format response
     const formattedTickets = tickets.map(ticket => ({
       id: ticket.id,
       ticketNumber: ticket.ticketNumber,
       status: ticket.status,
-      // Removed accessType as it's not in the Prisma schema
       sequence: ticket.ticketSequence,
       issuedAt: ticket.issuedAt,
       sentAt: ticket.sentAt,
@@ -96,6 +128,14 @@ export async function GET(request: NextRequest) {
       eventDate: ticket.eventDate,
       venue: ticket.venue,
       boothLocation: ticket.boothLocation,
+      // ✅ NEW: Include ticket type information
+      ticketType: {
+        id: ticket.ticketType?.id,
+        name: ticket.ticketType?.name || 'General Admission',
+        description: ticket.ticketType?.description,
+        category: ticket.ticketType?.category,
+        priceInCents: ticket.ticketType?.priceInCents
+      },
       customer: {
         id: ticket.registration.id,
         name: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
@@ -117,6 +157,8 @@ export async function GET(request: NextRequest) {
       data: {
         tickets: formattedTickets,
         stats: formattedStats,
+        // ✅ NEW: Include ticket types for filter
+        ticketTypes: ticketTypes,
         pagination: {
           currentPage: page,
           totalPages: Math.ceil(totalCount / limit),
