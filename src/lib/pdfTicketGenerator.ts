@@ -11,6 +11,8 @@ interface TicketData {
   sequence: number
   totalTickets: number
   isEmsClient: boolean
+  ticketTypeName?: string // Added ticket type name
+  ticketTypePrice?: number // Added ticket type price
 }
 
 export class PDFTicketGenerator {
@@ -120,6 +122,63 @@ export class PDFTicketGenerator {
     }
     
     currentY -= 18;
+    
+    // 🎫 TICKET TYPE SECTION (SIMPLIFIED - ALWAYS SHOW IF DATA EXISTS)
+    if (ticketData.ticketTypeName) {
+      console.log('✅ Drawing ticket type section for:', ticketData.ticketTypeName)
+      
+      page.drawText('TICKET TYPE:', {
+        x: x + 12,
+        y: currentY,
+        size: 7,
+        font: boldFont,
+        color: darkGray,
+      });
+      
+      currentY -= 12;
+      page.drawRectangle({
+        x: x + 12,
+        y: currentY - 2,
+        width: ticketWidth - 100,
+        height: 12,
+        color: rgb(0.95, 1, 0.95), // Light green background
+        borderColor: rgb(0.2, 0.7, 0.2), // Green border
+        borderWidth: 1,
+      });
+      
+      // Ticket type name
+      page.drawText(ticketData.ticketTypeName.toUpperCase(), {
+        x: x + 15,
+        y: currentY + 2,
+        size: 8,
+        font: boldFont,
+        color: rgb(0.1, 0.5, 0.1), // Dark green
+      });
+      
+      // Price (if not EMS client)
+      if (!ticketData.isEmsClient && ticketData.ticketTypePrice && ticketData.ticketTypePrice > 0) {
+        const priceText = `€${(ticketData.ticketTypePrice / 100).toFixed(2)}`;
+        page.drawText(priceText, {
+          x: x + ticketWidth - 85,
+          y: currentY + 2,
+          size: 7,
+          font: boldFont,
+          color: rgb(0.1, 0.5, 0.1),
+        });
+      } else if (ticketData.isEmsClient) {
+        page.drawText('VIP FREE', {
+          x: x + ticketWidth - 85,
+          y: currentY + 2,
+          size: 7,
+          font: boldFont,
+          color: gold,
+        });
+      }
+      
+      currentY -= 18;
+    } else {
+      console.log('❌ No ticket type name found. ticketData.ticketTypeName =', JSON.stringify(ticketData.ticketTypeName))
+    }
     
     // Customer Information Section
     page.drawText('CUSTOMER INFORMATION:', {
@@ -371,6 +430,16 @@ export class PDFTicketGenerator {
   static async generateAllTicketsPDF(tickets: TicketData[]): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
     
+    // 🔍 DEBUG: Log what we're receiving
+    console.log('🎫 PDF Generator called with', tickets.length, 'tickets')
+    tickets.forEach((ticket, index) => {
+      console.log(`📄 PDF TICKET ${index + 1}:`)
+      console.log('  - ticketNumber:', ticket.ticketNumber)
+      console.log('  - ticketTypeName:', ticket.ticketTypeName)
+      console.log('  - ticketTypePrice:', ticket.ticketTypePrice)
+      console.log('  - isEmsClient:', ticket.isEmsClient)
+    })
+    
     // A4 page dimensions
     const pageWidth = 595;
     const pageHeight = 842;
@@ -442,6 +511,10 @@ export class PDFTicketGenerator {
       
       // Draw the ticket
       if (currentPage) {
+        console.log(`🎨 Drawing ticket ${i + 1}: ${tickets[i].ticketNumber}`)
+        console.log('  - Ticket type name:', tickets[i].ticketTypeName)
+        console.log('  - Will show ticket type section:', !!(tickets[i].ticketTypeName && tickets[i].ticketTypeName !== 'undefined' && tickets[i].ticketTypeName !== 'General Admission'))
+        
         await this.drawSingleTicket(currentPage, pdfDoc, tickets[i], x, y);
         
         // Add subtle cut lines around ticket
@@ -475,8 +548,8 @@ export class PDFTicketGenerator {
   }
 
   /**
-   * 🎯 NEW: Helper method to generate PDF tickets from registration data
-   * This integrates with your existing registration flow
+   * 🎯 UPDATED: Helper method to generate PDF tickets from registration data with ticket types
+   * This integrates with your existing registration flow and includes ticket type information
    */
   static async generateTicketsFromRegistration(registration: any): Promise<Buffer> {
     const customerName = `${registration.firstName} ${registration.lastName}`;
@@ -489,7 +562,10 @@ export class PDFTicketGenerator {
       qrCode: ticket.qrCode, // This will be updated with proper URL in drawSingleTicket
       sequence: ticket.ticketSequence || (index + 1),
       totalTickets: registration.tickets.length,
-      isEmsClient: registration.isEmsClient
+      isEmsClient: registration.isEmsClient,
+      // 🎫 NEW: Include ticket type information
+      ticketTypeName: ticket.ticketType?.name || 'General Admission',
+      ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0
     }));
 
     return await this.generateAllTicketsPDF(ticketDataArray);

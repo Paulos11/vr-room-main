@@ -25,7 +25,12 @@ export async function POST(request: NextRequest) {
         include: {
           registration: {
             include: {
-              tickets: { orderBy: { ticketSequence: 'asc' } }
+              tickets: { 
+                include: {
+                  ticketType: true // Include ticket type information for sessionId path too
+                },
+                orderBy: { ticketSequence: 'asc' } 
+              }
             }
           }
         }
@@ -35,7 +40,12 @@ export async function POST(request: NextRequest) {
       registration = await prisma.registration.findUnique({
         where: { id: registrationId },
         include: {
-          tickets: { orderBy: { ticketSequence: 'asc' } }
+          tickets: { 
+            include: {
+              ticketType: true // Include ticket type information
+            },
+            orderBy: { ticketSequence: 'asc' } 
+          }
         }
       })
     }
@@ -85,7 +95,9 @@ export async function POST(request: NextRequest) {
         qrCode: ticket.qrCode,
         sequence: ticket.ticketSequence || 1,
         totalTickets: registration.tickets.length,
-        isEmsClient: registration.isEmsClient
+        isEmsClient: registration.isEmsClient,
+        ticketTypeName: ticket.ticketType?.name || 'General Admission',
+        ticketTypePrice: ticket.purchasePrice || 0
       }))
     }
 

@@ -7,8 +7,9 @@ import { EmailService, RegistrationEmailData } from '@/lib/emailService'
 import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil', // Updated API version
+  apiVersion: '2025-05-28.basil', // Using stable API version
 })
+
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
 
 export async function POST(request: NextRequest) {
@@ -64,12 +65,15 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
 
     // Use transaction to ensure all updates happen atomically
     const result = await prisma.$transaction(async (tx) => {
-      // Get registration with all related data
+      // Get registration with all related data including ticket types
       const registration = await tx.registration.findUnique({
         where: { id: registrationId },
         include: {
           appliedCoupon: true,
           tickets: {
+            include: {
+              ticketType: true // Include ticket type information
+            },
             orderBy: { ticketSequence: 'asc' }
           }
         }
@@ -155,7 +159,9 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
           qrCode: ticket.qrCode,
           sequence: ticket.ticketSequence || 1,
           totalTickets: result.tickets.length,
-          isEmsClient: result.registration.isEmsClient
+          isEmsClient: result.registration.isEmsClient,
+          ticketTypeName: ticket.ticketType?.name || 'General Admission', // Include ticket type name
+          ticketTypePrice: ticket.purchasePrice || 0 // Include ticket price
         }))
       }
 

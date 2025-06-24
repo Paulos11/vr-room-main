@@ -184,7 +184,7 @@ export async function POST(request: NextRequest) {
           finalAmount: totalFinalAmount,
           appliedCouponCode: appliedCoupon?.code || null,
           appliedCouponId: appliedCoupon?.id || null,
-          status: validatedData.isEmsClient ? 'COMPLETED' : 'PAYMENT_PENDING' // EMS clients are immediately completed
+          status: validatedData.isEmsClient ? 'PENDING' : 'PAYMENT_PENDING' // EMS clients need admin approval
         }
       });
 
@@ -254,13 +254,8 @@ export async function POST(request: NextRequest) {
     
     try {
       if (validatedData.isEmsClient) {
-        // For EMS clients: Generate PDF tickets and send email immediately
-        console.log('Generating PDF tickets for EMS customer:', result.registration.id);
-        
-        const pdfBuffer = await PDFTicketGenerator.generateTicketsFromRegistration({
-          ...result.registration,
-          tickets: result.tickets
-        });
+        // For EMS clients: Send registration confirmation (pending approval)
+        console.log('EMS customer registration - pending admin approval:', result.registration.id);
 
         const emailData: RegistrationEmailData = {
           registrationId: result.registration.id,
@@ -279,32 +274,25 @@ export async function POST(request: NextRequest) {
             qrCode: ticket.qrCode,
             sequence: ticket.ticketSequence || 1,
             totalTickets: result.tickets.length,
-            isEmsClient: true
+            isEmsClient: true,
+            ticketTypeName: 'VIP Access', // Default for EMS customers
+            ticketTypePrice: 0
           }))
         };
 
-        // Send registration confirmation with PDF tickets attached
-        emailSent = await EmailService.sendPaymentConfirmation(emailData, pdfBuffer);
-        console.log('EMS customer email sent:', emailSent);
-        
-        // Update tickets to SENT status
-        await prisma.ticket.updateMany({
-          where: { registrationId: result.registration.id },
-          data: {
-            status: 'SENT',
-            sentAt: new Date()
-          }
-        });
+        // Send registration confirmation - NO PDF tickets yet (pending approval)
+        emailSent = await EmailService.sendRegistrationConfirmation(emailData);
+        console.log('EMS customer registration confirmation sent:', emailSent);
         
         // Log email activity
         await prisma.emailLog.create({
           data: {
             registrationId: result.registration.id,
-            emailType: 'TICKET_DELIVERY',
-            subject: '🎫 Your EMS VIP Tickets - Ready for Use!',
+            emailType: 'REGISTRATION_CONFIRMATION',
+            subject: '🎫 EMS Registration Received - Pending Approval',
             recipient: validatedData.email,
             status: emailSent ? 'SENT' : 'FAILED',
-            errorMessage: emailSent ? null : 'Failed to send EMS registration email'
+            errorMessage: emailSent ? null : 'Failed to send EMS registration confirmation'
           }
         });
         
