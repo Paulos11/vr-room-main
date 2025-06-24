@@ -210,9 +210,6 @@ export default function StaffScanner() {
                 {isLoggingIn ? <Loader2 className="animate-spin" /> : <LogIn className="mr-2 h-4 w-4" />} Access Scanner
               </Button>
             </form>
-            <div className="mt-4 p-2 bg-gray-100 rounded text-xs text-center">
-              <strong>Daily Code:</strong> MALTA2025 | <strong>Staff:</strong> staff1 / pass123
-            </div>
           </CardContent>
         </Card>
       </div>
