@@ -1,4 +1,4 @@
-// src/components/forms/steps/TicketSelectionStep.tsx - Compact version with descriptions
+// src/components/forms/steps/TicketSelectionStep.tsx - Removed Collapsible dependency
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -14,14 +14,10 @@ import {
   Tag, 
   Check, 
   X, 
-  Loader2,
-  Info,
-  ChevronDown,
-  ChevronUp
+  Loader2
 } from 'lucide-react'
 import { StepProps, TicketType, SelectedTicket } from '@/types/registration'
 import { toast } from '@/components/ui/use-toast'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 interface CouponValidationResult {
   isValid: boolean
@@ -47,7 +43,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
   const [couponTouched, setCouponTouched] = useState(false)
-  const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchAvailableTickets()
@@ -192,16 +187,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     onUpdate('appliedDiscount', 0)
   }
 
-  const toggleTicketExpanded = (ticketId: string) => {
-    const newExpanded = new Set(expandedTickets)
-    if (newExpanded.has(ticketId)) {
-      newExpanded.delete(ticketId)
-    } else {
-      newExpanded.add(ticketId)
-    }
-    setExpandedTickets(newExpanded)
-  }
-
   const getSelectedQuantity = (ticketTypeId: string): number => {
     const selected = formData.selectedTickets.find(t => t.ticketTypeId === ticketTypeId)
     return selected ? selected.quantity : 0
@@ -280,9 +265,25 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     return `€${(cents / 100).toFixed(2)}`
   }
 
-  const truncateText = (text: string, maxLength: number = 80) => {
-    if (text.length <= maxLength) return text
-    return text.substring(0, maxLength) + '...'
+  // ✅ SAFE: Check if properties exist before accessing
+  const hasDescription = (ticket: TicketType): boolean => {
+    return !!(ticket.description && ticket.description.trim())
+  }
+
+  const getDescription = (ticket: TicketType): string => {
+    return ticket.description || ''
+  }
+
+  const getParsedTags = (ticket: TicketType): string[] => {
+    if (ticket.parsedTags) return ticket.parsedTags
+    if (ticket.tags) {
+      try {
+        return JSON.parse(ticket.tags) || []
+      } catch {
+        return ticket.tags.split(',').map(tag => tag.trim()).filter(Boolean)
+      }
+    }
+    return []
   }
 
   if (loading) {
@@ -334,8 +335,8 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
             const selectedQty = getSelectedQuantity(ticket.id)
             const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
             const isSelected = selectedQty > 0
-            const isExpanded = expandedTickets.has(ticket.id)
-            const hasDescription = ticket.description && ticket.description.trim()
+            const hasDesc = hasDescription(ticket)
+            const parsedTags = getParsedTags(ticket)
             
             return (
               <div 
@@ -379,12 +380,30 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         )}
                       </div>
                       
-                      {/* Short Description Preview */}
-                      {hasDescription && (
-                        <div className="mt-1">
-                          <p className="text-xs text-gray-600">
-                            {isExpanded ? ticket.description : truncateText(ticket.description!, 60)}
+                      {/* Description (always show if available) */}
+                      {hasDesc && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-600 leading-relaxed">
+                            {getDescription(ticket)}
                           </p>
+                          
+                          {/* Additional ticket info */}
+                          {(ticket.maxPerOrder < 10 || (parsedTags && parsedTags.length > 0)) && (
+                            <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
+                              {ticket.maxPerOrder < 10 && (
+                                <span>Max per order: {ticket.maxPerOrder}</span>
+                              )}
+                              {parsedTags && parsedTags.length > 0 && (
+                                <div className="flex gap-1">
+                                  {parsedTags.slice(0, 3).map((tag, idx) => (
+                                    <Badge key={idx} variant="outline" className="text-xs">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -417,74 +436,24 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                     </div>
                   </div>
                   
-                  {/* Bottom Row - Description Toggle & Subtotal */}
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
-                    {/* Description Toggle */}
-                    {hasDescription && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleTicketExpanded(ticket.id)}
-                        className="h-6 px-2 text-xs text-gray-600 hover:text-gray-800"
-                      >
-                        <Info className="h-3 w-3 mr-1" />
-                        {isExpanded ? 'Less info' : 'More info'}
-                        {isExpanded ? (
-                          <ChevronUp className="h-3 w-3 ml-1" />
-                        ) : (
-                          <ChevronDown className="h-3 w-3 ml-1" />
-                        )}
-                      </Button>
-                    )}
-                    
-                    {/* Subtotal */}
-                    {isSelected && !formData.isEmsClient && (
-                      <div className="text-xs">
-                        <span className="text-gray-600">Subtotal: </span>
-                        <span className="font-medium text-green-600">
-                          {formatPrice(ticket.priceInCents * selectedQty)}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {isSelected && formData.isEmsClient && (
-                      <div className="text-xs font-medium text-green-600">
-                        Complimentary
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Expanded Description */}
-                <Collapsible open={isExpanded}>
-                  <CollapsibleContent>
-                    {hasDescription && (
-                      <div className="px-3 pb-3 border-t border-gray-200 bg-gray-50">
-                        <div className="pt-2">
-                          <p className="text-xs text-gray-700 leading-relaxed">
-                            {ticket.description}
-                          </p>
-                          
-                          {/* Additional ticket info */}
-                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
-                            {ticket.maxPerOrder < 10 && (
-                              <span>Max per order: {ticket.maxPerOrder}</span>
-                            )}
-                            {ticket.parsedTags && ticket.parsedTags.length > 0 && (
-                              <div className="flex gap-1">
-                                {ticket.parsedTags.slice(0, 3).map((tag, idx) => (
-                                  <Badge key={idx} variant="outline" className="text-xs">
-                                    {tag}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                          </div>
+                  {/* Bottom Row - Subtotal */}
+                  {isSelected && (
+                    <div className="flex justify-end mt-2 pt-2 border-t border-gray-200">
+                      {!formData.isEmsClient ? (
+                        <div className="text-xs">
+                          <span className="text-gray-600">Subtotal: </span>
+                          <span className="font-medium text-green-600">
+                            {formatPrice(ticket.priceInCents * selectedQty)}
+                          </span>
                         </div>
-                      </div>
-                    )}
-                  </CollapsibleContent>
-                </Collapsible>
+                      ) : (
+                        <div className="text-xs font-medium text-green-600">
+                          Complimentary
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )
           })
