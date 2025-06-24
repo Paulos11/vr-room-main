@@ -1,4 +1,6 @@
-// src/utils/formValidation.ts - Fixed validation logic for correct step flow
+// SOLUTION: Fixed src/utils/formValidation.ts
+// src/utils/formValidation.ts - Fixed validation logic with EMS required fields
+
 import { RegistrationFormData } from '@/types/registration'
 
 export interface ValidationResult {
@@ -50,9 +52,37 @@ export function validateField(fieldName: string, value: any): FieldValidationRes
       }
       return { isValid: true }
 
+    // ✅ NEW: EMS Customer required field validations
+    case 'customerName':
+      if (!value || value.trim().length < 2) {
+        return { isValid: false, error: 'Customer name is required' }
+      }
+      return { isValid: true }
+
+    case 'orderNumber':
+      if (!value || value.trim().length < 3) {
+        return { isValid: false, error: 'Order number is required' }
+      }
+      return { isValid: true }
+
+    case 'applicationNumber':
+      if (!value || value.trim().length < 3) {
+        return { isValid: false, error: 'Application number is required' }
+      }
+      return { isValid: true }
+
     default:
       return { isValid: true }
   }
+}
+
+// ✅ NEW: Helper function to validate EMS customer required fields
+export function validateEmsCustomerFields(formData: RegistrationFormData): boolean {
+  if (!formData.isEmsClient) return true // Skip validation for non-EMS customers
+  
+  return validateField('customerName', formData.customerName).isValid &&
+         validateField('orderNumber', formData.orderNumber).isValid &&
+         validateField('applicationNumber', formData.applicationNumber).isValid
 }
 
 export function validateStep(step: number, formData: RegistrationFormData): boolean {
@@ -69,8 +99,8 @@ export function validateStep(step: number, formData: RegistrationFormData): bool
 
     case 3: 
       if (formData.isEmsClient) {
-        // EMS Customer Details step - all fields are optional, so always valid
-        return true
+        // ✅ FIXED: EMS Customer Details step - validate required fields
+        return validateEmsCustomerFields(formData)
       } else {
         // Panel Interest step for public customers - always valid since it's optional
         return true
@@ -123,6 +153,18 @@ export function validateAllFields(formData: RegistrationFormData): ValidationRes
   const ticketValidation = validateField('selectedTickets', formData.selectedTickets)
   if (!ticketValidation.isValid) errors.push(`Tickets: ${ticketValidation.error}`)
 
+  // ✅ NEW: EMS Customer fields validation (if EMS customer)
+  if (formData.isEmsClient) {
+    const customerNameValidation = validateField('customerName', formData.customerName)
+    if (!customerNameValidation.isValid) errors.push(`Customer name: ${customerNameValidation.error}`)
+
+    const orderNumberValidation = validateField('orderNumber', formData.orderNumber)
+    if (!orderNumberValidation.isValid) errors.push(`Order number: ${orderNumberValidation.error}`)
+
+    const applicationNumberValidation = validateField('applicationNumber', formData.applicationNumber)
+    if (!applicationNumberValidation.isValid) errors.push(`Application number: ${applicationNumberValidation.error}`)
+  }
+
   // Terms validation
   if (!formData.acceptTerms) {
     errors.push('Please accept the terms and conditions')
@@ -136,4 +178,31 @@ export function validateAllFields(formData: RegistrationFormData): ValidationRes
     isValid: errors.length === 0,
     errors
   }
+}
+
+// ✅ BONUS: Helper function to get specific field errors for real-time validation
+export function getFieldErrors(formData: RegistrationFormData): Record<string, string> {
+  const fieldErrors: Record<string, string> = {}
+  
+  // Personal fields
+  const personalFields = ['firstName', 'lastName', 'email', 'phone', 'idCardNumber']
+  personalFields.forEach(field => {
+    const validation = validateField(field, formData[field as keyof RegistrationFormData])
+    if (!validation.isValid && validation.error) {
+      fieldErrors[field] = validation.error
+    }
+  })
+  
+  // EMS customer fields (if applicable)
+  if (formData.isEmsClient) {
+    const emsFields = ['customerName', 'orderNumber', 'applicationNumber']
+    emsFields.forEach(field => {
+      const validation = validateField(field, formData[field as keyof RegistrationFormData])
+      if (!validation.isValid && validation.error) {
+        fieldErrors[field] = validation.error
+      }
+    })
+  }
+  
+  return fieldErrors
 }
