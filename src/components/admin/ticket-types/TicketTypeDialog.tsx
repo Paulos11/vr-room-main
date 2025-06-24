@@ -1,16 +1,18 @@
-// src/components/admin/ticket-types/TicketTypeDialog.tsx - Simplified
+// src/components/admin/ticket-types/TicketTypeDialog.tsx - Updated with Description
 'use client'
 
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/components/ui/use-toast'
 
 interface TicketType {
   id: string
   name: string
+  description?: string
   priceInCents: number
   totalStock: number
   soldStock: number
@@ -27,6 +29,7 @@ interface TicketTypeDialogProps {
 export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogProps) {
   const [formData, setFormData] = useState({
     name: '',
+    description: '',
     priceInCents: 0,
     totalStock: 100
   })
@@ -38,6 +41,7 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
     if (ticket) {
       setFormData({
         name: ticket.name,
+        description: ticket.description || '',
         priceInCents: ticket.priceInCents,
         totalStock: ticket.totalStock
       })
@@ -45,6 +49,7 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
     } else {
       setFormData({
         name: '',
+        description: '',
         priceInCents: 0,
         totalStock: 100
       })
@@ -87,10 +92,16 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
       const url = isEditing ? `/api/admin/ticket-types/${ticket.id}` : '/api/admin/ticket-types'
       const method = isEditing ? 'PUT' : 'POST'
 
+      // Prepare the data to send
+      const dataToSend = {
+        ...formData,
+        description: formData.description.trim() || null // Send null if empty
+      }
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(dataToSend),
       })
 
       const result = await response.json()
@@ -132,7 +143,7 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
   }
 
   return (
-    <DialogContent className="max-w-md bg-white">
+    <DialogContent className="max-w-md bg-white max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>
           {ticket ? 'Edit Ticket Type' : 'Create New Ticket Type'}
@@ -153,6 +164,22 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
             placeholder="e.g., Ice Skating"
             required
           />
+        </div>
+
+        {/* Description */}
+        <div>
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            value={formData.description}
+            onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+            placeholder="Describe what this ticket includes, duration, age requirements, etc."
+            className="resize-none"
+            rows={3}
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            This description will be shown to customers during ticket selection
+          </p>
         </div>
         
         {/* Price */}
@@ -189,12 +216,15 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
             placeholder="100"
             required
           />
+          <p className="text-xs text-gray-500 mt-1">
+            Total number of tickets available for sale
+          </p>
         </div>
 
         {/* Sales Report for existing tickets */}
         {ticket && (
           <div className="p-3 bg-gray-50 rounded-lg">
-            <h4 className="text-sm font-medium mb-2">Sales Report</h4>
+            <h4 className="text-sm font-medium mb-2">Current Sales Report</h4>
             <div className="space-y-1 text-sm text-gray-600">
               <div className="flex justify-between">
                 <span>Total Stock:</span>

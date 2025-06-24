@@ -1,42 +1,15 @@
-// src/app/api/admin/ticket-types/route.ts - Simplified
+// src/app/api/admin/ticket-types/route.ts - Updated to handle description
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { ServerAuthService } from '@/lib/server-auth'
-import { z } from 'zod'
 
-const CreateTicketTypeSchema = z.object({
-  name: z.string().min(2).max(100),
-  priceInCents: z.number().min(0),
-  totalStock: z.number().min(0)
-})
-
-// GET - List all ticket types
-export async function GET(request: NextRequest) {
+// GET - Fetch all ticket types for admin
+export async function GET() {
   try {
-    const currentUser = ServerAuthService.getCurrentUser(request)
-    if (!currentUser || !ServerAuthService.hasRole(currentUser, 'ADMIN')) {
-      return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
-
     const ticketTypes = await prisma.ticketType.findMany({
-      select: {
-        id: true,
-        name: true,
-        priceInCents: true,
-        totalStock: true,
-        reservedStock: true,
-        soldStock: true,
-        availableStock: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true
-      },
       orderBy: [
-        { isActive: 'desc' },
-        { createdAt: 'desc' }
+        { featured: 'desc' },
+        { sortOrder: 'asc' },
+        { name: 'asc' }
       ]
     })
 
@@ -58,25 +31,40 @@ export async function GET(request: NextRequest) {
 // POST - Create new ticket type
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = ServerAuthService.getCurrentUser(request)
-    if (!currentUser || !ServerAuthService.hasRole(currentUser, 'ADMIN')) {
+    const body = await request.json()
+    const { 
+      name, 
+      description, 
+      priceInCents, 
+      totalStock,
+      category,
+      emsClientsOnly,
+      publicOnly,
+      maxPerOrder,
+      minPerOrder,
+      featured,
+      tags,
+      notes
+    } = body
+
+    // Validation
+    if (!name?.trim()) {
       return NextResponse.json(
-        { success: false, message: 'Unauthorized' },
-        { status: 401 }
+        { success: false, message: 'Ticket name is required' },
+        { status: 400 }
       )
     }
 
-    const body = await request.json()
-    const validatedData = CreateTicketTypeSchema.parse(body)
-
-    // Check for existing ticket type with same name
-    const existingTicketType = await prisma.ticketType.findFirst({
-      where: { name: validatedData.name }
-    })
-
-    if (existingTicketType) {
+    if (priceInCents < 0) {
       return NextResponse.json(
-        { success: false, message: 'A ticket type with this name already exists' },
+        { success: false, message: 'Price cannot be negative' },
+        { status: 400 }
+      )
+    }
+
+    if (totalStock < 0) {
+      return NextResponse.json(
+        { success: false, message: 'Stock cannot be negative' },
         { status: 400 }
       )
     }
@@ -84,31 +72,31 @@ export async function POST(request: NextRequest) {
     // Create ticket type
     const ticketType = await prisma.ticketType.create({
       data: {
-        name: validatedData.name,
-        priceInCents: validatedData.priceInCents,
-        currency: 'EUR',
-        totalStock: validatedData.totalStock,
-        availableStock: validatedData.totalStock,
-        createdBy: currentUser.email,
+        name: name.trim(),
+        description: description?.trim() || null,
+        priceInCents: parseInt(priceInCents),
+        totalStock: parseInt(totalStock),
+        availableStock: parseInt(totalStock), // Initially all stock is available
+        category: category?.trim() || null,
+        emsClientsOnly: Boolean(emsClientsOnly),
+        publicOnly: Boolean(publicOnly),
+        maxPerOrder: parseInt(maxPerOrder) || 10,
+        minPerOrder: parseInt(minPerOrder) || 1,
+        featured: Boolean(featured),
+        tags: tags ? JSON.stringify(tags) : null,
+        notes: notes?.trim() || null,
+        createdBy: 'admin', // TODO: Get from session
         isActive: true
       }
     })
 
     return NextResponse.json({
       success: true,
-      message: 'Ticket type created successfully',
-      data: ticketType
+      data: { ticketType },
+      message: 'Ticket type created successfully'
     })
-  } catch (error: any) {
+  } catch (error) {
     console.error('Error creating ticket type:', error)
-    
-    if (error instanceof z.ZodError) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid data provided', errors: error.errors },
-        { status: 400 }
-      )
-    }
-
     return NextResponse.json(
       { success: false, message: 'Error creating ticket type' },
       { status: 500 }

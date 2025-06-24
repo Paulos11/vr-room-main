@@ -1,4 +1,4 @@
-// src/components/forms/steps/TicketSelectionStep.tsx - Updated to pass email for per-user validation
+// src/components/forms/steps/TicketSelectionStep.tsx - Compact version with descriptions
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -6,9 +6,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Ticket, Plus, Minus, AlertTriangle, Tag, Check, X, Loader2 } from 'lucide-react'
+import { 
+  Ticket, 
+  Plus, 
+  Minus, 
+  AlertTriangle, 
+  Tag, 
+  Check, 
+  X, 
+  Loader2,
+  Info,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react'
 import { StepProps, TicketType, SelectedTicket } from '@/types/registration'
 import { toast } from '@/components/ui/use-toast'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 interface CouponValidationResult {
   isValid: boolean
@@ -34,6 +47,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const [couponValidation, setCouponValidation] = useState<CouponValidationResult | null>(null)
   const [validatingCoupon, setValidatingCoupon] = useState(false)
   const [couponTouched, setCouponTouched] = useState(false)
+  const [expandedTickets, setExpandedTickets] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     fetchAvailableTickets()
@@ -55,7 +69,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
       
       return () => clearTimeout(timeoutId)
     }
-  }, [couponCode, couponTouched, formData.email]) // Add formData.email as dependency
+  }, [couponCode, couponTouched, formData.email])
 
   const fetchAvailableTickets = async () => {
     try {
@@ -91,12 +105,11 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     try {
       const totalAmount = getTotalCost()
       
-      // Include customer email for per-user validation if available
       const validationData = {
         code: code.toUpperCase(),
         orderAmount: totalAmount,
         isEmsClient: formData.isEmsClient,
-        ...(formData.email && { customerEmail: formData.email }) // Add email if available
+        ...(formData.email && { customerEmail: formData.email })
       }
 
       const response = await fetch('/api/coupons/validate', {
@@ -125,7 +138,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         onUpdate('couponCode', '')
         onUpdate('appliedDiscount', 0)
         
-        // Show specific error message
         toast({
           title: "Coupon Error",
           description: result.message || 'Invalid coupon code',
@@ -153,7 +165,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     setCouponCode(value.toUpperCase())
     setCouponTouched(true)
     
-    // Clear validation immediately when user types
     if (couponValidation) {
       setCouponValidation(null)
       onUpdate('appliedDiscount', 0)
@@ -161,14 +172,12 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   }
 
   const handleCouponBlur = () => {
-    // Validate immediately when user leaves the field
     if (couponCode.trim() && couponCode.length >= 3) {
       validateCoupon(couponCode)
     }
   }
 
   const handleCouponKeyPress = (e: React.KeyboardEvent) => {
-    // Validate when user presses Enter
     if (e.key === 'Enter' && couponCode.trim() && couponCode.length >= 3) {
       e.preventDefault()
       validateCoupon(couponCode)
@@ -181,6 +190,16 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     setCouponTouched(false)
     onUpdate('couponCode', '')
     onUpdate('appliedDiscount', 0)
+  }
+
+  const toggleTicketExpanded = (ticketId: string) => {
+    const newExpanded = new Set(expandedTickets)
+    if (newExpanded.has(ticketId)) {
+      newExpanded.delete(ticketId)
+    } else {
+      newExpanded.add(ticketId)
+    }
+    setExpandedTickets(newExpanded)
   }
 
   const getSelectedQuantity = (ticketTypeId: string): number => {
@@ -215,7 +234,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     
     onUpdate('selectedTickets', currentSelected)
     
-    // Re-validate coupon if applied when tickets change
     if (couponValidation?.isValid && couponCode) {
       setTimeout(() => validateCoupon(couponCode), 100)
     }
@@ -262,9 +280,14 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     return `€${(cents / 100).toFixed(2)}`
   }
 
+  const truncateText = (text: string, maxLength: number = 80) => {
+    if (text.length <= maxLength) return text
+    return text.substring(0, maxLength) + '...'
+  }
+
   if (loading) {
     return (
-      <div className="text-center py-8">
+      <div className="text-center py-6">
         <div className="inline-flex items-center gap-2">
           <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
           Loading available tickets...
@@ -274,13 +297,14 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="text-center mb-3">
-        <h3 className="text-base font-semibold flex items-center justify-center gap-2">
-          <Ticket className="h-4 w-4" />
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="text-center">
+        <h3 className="text-lg font-semibold flex items-center justify-center gap-2">
+          <Ticket className="h-5 w-5" />
           Select Your Tickets
         </h3>
-        <p className="text-xs text-gray-600">
+        <p className="text-sm text-gray-600">
           {formData.isEmsClient 
             ? 'Choose your complimentary tickets (1 each)' 
             : 'Choose tickets and quantities'
@@ -290,19 +314,19 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
 
       {/* EMS Customer Notice */}
       {formData.isEmsClient && (
-        <div className="p-2 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center gap-2 text-xs text-green-800">
-            <Ticket className="h-3 w-3" />
+        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-green-800">
+            <Ticket className="h-4 w-4" />
             <span className="font-medium">EMS Customer Benefits: All tickets complimentary (1 each)</span>
           </div>
         </div>
       )}
 
-      {/* Available Tickets */}
-      <div className="space-y-2">
+      {/* Available Tickets - Compact View */}
+      <div className="space-y-3">
         {availableTickets.length === 0 ? (
-          <div className="text-center py-6 text-gray-600">
-            <AlertTriangle className="h-6 w-6 mx-auto mb-2 text-gray-400" />
+          <div className="text-center py-8 text-gray-600">
+            <AlertTriangle className="h-8 w-8 mx-auto mb-3 text-gray-400" />
             <p className="text-sm">No tickets available at this time</p>
           </div>
         ) : (
@@ -310,73 +334,157 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
             const selectedQty = getSelectedQuantity(ticket.id)
             const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
             const isSelected = selectedQty > 0
+            const isExpanded = expandedTickets.has(ticket.id)
+            const hasDescription = ticket.description && ticket.description.trim()
             
             return (
               <div 
                 key={ticket.id} 
-                className={`p-3 border rounded-lg transition-all duration-200 ${
-                  isSelected ? 'ring-1 ring-blue-500 bg-blue-50 border-blue-300' : 'hover:border-blue-300'
+                className={`border rounded-lg transition-all duration-200 ${
+                  isSelected ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-300' : 'hover:border-blue-300'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-medium truncate">{ticket.name}</h4>
-                      {isSelected && (
-                        <Badge variant="secondary" className="text-xs px-1 py-0">
-                          {selectedQty}
-                        </Badge>
+                {/* Main Ticket Row */}
+                <div className="p-3">
+                  <div className="flex items-center justify-between">
+                    {/* Ticket Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="text-sm font-medium truncate">{ticket.name}</h4>
+                        {isSelected && (
+                          <Badge variant="secondary" className="text-xs px-2 py-0.5">
+                            {selectedQty}
+                          </Badge>
+                        )}
+                        {ticket.featured && (
+                          <Badge variant="outline" className="text-xs px-1 py-0.5 text-yellow-700 border-yellow-300">
+                            Featured
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      <div className="flex items-center gap-3">
+                        <span className={`text-sm font-bold ${
+                          formData.isEmsClient ? 'text-green-600' : 'text-blue-600'
+                        }`}>
+                          {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents)}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {ticket.availableStock} available
+                        </span>
+                        {ticket.category && (
+                          <Badge variant="outline" className="text-xs">
+                            {ticket.category}
+                          </Badge>
+                        )}
+                      </div>
+                      
+                      {/* Short Description Preview */}
+                      {hasDescription && (
+                        <div className="mt-1">
+                          <p className="text-xs text-gray-600">
+                            {isExpanded ? ticket.description : truncateText(ticket.description!, 60)}
+                          </p>
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className={`text-sm font-bold ${
-                        formData.isEmsClient ? 'text-green-600' : 'text-blue-600'
-                      }`}>
-                        {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents)}
+                    
+                    {/* Quantity Controls */}
+                    <div className="flex items-center gap-2 ml-3">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => decreaseQuantity(ticket)}
+                        disabled={selectedQty === 0}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      
+                      <span className="w-8 text-center text-sm font-medium">
+                        {selectedQty}
                       </span>
-                      <span className="text-xs text-gray-500">
-                        {ticket.availableStock} available
-                      </span>
+                      
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => increaseQuantity(ticket)}
+                        disabled={selectedQty >= maxQty}
+                        className="h-8 w-8 p-0"
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-1 ml-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => decreaseQuantity(ticket)}
-                      disabled={selectedQty === 0}
-                      className="h-7 w-7 p-0"
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
+                  {/* Bottom Row - Description Toggle & Subtotal */}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
+                    {/* Description Toggle */}
+                    {hasDescription && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => toggleTicketExpanded(ticket.id)}
+                        className="h-6 px-2 text-xs text-gray-600 hover:text-gray-800"
+                      >
+                        <Info className="h-3 w-3 mr-1" />
+                        {isExpanded ? 'Less info' : 'More info'}
+                        {isExpanded ? (
+                          <ChevronUp className="h-3 w-3 ml-1" />
+                        ) : (
+                          <ChevronDown className="h-3 w-3 ml-1" />
+                        )}
+                      </Button>
+                    )}
                     
-                    <span className="w-6 text-center text-sm font-medium">
-                      {selectedQty}
-                    </span>
+                    {/* Subtotal */}
+                    {isSelected && !formData.isEmsClient && (
+                      <div className="text-xs">
+                        <span className="text-gray-600">Subtotal: </span>
+                        <span className="font-medium text-green-600">
+                          {formatPrice(ticket.priceInCents * selectedQty)}
+                        </span>
+                      </div>
+                    )}
                     
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => increaseQuantity(ticket)}
-                      disabled={selectedQty >= maxQty}
-                      className="h-7 w-7 p-0"
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
+                    {isSelected && formData.isEmsClient && (
+                      <div className="text-xs font-medium text-green-600">
+                        Complimentary
+                      </div>
+                    )}
                   </div>
                 </div>
-                
-                {isSelected && !formData.isEmsClient && (
-                  <div className="mt-2 pt-2 border-t border-blue-200">
-                    <div className="flex justify-between text-xs">
-                      <span>Subtotal:</span>
-                      <span className="font-medium">
-                        {formatPrice(ticket.priceInCents * selectedQty)}
-                      </span>
-                    </div>
-                  </div>
-                )}
+
+                {/* Expanded Description */}
+                <Collapsible open={isExpanded}>
+                  <CollapsibleContent>
+                    {hasDescription && (
+                      <div className="px-3 pb-3 border-t border-gray-200 bg-gray-50">
+                        <div className="pt-2">
+                          <p className="text-xs text-gray-700 leading-relaxed">
+                            {ticket.description}
+                          </p>
+                          
+                          {/* Additional ticket info */}
+                          <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-600">
+                            {ticket.maxPerOrder < 10 && (
+                              <span>Max per order: {ticket.maxPerOrder}</span>
+                            )}
+                            {ticket.parsedTags && ticket.parsedTags.length > 0 && (
+                              <div className="flex gap-1">
+                                {ticket.parsedTags.slice(0, 3).map((tag, idx) => (
+                                  <Badge key={idx} variant="outline" className="text-xs">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </CollapsibleContent>
+                </Collapsible>
               </div>
             )
           })
@@ -387,7 +495,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
       {!formData.isEmsClient && formData.selectedTickets.length > 0 && (
         <div className="p-3 border border-gray-200 rounded-lg bg-gray-50">
           <Label className="text-sm font-medium mb-2 flex items-center gap-1">
-            <Tag className="h-3 w-3" />
+            <Tag className="h-4 w-4" />
             Coupon Code (Optional)
           </Label>
           
@@ -399,17 +507,17 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                 onBlur={handleCouponBlur}
                 onKeyPress={handleCouponKeyPress}
                 placeholder="Enter code and press Enter"
-                className="h-8 text-sm pr-8"
+                className="h-9 text-sm pr-8"
                 disabled={validatingCoupon}
               />
               {validatingCoupon && (
-                <Loader2 className="absolute right-2 top-2 h-4 w-4 animate-spin text-gray-400" />
+                <Loader2 className="absolute right-2 top-2.5 h-4 w-4 animate-spin text-gray-400" />
               )}
               {couponValidation?.isValid && (
-                <Check className="absolute right-2 top-2 h-4 w-4 text-green-500" />
+                <Check className="absolute right-2 top-2.5 h-4 w-4 text-green-500" />
               )}
               {couponValidation && !couponValidation.isValid && (
-                <X className="absolute right-2 top-2 h-4 w-4 text-red-500" />
+                <X className="absolute right-2 top-2.5 h-4 w-4 text-red-500" />
               )}
             </div>
             
@@ -418,9 +526,9 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                 variant="outline"
                 size="sm"
                 onClick={removeCoupon}
-                className="h-8 px-2"
+                className="h-9 px-3"
               >
-                <X className="h-3 w-3" />
+                <X className="h-4 w-4" />
               </Button>
             )}
           </div>
@@ -459,9 +567,9 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
 
       {/* Selection Summary */}
       {formData.selectedTickets.length > 0 && (
-        <div className="p-3 border-2 border-blue-200 bg-blue-50 rounded-lg">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-sm font-medium">Summary</h4>
+        <div className="p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-medium">Order Summary</h4>
             <span className="text-xs text-gray-600">{getTotalTickets()} tickets</span>
           </div>
           
@@ -476,7 +584,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
             ))}
             
             {!formData.isEmsClient && (
-              <div className="border-t pt-1 mt-1 space-y-1">
+              <div className="border-t pt-2 mt-2 space-y-1">
                 <div className="flex justify-between text-xs">
                   <span>Subtotal:</span>
                   <span>{formatPrice(getTotalCost())}</span>
@@ -499,7 +607,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
             )}
             
             {formData.isEmsClient && (
-              <div className="border-t pt-1 mt-1">
+              <div className="border-t pt-2 mt-2">
                 <div className="flex justify-between font-bold text-sm">
                   <span>Total:</span>
                   <span className="text-green-600">FREE</span>
@@ -512,9 +620,9 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
 
       {/* Validation Messages */}
       {formData.selectedTickets.length === 0 && (
-        <div className="p-2 bg-orange-50 border border-orange-200 rounded-lg">
-          <div className="flex items-center gap-2 text-xs text-orange-800">
-            <AlertTriangle className="h-3 w-3" />
+        <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-orange-800">
+            <AlertTriangle className="h-4 w-4" />
             <span>Please select at least one ticket to continue</span>
           </div>
         </div>

@@ -1,5 +1,6 @@
-// src/types/registration.ts - Updated with order fields
-// src/types/registration.ts - Add appliedDiscount field
+// SOLUTION 1: Updated types/registration.ts
+// src/types/registration.ts - Complete updated types
+
 export interface RegistrationFormData {
   // Personal Information
   firstName: string
@@ -25,15 +26,12 @@ export interface RegistrationFormData {
   
   // Coupon Support
   couponCode?: string
-  appliedDiscount?: number // ADD THIS LINE
+  appliedDiscount?: number
   
   // Terms
   acceptTerms: boolean
   acceptPrivacyPolicy: boolean
 }
-
-// ... rest of the types remain the same
-
 
 export interface SelectedTicket {
   ticketTypeId: string
@@ -44,14 +42,36 @@ export interface SelectedTicket {
   minPerOrder: number
 }
 
+// ✅ UPDATED: Extended TicketType interface to match your Prisma schema
 export interface TicketType {
   id: string
   name: string
+  description?: string | null          // ✅ Added
+  category?: string | null             // ✅ Added
   priceInCents: number
+  currency?: string                    // ✅ Added
+  totalStock?: number                  // ✅ Added
+  reservedStock?: number               // ✅ Added
+  soldStock?: number                   // ✅ Added
   availableStock: number
+  isActive: boolean
+  availableFrom?: Date | string | null // ✅ Added
+  availableUntil?: Date | string | null// ✅ Added
   maxPerOrder: number
   minPerOrder: number
-  isActive: boolean
+  emsClientsOnly?: boolean             // ✅ Added
+  publicOnly?: boolean                 // ✅ Added
+  sortOrder?: number                   // ✅ Added
+  imageUrl?: string | null             // ✅ Added
+  featured?: boolean                   // ✅ Added
+  tags?: string | null                 // ✅ Added
+  parsedTags?: string[]                // ✅ Added (computed field)
+  createdBy?: string                   // ✅ Added
+  notes?: string | null                // ✅ Added
+  createdAt?: Date | string            // ✅ Added
+  updatedAt?: Date | string            // ✅ Added
+  
+  // ✅ Keep your existing computed properties
   formattedPrice: string
   isAvailable: boolean
   isFree: boolean
@@ -60,4 +80,22 @@ export interface TicketType {
 export interface StepProps {
   formData: RegistrationFormData
   onUpdate: (field: keyof RegistrationFormData, value: any) => void
+}
+
+// ✅ BONUS: Add interface for coupon validation
+export interface CouponValidationResult {
+  isValid: boolean
+  coupon?: {
+    id: string
+    code: string
+    name: string
+    discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
+    discountValue: number
+    minOrderAmount?: number
+    maxUsesPerUser?: number
+    currentUses?: number
+    maxUses?: number
+  }
+  discountAmount?: number
+  message?: string
 }
