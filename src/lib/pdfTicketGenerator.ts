@@ -1,4 +1,4 @@
-// src/lib/pdfTicketGenerator.ts - Updated with correct QR code URLs
+// COMPACT: src/lib/pdfTicketGenerator.ts - Simple ticket type display without price
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -11,8 +11,8 @@ interface TicketData {
   sequence: number
   totalTickets: number
   isEmsClient: boolean
-  ticketTypeName?: string // Added ticket type name
-  ticketTypePrice?: number // Added ticket type price
+  ticketTypeName?: string
+  ticketTypePrice?: number
 }
 
 export class PDFTicketGenerator {
@@ -23,9 +23,9 @@ export class PDFTicketGenerator {
     x: number, 
     y: number
   ): Promise<void> {
-    // Ticket dimensions - more compact
-    const ticketWidth = 260;  // Compact width
-    const ticketHeight = 160; // Compact height
+    // Ticket dimensions - increased height for better fit
+    const ticketWidth = 260;
+    const ticketHeight = 180; // ✅ Increased from 160 to 180
     
     // Get fonts
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -51,12 +51,12 @@ export class PDFTicketGenerator {
       borderWidth: 2,
     });
     
-    // Header section background
+    // Header section background - ✅ FIXED: Fill completely to the top
     page.drawRectangle({
       x: x,
       y: y + ticketHeight - 40,
       width: ticketWidth,
-      height: 35,
+      height: 40, // ✅ Changed from 35 to 40 to fill completely
       color: primaryBlue,
     });
     
@@ -77,9 +77,8 @@ export class PDFTicketGenerator {
       font: regularFont,
       color: rgb(0.8, 0.8, 0.8),
     });
-    
 
-    // Content area starts here - more compact spacing
+    // Content area starts here
     let currentY = y + ticketHeight - 50;
     
     // Ticket Number Section
@@ -91,7 +90,7 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 12;
+    currentY -= 15; // ✅ Increased from 12 to 15 for more gap
     page.drawRectangle({
       x: x + 12,
       y: currentY - 2,
@@ -110,146 +109,63 @@ export class PDFTicketGenerator {
       color: primaryBlue,
     });
     
-    // Sequence indicator for multiple tickets
-    if (ticketData.totalTickets > 1) {
-      page.drawText(`${ticketData.sequence}/${ticketData.totalTickets}`, {
-        x: x + ticketWidth - 75,
-        y: currentY + 2,
-        size: 6,
-        font: regularFont,
-        color: mediumGray,
-      });
-    }
+    // Sequence indicator for multiple tickets - REMOVED
+    // ✅ REMOVED: No more sequence numbers behind QR code
     
     currentY -= 18;
     
-    // 🎫 TICKET TYPE SECTION (SIMPLIFIED - ALWAYS SHOW IF DATA EXISTS)
-    if (ticketData.ticketTypeName) {
-      console.log('✅ Drawing ticket type section for:', ticketData.ticketTypeName)
+    // ✅ SIMPLIFIED: Ticket Type Name - Small and Simple (No title, no background, no price)
+    if (ticketData.ticketTypeName && ticketData.ticketTypeName !== 'General Admission') {
+      console.log('✅ Drawing simple ticket type for:', ticketData.ticketTypeName)
       
-      page.drawText('TICKET TYPE:', {
+      // Simple ticket type name - small and clean
+      page.drawText(ticketData.ticketTypeName.toUpperCase(), {
         x: x + 12,
         y: currentY,
         size: 7,
-        font: boldFont,
-        color: darkGray,
+        font: regularFont,
+        color: mediumGray, // Subtle gray color
       });
       
-      currentY -= 12;
-      page.drawRectangle({
-        x: x + 12,
-        y: currentY - 2,
-        width: ticketWidth - 100,
-        height: 12,
-        color: rgb(0.95, 1, 0.95), // Light green background
-        borderColor: rgb(0.2, 0.7, 0.2), // Green border
-        borderWidth: 1,
-      });
-      
-      // Ticket type name
-      page.drawText(ticketData.ticketTypeName.toUpperCase(), {
-        x: x + 15,
-        y: currentY + 2,
-        size: 8,
-        font: boldFont,
-        color: rgb(0.1, 0.5, 0.1), // Dark green
-      });
-      
-      // Price (if not EMS client)
-      if (!ticketData.isEmsClient && ticketData.ticketTypePrice && ticketData.ticketTypePrice > 0) {
-        const priceText = `€${(ticketData.ticketTypePrice / 100).toFixed(2)}`;
-        page.drawText(priceText, {
-          x: x + ticketWidth - 85,
-          y: currentY + 2,
-          size: 7,
-          font: boldFont,
-          color: rgb(0.1, 0.5, 0.1),
-        });
-      } else if (ticketData.isEmsClient) {
-        page.drawText('VIP FREE', {
-          x: x + ticketWidth - 85,
-          y: currentY + 2,
-          size: 7,
-          font: boldFont,
-          color: gold,
-        });
-      }
-      
-      currentY -= 18;
+      currentY -= 12; // Reduced spacing to bring customer info closer
     } else {
-      console.log('❌ No ticket type name found. ticketData.ticketTypeName =', JSON.stringify(ticketData.ticketTypeName))
+      console.log('❌ No ticket type name to display or is General Admission')
     }
     
-    // Customer Information Section
-    page.drawText('CUSTOMER INFORMATION:', {
-      x: x + 12,
-      y: currentY,
-      size: 7,
-      font: boldFont,
-      color: darkGray,
-    });
-    
-    currentY -= 12;
-    
-    // Customer Name
-    page.drawText('Name:', {
-      x: x + 12,
-      y: currentY,
-      size: 6,
-      font: regularFont,
-      color: mediumGray,
-    });
-    
-    // Truncate long names
-    const displayName = ticketData.customerName.length > 28 
-      ? ticketData.customerName.substring(0, 28) + '...'
+    // ✅ REMOVED "CUSTOMER:" label - customer info directly under ticket type
+    // Customer Name - More compact layout
+    const displayName = ticketData.customerName.length > 32 
+      ? ticketData.customerName.substring(0, 32) + '...'
       : ticketData.customerName;
       
     page.drawText(displayName.toUpperCase(), {
-      x: x + 38,
+      x: x + 12,
       y: currentY,
       size: 7,
       font: boldFont,
       color: darkGray,
     });
     
-    currentY -= 10;
+    currentY -= 9; // Reduced spacing
     
-    // Email
-    page.drawText('Email:', {
-      x: x + 12,
-      y: currentY,
-      size: 6,
-      font: regularFont,
-      color: mediumGray,
-    });
-    
-    // Truncate long emails
-    const displayEmail = ticketData.email.length > 28 
-      ? ticketData.email.substring(0, 28) + '...'
+    // Email - More compact
+    const displayEmail = ticketData.email.length > 35 
+      ? ticketData.email.substring(0, 35) + '...'
       : ticketData.email;
       
     page.drawText(displayEmail, {
-      x: x + 38,
+      x: x + 12,
       y: currentY,
       size: 6,
       font: regularFont,
       color: darkGray,
     });
     
-    currentY -= 10;
+    currentY -= 9; // Reduced spacing
     
-    // Phone
-    page.drawText('Phone:', {
-      x: x + 12,
-      y: currentY,
-      size: 6,
-      font: regularFont,
-      color: mediumGray,
-    });
-    
+    // Phone - More compact
     page.drawText(ticketData.phone, {
-      x: x + 38,
+      x: x + 12,
       y: currentY,
       size: 6,
       font: regularFont,
@@ -257,9 +173,9 @@ export class PDFTicketGenerator {
     });
     
     // Event Details Section - More compact
-    currentY -= 15;
+    currentY -= 12; // Reduced spacing
     
-    page.drawText('EVENT DETAILS:', {
+    page.drawText('EVENT:', {
       x: x + 12,
       y: currentY,
       size: 7,
@@ -267,7 +183,7 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 10;
+    currentY -= 9; // Reduced spacing
     
     page.drawText('June 26 - July 6, 2025', {
       x: x + 12,
@@ -277,7 +193,7 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 8;
+    currentY -= 8; // Reduced spacing
     
     page.drawText('MFCC, Ta\' Qali, Malta', {
       x: x + 12,
@@ -287,7 +203,7 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 8;
+    currentY -= 8; // Reduced spacing
     
     page.drawText('EMS Booth - Main Hall', {
       x: x + 12,
@@ -297,13 +213,12 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    // QR Code Section (positioned on the right side) - more compact
+    // QR Code Section (positioned on the right side) - adjusted for new height
     const qrX = x + ticketWidth - 65;
-    const qrY = y + ticketHeight - 110;
+    const qrY = y + ticketHeight - 130; // ✅ Adjusted for new height
     
     try {
-      // 🔧 UPDATED QR CODE GENERATION
-      // Use the verification URL from your environment or fallback to production
+      // QR Code generation
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://emstickets.com';
       const verificationUrl = `${baseUrl}/staff/verify/${ticketData.ticketNumber}`;
       
@@ -339,22 +254,7 @@ export class PDFTicketGenerator {
         height: 50,
       });
       
-      // QR Code label - more compact
-      page.drawText('SCAN FOR', {
-        x: qrX + 8,
-        y: qrY - 10,
-        size: 5,
-        font: regularFont,
-        color: mediumGray,
-      });
-      
-      page.drawText('VERIFICATION', {
-        x: qrX + 3,
-        y: qrY - 17,
-        size: 5,
-        font: regularFont,
-        color: mediumGray,
-      });
+      // ✅ REMOVED: QR Code labels completely removed
       
     } catch (error) {
       console.error('QR code generation error:', error);
@@ -378,7 +278,7 @@ export class PDFTicketGenerator {
       });
     }
     
-    // Footer section - more compact
+    // Footer section
     page.drawRectangle({
       x: x,
       y: y,
@@ -387,7 +287,7 @@ export class PDFTicketGenerator {
       color: rgb(0.95, 0.95, 0.95),
     });
     
-    // Support contact - Updated to your support email
+    // Support contact
     page.drawText('info@ems.com.mt', {
       x: x + 12,
       y: y + 12,
@@ -405,7 +305,7 @@ export class PDFTicketGenerator {
       color: mediumGray,
     });
     
-    // Sequential number in footer (for multiple tickets)
+    // Sequential number in footer (for multiple tickets) - RESTORED
     if (ticketData.totalTickets > 1) {
       page.drawText(`#${ticketData.sequence}`, {
         x: x + ticketWidth - 20,
@@ -419,7 +319,7 @@ export class PDFTicketGenerator {
   
   static async generateTicketPDF(ticketData: TicketData): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([260, 160]); // Compact single ticket size
+    const page = pdfDoc.addPage([260, 160]);
     
     await this.drawSingleTicket(page, pdfDoc, ticketData, 0, 0);
     
@@ -430,26 +330,25 @@ export class PDFTicketGenerator {
   static async generateAllTicketsPDF(tickets: TicketData[]): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
     
-    // 🔍 DEBUG: Log what we're receiving
+    // DEBUG: Log what we're receiving
     console.log('🎫 PDF Generator called with', tickets.length, 'tickets')
     tickets.forEach((ticket, index) => {
       console.log(`📄 PDF TICKET ${index + 1}:`)
       console.log('  - ticketNumber:', ticket.ticketNumber)
       console.log('  - ticketTypeName:', ticket.ticketTypeName)
-      console.log('  - ticketTypePrice:', ticket.ticketTypePrice)
       console.log('  - isEmsClient:', ticket.isEmsClient)
     })
     
     // A4 page dimensions
     const pageWidth = 595;
     const pageHeight = 842;
-    const ticketWidth = 260;  // Updated compact width
-    const ticketHeight = 160; // Updated compact height
+    const ticketWidth = 260;
+    const ticketHeight = 180; // ✅ Updated height
     const margin = 15;
     
     // Calculate layout - 2 tickets per row, multiple rows per page
     const ticketsPerRow = 2;
-    const ticketsPerCol = Math.floor((pageHeight - 60) / (ticketHeight + margin)); // Leave space for header
+    const ticketsPerCol = Math.floor((pageHeight - 60) / (ticketHeight + margin));
     const ticketsPerPage = ticketsPerRow * ticketsPerCol;
     
     console.log(`Arranging ${tickets.length} tickets: ${ticketsPerRow} per row, ${ticketsPerCol} per column, ${ticketsPerPage} per page`);
@@ -513,7 +412,6 @@ export class PDFTicketGenerator {
       if (currentPage) {
         console.log(`🎨 Drawing ticket ${i + 1}: ${tickets[i].ticketNumber}`)
         console.log('  - Ticket type name:', tickets[i].ticketTypeName)
-        console.log('  - Will show ticket type section:', !!(tickets[i].ticketTypeName && tickets[i].ticketTypeName !== 'undefined' && tickets[i].ticketTypeName !== 'General Admission'))
         
         await this.drawSingleTicket(currentPage, pdfDoc, tickets[i], x, y);
         
@@ -522,7 +420,7 @@ export class PDFTicketGenerator {
         const dashArray = [3, 2];
         
         // Horizontal cut lines
-        if (row > 0) { // Top cut line (except for first row)
+        if (row > 0) {
           currentPage.drawLine({
             start: { x: x - 5, y: y + ticketHeight + (margin/2) },
             end: { x: x + ticketWidth + 5, y: y + ticketHeight + (margin/2) },
@@ -532,7 +430,7 @@ export class PDFTicketGenerator {
         }
         
         // Vertical cut lines
-        if (col > 0) { // Left cut line (except for first column)
+        if (col > 0) {
           currentPage.drawLine({
             start: { x: x - (margin/2), y: y - 5 },
             end: { x: x - (margin/2), y: y + ticketHeight + 5 },
@@ -548,8 +446,7 @@ export class PDFTicketGenerator {
   }
 
   /**
-   * 🎯 UPDATED: Helper method to generate PDF tickets from registration data with ticket types
-   * This integrates with your existing registration flow and includes ticket type information
+   * Helper method to generate PDF tickets from registration data
    */
   static async generateTicketsFromRegistration(registration: any): Promise<Buffer> {
     const customerName = `${registration.firstName} ${registration.lastName}`;
@@ -559,11 +456,11 @@ export class PDFTicketGenerator {
       customerName,
       email: registration.email,
       phone: registration.phone,
-      qrCode: ticket.qrCode, // This will be updated with proper URL in drawSingleTicket
+      qrCode: ticket.qrCode,
       sequence: ticket.ticketSequence || (index + 1),
       totalTickets: registration.tickets.length,
       isEmsClient: registration.isEmsClient,
-      // 🎫 NEW: Include ticket type information
+      // Include ticket type information
       ticketTypeName: ticket.ticketType?.name || 'General Admission',
       ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0
     }));
