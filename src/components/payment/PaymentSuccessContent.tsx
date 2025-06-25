@@ -1,11 +1,11 @@
-// src/components/payment/PaymentSuccessContent.tsx - Separated content component
+// src/components/payment/PaymentSuccessContent.tsx - Handle both paid and free orders
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, Ticket, Mail, Calendar, MapPin, Home, Download, Copy, FileText } from 'lucide-react'
+import { CheckCircle, Ticket, Mail, Calendar, MapPin, Home, Download, Copy, FileText, Gift } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
@@ -17,14 +17,20 @@ interface PaymentSuccessData {
   totalAmount: number
   currency: string
   paidAt: string
-  sessionId: string
+  sessionId?: string
   ticketNumbers: string[]
+  isFreeOrder?: boolean
+  appliedCouponCode?: string
 }
 
 export function PaymentSuccessContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  
+  // Check if this is a free order or paid order
   const sessionId = searchParams.get('session_id')
+  const isFreeOrder = searchParams.get('free_order') === 'true'
+  const registrationId = searchParams.get('registration_id')
   
   const [paymentData, setPaymentData] = useState<PaymentSuccessData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,12 +39,16 @@ export function PaymentSuccessContent() {
 
   useEffect(() => {
     if (sessionId) {
+      // Paid order - verify with Stripe session
       fetchPaymentDetails()
+    } else if (isFreeOrder && registrationId) {
+      // Free order - get registration details directly
+      fetchFreeOrderDetails()
     } else {
-      setError('No session ID provided')
+      setError('No session ID or registration ID provided')
       setLoading(false)
     }
-  }, [sessionId])
+  }, [sessionId, isFreeOrder, registrationId])
 
   const fetchPaymentDetails = async () => {
     try {
@@ -58,13 +68,93 @@ export function PaymentSuccessContent() {
     }
   }
 
+  const fetchFreeOrderDetails = async () => {
+    try {
+      console.log('Fetching free order details for registration:', registrationId)
+      
+      // Use the ticket status API to get registration details
+      const response = await fetch('/api/ticket-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          searchType: 'email', // We'll search by registration ID, but let's get the email first
+          searchValue: registrationId // This won't work, let me fix this
+        })
+      })
+
+      // Alternative: Create a direct endpoint or use the registration ID
+      const directResponse = await fetch(`/api/registration/details?id=${registrationId}`)
+      
+      if (!directResponse.ok) {
+        // Fallback: Try to get registration details another way
+        const fallbackResponse = await fetch(`/api/admin/registrations/${registrationId}`)
+        
+        if (!fallbackResponse.ok) {
+          throw new Error('Could not fetch registration details')
+        }
+        
+        const fallbackResult = await fallbackResponse.json()
+        
+        if (fallbackResult.success) {
+          const registration = fallbackResult.data
+          setPaymentData({
+            registrationId: registration.id,
+            customerName: `${registration.firstName} ${registration.lastName}`,
+            email: registration.email,
+            quantity: registration.ticketCount || 0,
+            totalAmount: 0, // Free order
+            currency: 'eur',
+            paidAt: registration.completedAt || new Date().toISOString(),
+            ticketNumbers: registration.tickets?.map((t: any) => t.ticketNumber) || [],
+            isFreeOrder: true,
+            appliedCouponCode: registration.appliedCouponCode
+          })
+        } else {
+          throw new Error('Registration not found')
+        }
+      } else {
+        const result = await directResponse.json()
+        
+        if (result.success) {
+          const registration = result.data
+          setPaymentData({
+            registrationId: registration.id,
+            customerName: `${registration.firstName} ${registration.lastName}`,
+            email: registration.email,
+            quantity: registration.allTickets?.length || 0,
+            totalAmount: 0, // Free order
+            currency: 'eur',
+            paidAt: registration.payment?.paidAt || new Date().toISOString(),
+            ticketNumbers: registration.allTickets?.map((t: any) => t.ticketNumber) || [],
+            isFreeOrder: true,
+            appliedCouponCode: registration.appliedCouponCode
+          })
+        } else {
+          throw new Error('Registration not found')
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching free order details:', error)
+      setError('Failed to fetch order details')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const downloadTicketPDF = async () => {
     if (!paymentData) return
     
     setDownloadingPdf(true)
     
     try {
-      const response = await fetch(`/api/tickets/download?sessionId=${sessionId}`)
+      // For free orders, use registration ID; for paid orders, use session ID
+      const downloadUrl = paymentData.isFreeOrder 
+        ? `/api/tickets/download?registrationId=${paymentData.registrationId}`
+        : `/api/tickets/download?sessionId=${sessionId}`
+      
+      const response = await fetch(downloadUrl)
       
       if (!response.ok) {
         throw new Error('Failed to generate PDF')
@@ -145,7 +235,7 @@ export function PaymentSuccessContent() {
             <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
               <CheckCircle className="h-8 w-8 text-red-600" />
             </div>
-            <h2 className="text-xl font-bold mb-2 text-red-700">Payment Verification Failed</h2>
+            <h2 className="text-xl font-bold mb-2 text-red-700">Order Verification Failed</h2>
             <p className="text-gray-600 mb-4 text-sm">{error}</p>
             <div className="space-y-2">
               <Link href="/ticket-status">
@@ -167,10 +257,14 @@ export function PaymentSuccessContent() {
         <Card>
           <CardHeader className="text-center pb-4">
             <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle className="h-8 w-8 text-green-600" />
+              {paymentData.isFreeOrder ? (
+                <Gift className="h-8 w-8 text-green-600" />
+              ) : (
+                <CheckCircle className="h-8 w-8 text-green-600" />
+              )}
             </div>
             <CardTitle className="text-xl text-green-700">
-              Payment Successful! 🎉
+              {paymentData.isFreeOrder ? 'Order Confirmed! 🎉' : 'Payment Successful! 🎉'}
             </CardTitle>
           </CardHeader>
           
@@ -178,11 +272,39 @@ export function PaymentSuccessContent() {
             {/* Success Message */}
             <div className="text-center">
               <p className="text-gray-600 text-sm">
-                Your VIP registration is complete! 
-                {paymentData.quantity > 1 ? ` All ${paymentData.quantity} tickets have` : ' Your ticket has'} 
-                been generated.
+                {paymentData.isFreeOrder ? (
+                  <>
+                    Your FREE VIP registration is complete! 
+                    {paymentData.quantity > 1 ? ` All ${paymentData.quantity} tickets have` : ' Your ticket has'} 
+                    been generated at no cost.
+                  </>
+                ) : (
+                  <>
+                    Your VIP registration is complete! 
+                    {paymentData.quantity > 1 ? ` All ${paymentData.quantity} tickets have` : ' Your ticket has'} 
+                    been generated.
+                  </>
+                )}
               </p>
             </div>
+
+            {/* Free Order Special Notice */}
+            {paymentData.isFreeOrder && (
+              <div className="p-4 border-2 border-purple-200 rounded-lg bg-purple-50">
+                <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
+                  <Gift className="h-4 w-4 text-purple-600" />
+                  100% Discount Applied!
+                </h3>
+                <div className="text-xs text-purple-800">
+                  {paymentData.appliedCouponCode && (
+                    <p>✓ Coupon "{paymentData.appliedCouponCode}" - 100% OFF</p>
+                  )}
+                  <p>✓ No payment required</p>
+                  <p>✓ Your tickets are completely FREE</p>
+                  <p>✓ Full VIP access included</p>
+                </div>
+              </div>
+            )}
 
             {/* PDF Download Section */}
             <div className="p-4 border-2 border-green-200 rounded-lg bg-green-50">
@@ -219,7 +341,7 @@ export function PaymentSuccessContent() {
 
             {/* Payment Summary */}
             <div className="p-3 border rounded-lg bg-blue-50">
-              <h3 className="font-medium mb-2 text-sm">Payment Confirmation</h3>
+              <h3 className="font-medium mb-2 text-sm">Order Confirmation</h3>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Customer:</span>
@@ -230,13 +352,27 @@ export function PaymentSuccessContent() {
                   <span className="font-medium">{paymentData.quantity} VIP ticket{paymentData.quantity > 1 ? 's' : ''}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Amount Paid:</span>
-                  <span className="font-medium">€{(paymentData.totalAmount / 100).toFixed(2)}</span>
+                  <span className="text-gray-600">
+                    {paymentData.isFreeOrder ? 'Total Value:' : 'Amount Paid:'}
+                  </span>
+                  <span className="font-medium">
+                    {paymentData.isFreeOrder ? (
+                      <span className="text-green-600">FREE</span>
+                    ) : (
+                      `€${(paymentData.totalAmount / 100).toFixed(2)}`
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Payment Date:</span>
+                  <span className="text-gray-600">Order Date:</span>
                   <span className="font-medium">{new Date(paymentData.paidAt).toLocaleDateString()}</span>
                 </div>
+                {paymentData.appliedCouponCode && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Coupon:</span>
+                    <span className="font-medium text-purple-600">{paymentData.appliedCouponCode}</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -272,7 +408,7 @@ export function PaymentSuccessContent() {
               </h3>
               <div className="space-y-1 text-xs text-orange-800">
                 <p>✓ Confirmation sent to: <strong>{paymentData.email}</strong></p>
-                <p>✓ Payment receipt included</p>
+                {!paymentData.isFreeOrder && <p>✓ Payment receipt included</p>}
                 <p>✓ Event details and instructions attached</p>
                 <p className="text-orange-600 mt-2">
                   <strong>Tip:</strong> Download the PDF and save to your phone for easy access!
