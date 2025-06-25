@@ -1,4 +1,4 @@
-// src/components/admin/AdminLayout.tsx - Updated with Ticket Types navigation
+// src/components/admin/AdminLayout.tsx - Fixed mobile responsiveness
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -103,7 +103,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     }
   }
 
-  const NavItems = ({ mobile = false }) => (
+  const NavItems = ({ mobile = false, onNavigate }: { mobile?: boolean, onNavigate?: () => void }) => (
     <nav className={`space-y-1 ${mobile ? 'px-3 py-4' : 'px-3 py-6'}`}>
       {navigation.map((item) => {
         const isActive = pathname === item.href || 
@@ -113,7 +113,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           <Link
             key={item.name}
             href={item.href}
-            onClick={() => mobile && setSidebarOpen(false)}
+            onClick={onNavigate}
             className={cn(
               'group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200',
               isActive
@@ -160,6 +160,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-green-50/30">
       {/* Mobile Sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetTrigger asChild>
+          {/* This trigger is hidden and controlled programmatically */}
+          <div className="hidden" />
+        </SheetTrigger>
         <SheetContent side="left" className="p-0 w-64 bg-white border-r border-gray-200">
           <div className="flex h-full flex-col">
             {/* Mobile Header */}
@@ -171,7 +175,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </div>
             
             <div className="flex-1 overflow-y-auto">
-              <NavItems mobile={true} />
+              <NavItems mobile={true} onNavigate={() => setSidebarOpen(false)} />
             </div>
             
             <UserSection mobile={true} />
@@ -201,23 +205,30 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* Main Content */}
       <div className="lg:pl-60">
         {/* Top Bar */}
-        <div className="sticky top-0 z-40 flex h-14 flex-shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white/95 backdrop-blur-sm px-4 shadow-sm">
+        <div className="sticky top-0 z-40 flex h-14 flex-shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white/95 backdrop-blur-sm px-4 shadow-sm sm:px-6">
           {/* Mobile Menu Button */}
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="sm" className="lg:hidden hover:bg-green-50">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-          </Sheet>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="lg:hidden hover:bg-green-50 -ml-2"
+            onClick={() => setSidebarOpen(true)}
+          >
+            <Menu className="h-5 w-5" />
+            <span className="sr-only">Open sidebar</span>
+          </Button>
 
           {/* Top Bar Content */}
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex flex-1"></div>
-            <div className="flex items-center gap-x-4 lg:gap-x-6">
+            <div className="flex items-center gap-x-2 sm:gap-x-4 lg:gap-x-6">
               <div className="hidden sm:block text-sm text-gray-600">
                 <span className="font-medium text-green-600">Welcome,</span>{' '}
-                {currentUser?.firstName || 'Admin'}
+                <span className="hidden md:inline">
+                  {currentUser?.firstName || 'Admin'}
+                </span>
+                <span className="md:hidden">
+                  {(currentUser?.firstName || 'Admin').split(' ')[0]}
+                </span>
               </div>
               <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             </div>
@@ -225,8 +236,10 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         </div>
 
         {/* Page Content */}
-        <main className="flex-1">
-          {children}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto max-w-7xl">
+            {children}
+          </div>
         </main>
       </div>
     </div>
