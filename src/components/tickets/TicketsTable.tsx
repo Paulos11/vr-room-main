@@ -1,4 +1,4 @@
-// UPDATED: src/components/tickets/TicketsTable.tsx - Show ticket type and hide collected
+// UPDATED: src/components/tickets/TicketsTable.tsx - Fixed button logic and download
 import React, { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -149,19 +149,20 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
     toast({ title: "Copied!", description: "Ticket number copied to clipboard" })
   }
 
+  // ✅ FIXED: Download all active tickets for this user (excluding USED)
   const handleDownload = () => {
-    // ✅ FIXED: Use relative URL for production compatibility
     const downloadUrl = `/api/admin/tickets/download/${ticket.id}`
     const link = document.createElement('a')
     link.href = downloadUrl
-    link.download = `ticket-${ticket.ticketNumber}.pdf`
+    link.download = `tickets-${ticket.ticketNumber}.pdf` // Will be renamed by server
+    link.target = '_blank' // Fallback: open in new tab
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
     
     toast({
       title: "Download Started",
-      description: `Downloading ticket ${ticket.ticketNumber}`,
+      description: `Downloading active tickets for this customer (excluding used tickets)`,
     })
   }
 
@@ -207,6 +208,7 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
               <button 
                 onClick={copyTicketNumber}
                 className="text-blue-600 hover:text-blue-800 opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Copy ticket number"
               >
                 <Copy className="h-3 w-3" />
               </button>
@@ -281,35 +283,50 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
           </div>
         </TableCell>
 
-        {/* Actions - ✅ UPDATED: Remove collect button, only show Send and Use */}
+        {/* ✅ FIXED: Actions with correct button priority */}
         <TableCell className="py-2">
           <div className="flex gap-1">
-            {/* Download Button */}
+            {/* Download Button - Always available */}
             <Button
               size="sm"
               variant="outline"
               onClick={handleDownload}
               className="h-7 px-2 text-xs hover:bg-green-50"
+              title="Download active tickets for this customer"
             >
               <Download className="h-3 w-3" />
             </Button>
 
-            {/* Send Button */}
+            {/* ✅ FIXED: For GENERATED tickets - Show USE button first (primary), SEND second */}
             {ticket.status === 'GENERATED' && (
-              <Button
-                size="sm"
-                variant="default"
-                onClick={() => onAction(ticket.id, 'SEND')}
-                disabled={processing}
-                className="h-7 px-2 text-xs bg-blue-500 hover:bg-blue-600 text-white"
-              >
-                {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
-              </Button>
+              <>
+                {/* USE Button - Primary action (green) */}
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={() => onAction(ticket.id, 'USE')}
+                  disabled={processing}
+                  className="h-7 px-2 text-xs bg-green-500 hover:bg-green-600 text-white"
+                  title="Check-in ticket (mark as used)"
+                >
+                  {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
+                </Button>
+
+                {/* Send Button - Secondary action (blue outline) */}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onAction(ticket.id, 'SEND')}
+                  disabled={processing}
+                  className="h-7 px-2 text-xs border-blue-500 text-blue-500 hover:bg-blue-50"
+                  title="Mark as sent to customer"
+                >
+                  {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <Send className="h-3 w-3" />}
+                </Button>
+              </>
             )}
 
-            {/* ✅ REMOVED: Collect Button (no longer needed) */}
-
-            {/* Check-in Button - ✅ UPDATED: Allow direct check-in from SENT status */}
+            {/* ✅ FIXED: For SENT tickets - Show USE button only */}
             {ticket.status === 'SENT' && (
               <Button
                 size="sm"
@@ -317,12 +334,13 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
                 onClick={() => onAction(ticket.id, 'USE')}
                 disabled={processing}
                 className="h-7 px-2 text-xs bg-green-500 hover:bg-green-600 text-white"
+                title="Check-in ticket (mark as used)"
               >
                 {processing ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle className="h-3 w-3" />}
               </Button>
             )}
 
-            {/* Cancel Button */}
+            {/* Cancel Button - Available for active tickets */}
             {ticket.status !== 'USED' && ticket.status !== 'CANCELLED' && (
               <Button
                 size="sm"
@@ -330,9 +348,25 @@ const TicketRow = React.memo(({ ticket, index, processing, onAction }: {
                 onClick={() => handleActionWithConfirmation('CANCEL')}
                 disabled={processing}
                 className="h-7 px-2 text-xs"
+                title="Cancel ticket"
               >
                 <X className="h-3 w-3" />
               </Button>
+            )}
+
+            {/* ✅ NEW: Status indicators for completed tickets */}
+            {ticket.status === 'USED' && (
+              <div className="flex items-center text-green-600 text-xs font-medium px-2">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Used
+              </div>
+            )}
+
+            {ticket.status === 'CANCELLED' && (
+              <div className="flex items-center text-red-600 text-xs font-medium px-2">
+                <X className="h-3 w-3 mr-1" />
+                Cancelled
+              </div>
             )}
           </div>
         </TableCell>

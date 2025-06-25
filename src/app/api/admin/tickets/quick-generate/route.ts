@@ -1,19 +1,24 @@
-// src/app/api/admin/tickets/quick-generate/route.ts - Quick ticket generation with registration
+// src/app/api/admin/tickets/quick-generate/route.ts - Simplified version without complex transactions
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
+// ✅ SIMPLIFIED: Basic validation
 const CustomerSchema = z.object({
-  firstName: z.string().min(1),
-  lastName: z.string().min(1),
-  email: z.string().email().optional().or(z.literal('')),
-  phone: z.string().min(8),
-  isEmsClient: z.boolean()
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  isEmsClient: z.boolean().default(false),
+  paymentMethod: z.string().optional().default('CASH')
 })
 
 const TicketSchema = z.object({
   ticketTypeId: z.string(),
-  quantity: z.number().min(1).max(10)
+  name: z.string(),
+  quantity: z.number().min(1).max(50),
+  priceInCents: z.number().min(0),
+  maxStock: z.number()
 })
 
 const QuickGenerateSchema = z.object({
@@ -22,151 +27,162 @@ const QuickGenerateSchema = z.object({
   adminUser: z.string().optional()
 })
 
+// Type for the generated ticket
+type GeneratedTicket = {
+  id: string
+  ticketNumber: string
+  qrCode: string
+  purchasePrice: number
+  status: string
+  ticketSequence: number | null
+  registrationId: string
+  ticketTypeId: string
+  [key: string]: any // For other Prisma fields
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log('🚀 Quick generate request body:', JSON.stringify(body, null, 2))
+    
     const { customer, tickets, adminUser } = QuickGenerateSchema.parse(body)
 
-    // Check if email already exists (if provided)
-    if (customer.email && customer.email.trim()) {
-      const existingRegistration = await prisma.registration.findUnique({
-        where: { email: customer.email }
-      })
-
-      if (existingRegistration) {
-        return NextResponse.json(
-          { success: false, message: 'Email already registered. Use existing customer tab instead.' },
-          { status: 400 }
-        )
-      }
+    // ✅ SIMPLIFIED: Generate defaults immediately
+    const processedCustomer = {
+      firstName: customer.firstName?.trim() || 'Unknown',
+      lastName: customer.lastName?.trim() || 'Customer',
+      email: customer.email?.trim() || `quick-${Date.now()}@admin-generated.local`,
+      phone: customer.phone?.trim() || '+35600000000', // ✅ FIXED: Use zeros instead of timestamp
+      isEmsClient: customer.isEmsClient || false,
+      paymentMethod: customer.paymentMethod || 'CASH'
     }
 
-    // Verify ticket types and stock
-    const ticketTypeIds = tickets.map(t => t.ticketTypeId)
-    const ticketTypes = await prisma.ticketType.findMany({
-      where: { 
-        id: { in: ticketTypeIds },
-        isActive: true
+    console.log('✅ Processed customer:', processedCustomer)
+
+    // Generate unique identifiers
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substr(2, 4).toUpperCase()
+    const idCardNumber = `QK${timestamp}${random}`
+
+    // ✅ STEP 1: Create registration first (no transaction)
+    console.log('Creating registration...')
+    const registration = await prisma.registration.create({
+      data: {
+        firstName: processedCustomer.firstName,
+        lastName: processedCustomer.lastName,
+        email: processedCustomer.email,
+        phone: processedCustomer.phone,
+        idCardNumber,
+        isEmsClient: processedCustomer.isEmsClient,
+        status: 'PENDING',
+        originalAmount: 0,
+        finalAmount: 0
       }
     })
 
-    if (ticketTypes.length !== ticketTypeIds.length) {
-      return NextResponse.json(
-        { success: false, message: 'One or more ticket types not found or inactive' },
-        { status: 400 }
-      )
-    }
+    console.log('✅ Registration created:', registration.id)
 
-    // Validate stock availability
-    for (const ticket of tickets) {
-      const ticketType = ticketTypes.find(tt => tt.id === ticket.ticketTypeId)
-      if (!ticketType) continue
+    // ✅ STEP 2: Create tickets one by one
+    const generatedTickets: GeneratedTicket[] = []
+    let totalOrderAmount = 0
+
+    for (const ticketRequest of tickets) {
+      console.log(`Creating ${ticketRequest.quantity} tickets for ${ticketRequest.name}...`)
       
-      if (ticketType.availableStock < ticket.quantity) {
-        return NextResponse.json(
-          { success: false, message: `Insufficient stock for ${ticketType.name}. Available: ${ticketType.availableStock}` },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Create registration and tickets in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create registration
-      const registration = await tx.registration.create({
-        data: {
-          firstName: customer.firstName,
-          lastName: customer.lastName,
-          email: customer.email || `temp_${Date.now()}@quickticket.local`,
-          phone: customer.phone,
-          idCardNumber: '', // Not required for quick tickets
-          isEmsClient: customer.isEmsClient,
-          customerName: customer.isEmsClient ? `${customer.firstName} ${customer.lastName}` : null,
-          originalAmount: 0,
-          discountAmount: 0,
-          finalAmount: 0,
-          status: 'COMPLETED', // Auto-approve quick tickets
-          adminNotes: `Quick ticket generated by ${adminUser || 'Admin'}`,
-          verifiedAt: new Date(),
-          verifiedBy: adminUser || 'System Admin'
-        }
+      // Get ticket type
+      const ticketType = await prisma.ticketType.findUnique({
+        where: { id: ticketRequest.ticketTypeId }
       })
 
-      const generatedTickets = []
-      
-      for (const ticketRequest of tickets) {
-        const ticketType = ticketTypes.find(tt => tt.id === ticketRequest.ticketTypeId)!
-        
-        for (let i = 0; i < ticketRequest.quantity; i++) {
-          const ticketNumber = `TKT-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
-          const qrCode = `EMS-${registration.id}-${ticketNumber}`
+      if (!ticketType) {
+        throw new Error(`Ticket type ${ticketRequest.ticketTypeId} not found`)
+      }
 
-          const ticket = await tx.ticket.create({
-            data: {
-              registrationId: registration.id,
-              ticketTypeId: ticketRequest.ticketTypeId,
-              ticketNumber,
-              qrCode,
-              purchasePrice: customer.isEmsClient ? 0 : ticketType.priceInCents,
-              eventDate: new Date('2025-06-26'), // Event dates: 26 June - 06 July
-              venue: 'Malta Fairs and Conventions Centre',
-              boothLocation: 'EMS Booth - MFCC',
-              status: 'GENERATED'
-            }
-          })
+      // Calculate price per ticket
+      const pricePerTicket = processedCustomer.isEmsClient ? 0 : Math.round(ticketRequest.priceInCents / ticketRequest.quantity)
 
-          generatedTickets.push(ticket)
-        }
+      // Create individual tickets
+      for (let i = 0; i < ticketRequest.quantity; i++) {
+        const ticketTimestamp = Date.now() + i + Math.random() * 1000
+        const ticketRandom = Math.random().toString(36).substr(2, 6).toUpperCase()
+        const ticketNumber = `T${Math.floor(ticketTimestamp)}${ticketRandom}`
+        const qrCode = `QR${Math.floor(ticketTimestamp)}${ticketRandom}`
 
-        // Update ticket type stock
-        await tx.ticketType.update({
-          where: { id: ticketRequest.ticketTypeId },
+        const ticket: GeneratedTicket = await prisma.ticket.create({
           data: {
-            availableStock: { decrement: ticketRequest.quantity },
-            soldStock: { increment: ticketRequest.quantity }
+            registrationId: registration.id,
+            ticketTypeId: ticketRequest.ticketTypeId,
+            ticketNumber,
+            qrCode,
+            purchasePrice: pricePerTicket,
+            eventDate: new Date('2025-06-26'),
+            venue: 'Malta Fairs and Conventions Centre',
+            boothLocation: 'EMS Booth - MFCC',
+            status: 'GENERATED',
+            ticketSequence: generatedTickets.length + 1
           }
         })
+
+        generatedTickets.push(ticket)
+        console.log(`✅ Created ticket ${i + 1}/${ticketRequest.quantity}: ${ticket.ticketNumber}`)
       }
 
-      return { registration, tickets: generatedTickets }
-    })
-
-    // Log ticket generation
-    if (customer.email && customer.email.trim()) {
-      await prisma.emailLog.create({
+      // Update stock
+      await prisma.ticketType.update({
+        where: { id: ticketRequest.ticketTypeId },
         data: {
-          registrationId: result.registration.id,
-          emailType: 'TICKET_DELIVERY',
-          subject: `${result.tickets.length} Quick Ticket(s) Generated`,
-          recipient: customer.email,
-          status: 'SENT'
+          availableStock: { decrement: ticketRequest.quantity },
+          soldStock: { increment: ticketRequest.quantity }
         }
       })
+
+      totalOrderAmount += ticketRequest.priceInCents
     }
+
+    // ✅ STEP 3: Update registration with totals
+    await prisma.registration.update({
+      where: { id: registration.id },
+      data: {
+        originalAmount: totalOrderAmount,
+        finalAmount: totalOrderAmount,
+        status: processedCustomer.isEmsClient || totalOrderAmount === 0 ? 'COMPLETED' : 'PAYMENT_PENDING'
+      }
+    })
+
+    console.log(`✅ Successfully generated ${generatedTickets.length} tickets for ${processedCustomer.firstName} ${processedCustomer.lastName}`)
 
     return NextResponse.json({
       success: true,
-      message: `Successfully created registration and generated ${result.tickets.length} ticket(s)`,
+      message: `Successfully created registration and generated ${generatedTickets.length} ticket(s)`,
       data: {
         registration: {
-          id: result.registration.id,
-          name: `${result.registration.firstName} ${result.registration.lastName}`,
-          email: result.registration.email,
-          phone: result.registration.phone,
-          isEmsClient: result.registration.isEmsClient
+          id: registration.id,
+          name: `${registration.firstName} ${registration.lastName}`,
+          email: registration.email,
+          phone: registration.phone,
+          isEmsClient: registration.isEmsClient,
+          status: registration.status
         },
-        tickets: result.tickets.map(t => ({
+        tickets: generatedTickets.map(t => ({
           id: t.id,
           ticketNumber: t.ticketNumber,
-          status: t.status
-        }))
+          status: t.status,
+          purchasePrice: t.purchasePrice
+        })),
+        summary: {
+          totalTickets: generatedTickets.length,
+          totalAmount: totalOrderAmount,
+          customerType: processedCustomer.isEmsClient ? 'EMS Customer' : 'Public Customer',
+          paymentMethod: processedCustomer.paymentMethod
+        }
       }
     })
 
   } catch (error: any) {
-    console.error('Error in quick ticket generation:', error)
+    console.error('❌ Error in quick ticket generation:', error)
     
     if (error instanceof z.ZodError) {
+      console.error('❌ Validation errors:', error.errors)
       return NextResponse.json(
         { success: false, message: 'Invalid data provided', errors: error.errors },
         { status: 400 }
@@ -174,7 +190,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, message: 'Failed to generate quick tickets', error: error.message },
+      { success: false, message: 'Failed to create registration and generate tickets', error: error.message },
       { status: 500 }
     )
   }
