@@ -1,9 +1,11 @@
-// FIXED: src/app/api/create-checkout-session/route.ts - Use actual paid prices
+// FIXED: src/app/api/create-checkout-session/route.ts - Handle 100% free orders
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe' // Use centralized config
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import Stripe from 'stripe'
+import { EmailService, RegistrationEmailData } from '@/lib/emailService'
+import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 
 const CheckoutSchema = z.object({
   registrationId: z.string(),
@@ -57,12 +59,132 @@ export async function POST(request: NextRequest) {
       ticketCount: registration.tickets.length
     })
 
+    // ✅ NEW: Handle 100% free orders (bypass Stripe completely)
     if (totalAmount <= 0) {
-      return NextResponse.json(
-        { success: false, message: 'Invalid payment amount' },
-        { status: 400 }
-      )
+      console.log('🎉 Processing 100% free order - bypassing Stripe')
+      
+      try {
+        // Mark as completed in transaction
+        await prisma.$transaction(async (tx) => {
+          // Update registration status
+          await tx.registration.update({
+            where: { id: registrationId },
+            data: { 
+              status: 'COMPLETED',
+              verifiedAt: new Date()
+            }
+          })
+
+          // Update payment record as completed
+          await tx.payment.upsert({
+            where: { registrationId },
+            update: {
+              status: 'SUCCEEDED',
+              paidAt: new Date(),
+              amount: 0
+            },
+            create: {
+              registrationId,
+              stripePaymentId: `free_order_${Date.now()}`,
+              amount: 0,
+              originalAmount: registration.originalAmount || 0,
+              currency: 'eur',
+              status: 'SUCCEEDED',
+              paidAt: new Date()
+            }
+          })
+
+          // Update tickets status to SENT
+          await tx.ticket.updateMany({
+            where: { registrationId: registrationId },
+            data: {
+              status: 'SENT',
+              sentAt: new Date()
+            }
+          })
+
+          // Increment coupon usage for 100% off coupons
+          if (registration.appliedCouponId) {
+            await tx.coupon.update({
+              where: { id: registration.appliedCouponId },
+              data: { currentUses: { increment: 1 } }
+            })
+            console.log(`Coupon ${registration.appliedCouponCode} usage incremented for 100% free order`)
+          }
+        })
+
+        // Send confirmation email with tickets
+        try {
+          const customerName = `${registration.firstName} ${registration.lastName}`
+          console.log(`Generating PDF for free order: ${registration.tickets.length} tickets`)
+          
+          const pdfBuffer = await PDFTicketGenerator.generateTicketsFromRegistration(registration)
+
+          const emailData: RegistrationEmailData = {
+            registrationId: registration.id,
+            customerName,
+            email: registration.email,
+            phone: registration.phone,
+            isEmsClient: registration.isEmsClient,
+            ticketCount: registration.tickets.length,
+            finalAmount: 0, // Free order
+            appliedCouponCode: registration.appliedCouponCode || undefined,
+            tickets: registration.tickets.map(ticket => ({
+              ticketNumber: ticket.ticketNumber,
+              customerName,
+              email: registration.email,
+              phone: registration.phone,
+              qrCode: ticket.qrCode,
+              sequence: ticket.ticketSequence || 1,
+              totalTickets: registration.tickets.length,
+              isEmsClient: registration.isEmsClient
+            }))
+          }
+
+          const emailSent = await EmailService.sendPaymentConfirmation(emailData, pdfBuffer)
+
+          await prisma.emailLog.create({
+            data: {
+              registrationId,
+              emailType: 'PAYMENT_CONFIRMATION',
+              subject: '🎉 Order Confirmed - Your FREE EMS Tickets!',
+              recipient: registration.email,
+              status: emailSent ? 'SENT' : 'FAILED',
+              errorMessage: emailSent ? null : 'Failed to send free order confirmation email'
+            }
+          })
+
+          console.log(`Free order completed successfully: ${registrationId}`)
+
+        } catch (emailError: any) {
+          console.error('Error sending free order confirmation:', emailError)
+          // Don't fail the order if email fails
+        }
+
+        // Return success response for free order
+        return NextResponse.json({
+          success: true,
+          isFreeOrder: true,
+          message: 'Order completed successfully - 100% discount applied!',
+          registrationId,
+          totalAmount: 0,
+          originalAmount: registration.originalAmount,
+          discountAmount: registration.discountAmount,
+          appliedCouponCode: registration.appliedCouponCode,
+          redirectUrl: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/success?free_order=true&registration_id=${registrationId}`
+        })
+
+      } catch (freeOrderError: any) {
+        console.error('Error processing free order:', freeOrderError)
+        return NextResponse.json(
+          { success: false, message: 'Failed to process free order' },
+          { status: 500 }
+        )
+      }
     }
+
+    // ✅ Continue with regular Stripe checkout for paid orders
+    console.log('Processing paid order through Stripe')
 
     // ✅ FIXED: Build line items using ACTUAL purchase prices from tickets
     const ticketGroups = registration.tickets.reduce((groups, ticket) => {
