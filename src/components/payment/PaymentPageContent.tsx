@@ -1,4 +1,4 @@
-// src/components/payment/PaymentPageContent.tsx - Fixed with real pricing and discount display
+// src/components/payment/PaymentPageContent.tsx - Fixed with free order handling
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket, Tag } from 'lucide-react'
+import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket, Tag, Gift } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
@@ -96,7 +96,7 @@ export function PaymentPageContent() {
     }
   }
 
-  const handleStripeCheckout = async () => {
+  const handleCheckout = async () => {
     if (!registration) return
     
     setProcessing(true)
@@ -114,20 +114,38 @@ export function PaymentPageContent() {
 
       const result = await response.json()
 
-      if (result.success && result.checkoutUrl) {
-        // Redirect to Stripe Checkout
-        window.location.href = result.checkoutUrl
+      if (result.success) {
+        if (result.isFreeOrder) {
+          // Handle free order - redirect to success page
+          console.log('🎉 Free order completed!')
+          toast({
+            title: "Order Completed!",
+            description: "Your free tickets have been generated and sent to your email.",
+          })
+          
+          // Redirect to success page for free orders
+          if (result.redirectUrl) {
+            window.location.href = result.redirectUrl
+          } else {
+            router.push(`/payment/success?free_order=true&registration_id=${registration.id}`)
+          }
+        } else if (result.checkoutUrl) {
+          // Regular paid order - redirect to Stripe
+          window.location.href = result.checkoutUrl
+        } else {
+          throw new Error('Invalid response from checkout API')
+        }
       } else {
         toast({
-          title: "Payment Error",
-          description: result.message || "Failed to create checkout session",
+          title: "Checkout Error",
+          description: result.message || "Failed to process order",
           variant: "destructive",
         })
       }
     } catch (error) {
       console.error('Checkout error:', error)
       toast({
-        title: "Payment Error",
+        title: "Checkout Error",
         description: "Network error. Please try again.",
         variant: "destructive",
       })
@@ -137,6 +155,9 @@ export function PaymentPageContent() {
   }
 
   const formatPrice = (cents: number) => `€${(cents / 100).toFixed(2)}`
+  
+  // Check if this is a free order
+  const isFreeOrder = registration && registration.finalAmount <= 0
 
   if (loading) {
     return (
@@ -192,11 +213,22 @@ export function PaymentPageContent() {
         <Card>
           <CardHeader className="pb-4">
             <CardTitle className="text-xl flex items-center gap-2">
-              <Euro className="h-5 w-5" />
-              Secure Payment
+              {isFreeOrder ? (
+                <>
+                  <Gift className="h-5 w-5 text-green-600" />
+                  Free Order Confirmation
+                </>
+              ) : (
+                <>
+                  <Euro className="h-5 w-5" />
+                  Secure Payment
+                </>
+              )}
             </CardTitle>
             <CardDescription className="text-sm">
-              Complete your registration with Stripe
+              {isFreeOrder 
+                ? "Complete your free registration" 
+                : "Complete your registration with secure payment"}
             </CardDescription>
           </CardHeader>
           
@@ -219,7 +251,9 @@ export function PaymentPageContent() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
-                  <Badge variant="secondary" className="text-xs">Payment Required</Badge>
+                  <Badge variant={isFreeOrder ? "default" : "secondary"} className="text-xs">
+                    {isFreeOrder ? "Ready to Complete" : "Payment Required"}
+                  </Badge>
                 </div>
               </div>
             </div>
@@ -234,14 +268,18 @@ export function PaymentPageContent() {
                 {registration.tickets.map((ticket, index) => (
                   <div key={ticket.id} className="flex justify-between text-xs">
                     <span className="text-gray-700">{ticket.ticketType.name}</span>
-                    <span className="font-medium">{formatPrice(ticket.ticketType.priceInCents)}</span>
+                    <span className="font-medium">
+                      {isFreeOrder ? "FREE" : formatPrice(ticket.ticketType.priceInCents)}
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Price Breakdown */}
-            <div className="p-4 border-2 border-blue-200 rounded-lg bg-blue-50">
+            <div className={`p-4 border-2 rounded-lg ${
+              isFreeOrder ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'
+            }`}>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal:</span>
@@ -262,17 +300,28 @@ export function PaymentPageContent() {
                 <div className="border-t pt-2">
                   <div className="flex justify-between items-center">
                     <span className="font-bold text-lg">Total:</span>
-                    <span className="font-bold text-2xl text-blue-900">
-                      {formatPrice(registration.finalAmount)}
+                    <span className={`font-bold text-2xl ${
+                      isFreeOrder ? 'text-green-900' : 'text-blue-900'
+                    }`}>
+                      {isFreeOrder ? "FREE" : formatPrice(registration.finalAmount)}
                     </span>
                   </div>
                 </div>
 
                 {/* Savings highlight */}
                 {registration.discountAmount > 0 && (
-                  <div className="text-center p-2 bg-green-100 border border-green-300 rounded mt-2">
-                    <p className="text-sm font-medium text-green-800">
-                      🎉 You saved {formatPrice(registration.discountAmount)}!
+                  <div className={`text-center p-2 border rounded mt-2 ${
+                    isFreeOrder 
+                      ? 'bg-green-200 border-green-400' 
+                      : 'bg-green-100 border-green-300'
+                  }`}>
+                    <p className={`text-sm font-medium ${
+                      isFreeOrder ? 'text-green-900' : 'text-green-800'
+                    }`}>
+                      🎉 {isFreeOrder 
+                        ? `100% Discount Applied! You saved ${formatPrice(registration.discountAmount)}!`
+                        : `You saved ${formatPrice(registration.discountAmount)}!`
+                      }
                     </p>
                   </div>
                 )}
@@ -307,41 +356,54 @@ export function PaymentPageContent() {
               </div>
             )}
 
-            {/* Security & Trust */}
-            <div className="p-3 border rounded-lg bg-gray-50 flex items-start gap-2">
-              <Shield className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
-              <div className="text-xs text-gray-700">
-                <p className="font-medium">Secure Payment by Stripe</p>
-                <p>Bank-level security. We never see your card details.</p>
+            {/* Security & Trust - Only show for paid orders */}
+            {!isFreeOrder && (
+              <div className="p-3 border rounded-lg bg-gray-50 flex items-start gap-2">
+                <Shield className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
+                <div className="text-xs text-gray-700">
+                  <p className="font-medium">Secure Payment by Stripe</p>
+                  <p>Bank-level security. We never see your card details.</p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Checkout Button */}
             <Button 
-              onClick={handleStripeCheckout}
+              onClick={handleCheckout}
               disabled={processing}
-              className="w-full bg-blue-600 hover:bg-blue-700"
+              className={`w-full ${
+                isFreeOrder 
+                  ? 'bg-green-600 hover:bg-green-700' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
               size="lg"
             >
               {processing ? (
                 <>
                   <Clock className="mr-2 h-4 w-4 animate-spin" />
-                  Loading Checkout...
+                  {isFreeOrder ? 'Completing Order...' : 'Loading Checkout...'}
+                </>
+              ) : isFreeOrder ? (
+                <>
+                  <Gift className="mr-2 h-4 w-4" />
+                  Complete Free Order
                 </>
               ) : (
                 <>
                   <CreditCard className="mr-2 h-4 w-4" />
-                  Pay {formatPrice(registration.finalAmount)} with Stripe
+                  Pay {formatPrice(registration.finalAmount)} Securely
                 </>
               )}
             </Button>
 
             {/* Trust Indicators */}
             <div className="flex items-center justify-center gap-4 pt-2">
-              <div className="flex items-center gap-1 text-xs text-gray-500">
-                <Shield className="h-3 w-3" />
-                <span>SSL Secured</span>
-              </div>
+              {!isFreeOrder && (
+                <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <Shield className="h-3 w-3" />
+                  <span>SSL Secured</span>
+                </div>
+              )}
               <div className="flex items-center gap-1 text-xs text-gray-500">
                 <CheckCircle className="h-3 w-3" />
                 <span>Instant Delivery</span>
@@ -349,8 +411,10 @@ export function PaymentPageContent() {
             </div>
 
             <p className="text-xs text-gray-500 text-center">
-              You'll be redirected to Stripe's secure checkout. 
-              Your ticket{registration.quantity > 1 ? 's' : ''} will be emailed immediately after payment.
+              {isFreeOrder 
+                ? "Your free tickets will be generated and emailed to you immediately."
+                : "You'll be redirected to Stripe's secure checkout. Your tickets will be emailed immediately after payment."
+              }
             </p>
           </CardContent>
         </Card>

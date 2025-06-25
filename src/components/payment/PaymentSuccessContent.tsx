@@ -72,72 +72,72 @@ export function PaymentSuccessContent() {
     try {
       console.log('Fetching free order details for registration:', registrationId)
       
-      // Use the ticket status API to get registration details
-      const response = await fetch('/api/ticket-status', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          searchType: 'email', // We'll search by registration ID, but let's get the email first
-          searchValue: registrationId // This won't work, let me fix this
-        })
-      })
-
-      // Alternative: Create a direct endpoint or use the registration ID
-      const directResponse = await fetch(`/api/registration/details?id=${registrationId}`)
+      // Try the direct registration details endpoint first
+      const response = await fetch(`/api/registrations/details?id=${registrationId}`)
       
-      if (!directResponse.ok) {
-        // Fallback: Try to get registration details another way
-        const fallbackResponse = await fetch(`/api/admin/registrations/${registrationId}`)
+      if (!response.ok) {
+        console.log('Direct endpoint failed, trying fallback method')
+        throw new Error('Direct endpoint failed')
+      }
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        const registration = result.data
         
-        if (!fallbackResponse.ok) {
-          throw new Error('Could not fetch registration details')
-        }
+        // Map the registration data to PaymentSuccessData format
+        setPaymentData({
+          registrationId: registration.id,
+          customerName: `${registration.firstName} ${registration.lastName}`,
+          email: registration.email,
+          quantity: registration.allTickets?.length || 0,
+          totalAmount: registration.finalAmount || 0,
+          currency: 'eur',
+          paidAt: registration.payment?.paidAt || registration.createdAt || new Date().toISOString(),
+          ticketNumbers: registration.allTickets?.map((t: any) => t.ticketNumber) || [],
+          isFreeOrder: true,
+          appliedCouponCode: registration.appliedCouponCode
+        })
         
-        const fallbackResult = await fallbackResponse.json()
-        
-        if (fallbackResult.success) {
-          const registration = fallbackResult.data
-          setPaymentData({
-            registrationId: registration.id,
-            customerName: `${registration.firstName} ${registration.lastName}`,
-            email: registration.email,
-            quantity: registration.ticketCount || 0,
-            totalAmount: 0, // Free order
-            currency: 'eur',
-            paidAt: registration.completedAt || new Date().toISOString(),
-            ticketNumbers: registration.tickets?.map((t: any) => t.ticketNumber) || [],
-            isFreeOrder: true,
-            appliedCouponCode: registration.appliedCouponCode
-          })
-        } else {
-          throw new Error('Registration not found')
-        }
+        console.log('Free order data loaded successfully:', {
+          registrationId: registration.id,
+          quantity: registration.allTickets?.length || 0,
+          status: registration.registrationStatus
+        })
       } else {
-        const result = await directResponse.json()
-        
-        if (result.success) {
-          const registration = result.data
-          setPaymentData({
-            registrationId: registration.id,
-            customerName: `${registration.firstName} ${registration.lastName}`,
-            email: registration.email,
-            quantity: registration.allTickets?.length || 0,
-            totalAmount: 0, // Free order
-            currency: 'eur',
-            paidAt: registration.payment?.paidAt || new Date().toISOString(),
-            ticketNumbers: registration.allTickets?.map((t: any) => t.ticketNumber) || [],
-            isFreeOrder: true,
-            appliedCouponCode: registration.appliedCouponCode
-          })
-        } else {
-          throw new Error('Registration not found')
-        }
+        throw new Error(result.message || 'Registration not found')
       }
     } catch (error) {
       console.error('Error fetching free order details:', error)
-      setError('Failed to fetch order details')
+      
+      // Fallback: Try to get minimal data for the success page
+      try {
+        console.log('Attempting fallback data fetch...')
+        
+        // Set minimal data so the page doesn't fail completely
+        setPaymentData({
+          registrationId: registrationId || '',
+          customerName: 'Valued Customer',
+          email: '',
+          quantity: 0,
+          totalAmount: 0,
+          currency: 'eur',
+          paidAt: new Date().toISOString(),
+          ticketNumbers: [],
+          isFreeOrder: true,
+          appliedCouponCode: ''
+        })
+        
+        // But still show a warning
+        toast({
+          title: "Data Loading Issue",
+          description: "Your order was successful, but we couldn't load all details. Please check your email for confirmation.",
+          variant: "default",
+        })
+        
+      } catch (fallbackError) {
+        setError('Failed to fetch order details. Your order was successful - please check your email for confirmation.')
+      }
     } finally {
       setLoading(false)
     }
@@ -154,6 +154,8 @@ export function PaymentSuccessContent() {
         ? `/api/tickets/download?registrationId=${paymentData.registrationId}`
         : `/api/tickets/download?sessionId=${sessionId}`
       
+      console.log('Downloading PDF from:', downloadUrl)
+      
       const response = await fetch(downloadUrl)
       
       if (!response.ok) {
@@ -167,7 +169,7 @@ export function PaymentSuccessContent() {
       
       const customerName = paymentData.customerName.replace(/[^a-zA-Z0-9]/g, '_')
       const filename = paymentData.quantity === 1 
-        ? `EMS_VIP_Ticket_${paymentData.ticketNumbers[0]}.pdf`
+        ? `EMS_VIP_Ticket_${paymentData.ticketNumbers[0] || 'FREE'}.pdf`
         : `EMS_VIP_Tickets_${customerName}_${paymentData.quantity}tickets.pdf`
       
       link.download = filename
@@ -275,7 +277,7 @@ export function PaymentSuccessContent() {
                 {paymentData.isFreeOrder ? (
                   <>
                     Your FREE VIP registration is complete! 
-                    {paymentData.quantity > 1 ? ` All ${paymentData.quantity} tickets have` : ' Your ticket has'} 
+                    {paymentData.quantity > 1 ? ` All ${paymentData.quantity} tickets have` : paymentData.quantity === 1 ? ' Your ticket has' : ' Your tickets have'} 
                     been generated at no cost.
                   </>
                 ) : (
@@ -339,13 +341,13 @@ export function PaymentSuccessContent() {
               </div>
             </div>
 
-            {/* Payment Summary */}
+            {/* Order Summary */}
             <div className="p-3 border rounded-lg bg-blue-50">
               <h3 className="font-medium mb-2 text-sm">Order Confirmation</h3>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Customer:</span>
-                  <span className="font-medium">{paymentData.customerName}</span>
+                  <span className="font-medium">{paymentData.customerName || 'Valued Customer'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tickets:</span>
@@ -357,7 +359,7 @@ export function PaymentSuccessContent() {
                   </span>
                   <span className="font-medium">
                     {paymentData.isFreeOrder ? (
-                      <span className="text-green-600">FREE</span>
+                      <span className="text-green-600 font-bold">FREE</span>
                     ) : (
                       `€${(paymentData.totalAmount / 100).toFixed(2)}`
                     )}
@@ -407,7 +409,9 @@ export function PaymentSuccessContent() {
                 Email Confirmation
               </h3>
               <div className="space-y-1 text-xs text-orange-800">
-                <p>✓ Confirmation sent to: <strong>{paymentData.email}</strong></p>
+                {paymentData.email && (
+                  <p>✓ Confirmation sent to: <strong>{paymentData.email}</strong></p>
+                )}
                 {!paymentData.isFreeOrder && <p>✓ Payment receipt included</p>}
                 <p>✓ Event details and instructions attached</p>
                 <p className="text-orange-600 mt-2">
@@ -455,7 +459,7 @@ export function PaymentSuccessContent() {
               <div className="space-y-1 text-xs">
                 <div className="flex items-center gap-2">
                   <Mail className="h-3 w-3 text-gray-600" />
-                  <span>support@ems-events.com</span>
+                  <span>info@ems.com.mt</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-gray-600">📞</span>

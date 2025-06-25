@@ -1,11 +1,11 @@
-// FIXED: src/types/registration.ts - Add missing CouponValidationResult type
+// UPDATED: src/types/registration.ts - Optional ID card and multiple registrations support
 
 export interface RegistrationFormData {
   firstName: string
   lastName: string
   email: string
   phone: string
-  idCardNumber: string
+  idCardNumber?: string // ✅ UPDATED: Now optional
   isEmsClient: boolean
   selectedTickets: SelectedTicket[]
   customerName?: string
@@ -26,8 +26,8 @@ export interface SelectedTicket {
   quantity: number
   maxPerOrder: number
   minPerOrder: number
-  
-  // ✅ For package deals
+     
+  // For package deals
   originalTicketId?: string // Original ticket ID for packages
   tierId?: string // Which tier was selected
   packageInfo?: {
@@ -39,7 +39,7 @@ export interface SelectedTicket {
   }
 }
 
-// ✅ ADD: Missing CouponValidationResult interface
+// CouponValidationResult interface
 export interface CouponValidationResult {
   isValid: boolean
   message?: string
@@ -82,14 +82,14 @@ export interface TicketType {
   notes?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
-  
+     
   // Computed properties
   formattedPrice: string
   isAvailable: boolean
   isFree: boolean
   hasTieredPricing?: boolean
-  
-  // ✅ For tiered pricing
+     
+  // For tiered pricing
   pricingTiers?: Array<{
     id: string
     name: string
@@ -111,8 +111,8 @@ export interface TicketType {
       pricePerTicket: number
     }>
   }
-  
-  // ✅ For package deals
+     
+  // For package deals
   originalTicketId?: string
   tierId?: string
   packageInfo?: {
@@ -127,4 +127,27 @@ export interface TicketType {
 export interface StepProps {
   formData: RegistrationFormData
   onUpdate: (field: keyof RegistrationFormData, value: any) => void
+}
+
+// ✅ NEW: Registration status types for better handling
+export type RegistrationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED' | 'PAYMENT_PENDING' | 'COMPLETED'
+
+// ✅ NEW: Registration response type
+export interface RegistrationResponse {
+  success: boolean
+  message: string
+  data?: {
+    id: string
+    email: string
+    isEmsClient: boolean
+    status: RegistrationStatus
+    finalAmount: number
+    appliedCouponCode?: string
+    ticketCount: number
+    emailSent: boolean
+    awaitingApproval?: boolean
+  }
+  existingRegistrationId?: string
+  registrationStatus?: RegistrationStatus
+  errors?: any[]
 }

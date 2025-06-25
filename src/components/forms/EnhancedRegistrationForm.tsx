@@ -1,4 +1,4 @@
-// FIXED: src/components/forms/EnhancedRegistrationForm.tsx - Tiered pricing support
+// FIXED: src/components/forms/EnhancedRegistrationForm.tsx - Optional ID card support
 'use client'
 
 import { useState, useCallback, useMemo } from 'react'
@@ -27,7 +27,7 @@ export function EnhancedRegistrationForm() {
     lastName: '',
     email: '',
     phone: '',
-    idCardNumber: '',
+    idCardNumber: '', // ✅ FIXED: Initialize as empty string instead of undefined
     isEmsClient: false,
     selectedTickets: [],
     panelInterest: false,
@@ -53,9 +53,9 @@ export function EnhancedRegistrationForm() {
   const totalCost = useMemo(() => {
     if (formData.isEmsClient) return 'Free'
     
-    // ✅ FIXED: Use the priceInCents from selectedTickets (which already includes tier calculations)
+    // Use the priceInCents from selectedTickets (which already includes tier calculations)
     const subtotal = formData.selectedTickets.reduce((sum, ticket) => 
-      sum + ticket.priceInCents, 0  // ✅ This already includes tiered discounts from TicketSelectionStep
+      sum + ticket.priceInCents, 0
     )
     
     const discount = formData.appliedDiscount || 0
@@ -68,7 +68,7 @@ export function EnhancedRegistrationForm() {
     return `€${(finalAmount / 100).toFixed(2)}`
   }, [formData.selectedTickets, formData.isEmsClient, formData.appliedDiscount, formData.couponCode])
 
-  // ✅ NEW: Calculate savings from tiered pricing
+  // Calculate savings from tiered pricing
   const tierSavings = useMemo(() => {
     if (formData.isEmsClient) return 0
     
@@ -99,7 +99,7 @@ export function EnhancedRegistrationForm() {
       lastName: '',
       email: '',
       phone: '',
-      idCardNumber: '',
+      idCardNumber: '', // ✅ FIXED: Reset to empty string
       isEmsClient,
       selectedTickets: [],
       panelInterest: false,
@@ -165,14 +165,17 @@ export function EnhancedRegistrationForm() {
     setIsSubmitting(true)
 
     try {
-      // ✅ FIXED: Prepare data with proper ticket pricing (already calculated with tiers)
+      // ✅ FIXED: Prepare data with proper optional field handling
       const cleanedData = {
         ...formData,
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim(),
-        idCardNumber: formData.idCardNumber.trim(),
+        // ✅ FIXED: Handle optional idCardNumber properly
+        idCardNumber: formData.idCardNumber && formData.idCardNumber.trim().length > 0 
+          ? formData.idCardNumber.trim() 
+          : undefined,
         couponCode: formData.couponCode || undefined,
         appliedDiscount: formData.appliedDiscount || 0,
         // Clean up EMS fields
@@ -180,7 +183,7 @@ export function EnhancedRegistrationForm() {
         orderNumber: formData.orderNumber || undefined,
         applicationNumber: formData.applicationNumber || undefined,
         orderDate: formData.orderDate || undefined,
-        // ✅ FIXED: Send tickets with correct pricing and quantity
+        // Send tickets with correct pricing and quantity
         selectedTickets: formData.selectedTickets.map(ticket => ({
           ticketTypeId: ticket.originalTicketId || ticket.ticketTypeId, // Use original ID if package
           name: ticket.name,
@@ -190,6 +193,14 @@ export function EnhancedRegistrationForm() {
           minPerOrder: ticket.minPerOrder
         }))
       }
+
+      console.log('Submitting registration data:', {
+        email: cleanedData.email,
+        isEmsClient: cleanedData.isEmsClient,
+        ticketCount: cleanedData.selectedTickets.length,
+        totalTickets: cleanedData.selectedTickets.reduce((sum, t) => sum + t.quantity, 0),
+        hasIdCard: !!cleanedData.idCardNumber
+      })
 
       const response = await fetch('/api/register', {
         method: 'POST',
@@ -213,13 +224,24 @@ export function EnhancedRegistrationForm() {
           router.push(`/payment?id=${result.data.id}`)
         }
       } else {
-        toast({
-          title: "Registration Failed",
-          description: result.message || "Please try again.",
-          variant: "destructive",
-        })
+        // ✅ ENHANCED: Handle specific error cases
+        if (result.existingRegistrationId) {
+          // EMS customer with pending registration
+          toast({
+            title: "Registration Already Exists",
+            description: result.message,
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Registration Failed",
+            description: result.message || "Please try again.",
+            variant: "destructive",
+          })
+        }
       }
     } catch (error) {
+      console.error('Registration submission error:', error)
       toast({
         title: "Network Error",
         description: "Please check connection and try again.",
@@ -287,7 +309,7 @@ export function EnhancedRegistrationForm() {
                 <div>
                   <span>{totalTickets} ticket{totalTickets > 1 ? 's' : ''} - {totalCost}</span>
                   
-                  {/* ✅ NEW: Show tier savings */}
+                  {/* Show tier savings */}
                   {tierSavings > 0 && !formData.isEmsClient && (
                     <div className="text-green-600 text-xs mt-1">
                       💰 Tier savings: €{(tierSavings / 100).toFixed(2)}

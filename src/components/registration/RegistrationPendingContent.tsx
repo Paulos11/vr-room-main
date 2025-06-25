@@ -423,7 +423,7 @@ export function RegistrationPendingContent() {
               <div className="space-y-1 text-xs">
                 <div className="flex items-center gap-2">
                   <Mail className="h-3 w-3 text-gray-600" />
-                  <span>support@ems-events.com</span>
+                  <span>info@ems.com.mt</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Phone className="h-3 w-3 text-gray-600" />

@@ -1,4 +1,4 @@
-// Enhanced Prisma Schema - prisma/schema.prisma
+// CORRECTED: Enhanced Prisma Schema - Fixed unique constraint issue
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,12 +13,12 @@ model Registration {
   id           String  @id @default(cuid())
   firstName    String  @map("first_name")
   lastName     String  @map("last_name")
-  email        String  @unique
+  email        String // ✅ FIXED: No @unique - allows multiple registrations
   phone        String
-  idCardNumber String  @unique @map("id_card_number")
+  idCardNumber String? @map("id_card_number") // ✅ Optional and no unique constraint
   isEmsClient  Boolean @default(false) @map("is_ems_client")
 
-  // For EMS Clients - UPDATED FIELDS
+  // For EMS Clients
   customerName      String?   @map("customer_name")
   orderNumber       String?   @map("order_number")
   applicationNumber String?   @map("application_number")
@@ -49,6 +49,8 @@ model Registration {
   emailLogs      EmailLog[]
   appliedCoupon  Coupon?         @relation(fields: [appliedCouponId], references: [id])
 
+  // ✅ REMOVED: The problematic unique constraint that was blocking updates
+  // We'll handle EMS customer restrictions in application logic instead
   @@map("registrations")
 }
 
@@ -56,7 +58,7 @@ model Ticket {
   id             String  @id @default(cuid())
   registrationId String  @map("registration_id")
   ticketTypeId   String  @map("ticket_type_id")
-  pricingTierId  String? @map("pricing_tier_id") // ✅ NEW: Which tier was selected
+  pricingTierId  String? @map("pricing_tier_id")
 
   ticketNumber   String  @unique @map("ticket_number")
   ticketSequence Int?    @map("ticket_sequence")
@@ -71,8 +73,8 @@ model Ticket {
   collectedBy String?      @map("collected_by")
 
   // Pricing at time of purchase
-  purchasePrice Int   @map("purchase_price") // Actual price paid
-  tierInfo      Json? @map("tier_info") // ✅ NEW: Store tier details at purchase time
+  purchasePrice Int   @map("purchase_price")
+  tierInfo      Json? @map("tier_info")
 
   // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
@@ -86,87 +88,84 @@ model Ticket {
   // Relations
   registration Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
   ticketType   TicketType      @relation(fields: [ticketTypeId], references: [id])
-  pricingTier  PricingTier?    @relation(fields: [pricingTierId], references: [id]) // ✅ NEW
+  pricingTier  PricingTier?    @relation(fields: [pricingTierId], references: [id])
   checkIns     TicketCheckIn[]
 
   @@map("tickets")
 }
 
-// STEP 1: Updated Prisma Schema - Add to your existing schema.prisma
-
 model TicketType {
   id          String  @id @default(cuid())
-  name        String // e.g., "VR Experience", "Magic Show"
+  name        String
   description String?
   category    String?
 
-  // ✅ NEW: Pricing System
+  // Pricing System
   pricingType PricingType @default(FIXED) @map("pricing_type")
 
-  // For FIXED pricing (existing system)
+  // For FIXED pricing
   priceInCents Int @map("price_in_cents")
 
-  // For TIERED pricing (new system)
+  // For TIERED pricing
   hasTieredPricing Boolean @default(false) @map("has_tiered_pricing")
-  basePrice        Int?    @map("base_price") // Base price for calculating savings
+  basePrice        Int?    @map("base_price")
 
   currency String @default("EUR")
 
-  // Stock Management (keep existing)
+  // Stock Management
   totalStock     Int @default(0) @map("total_stock")
   reservedStock  Int @default(0) @map("reserved_stock")
   soldStock      Int @default(0) @map("sold_stock")
   availableStock Int @default(0) @map("available_stock")
 
-  // Availability (keep existing)
+  // Availability
   isActive       Boolean   @default(true) @map("is_active")
   availableFrom  DateTime? @map("available_from")
   availableUntil DateTime? @map("available_until")
   maxPerOrder    Int       @default(10) @map("max_per_order")
   minPerOrder    Int       @default(1) @map("min_per_order")
 
-  // Target Audience (keep existing)
+  // Target Audience
   emsClientsOnly Boolean @default(false) @map("ems_clients_only")
   publicOnly     Boolean @default(false) @map("public_only")
 
-  // Display & Sorting (keep existing)
+  // Display & Sorting
   sortOrder Int     @default(0) @map("sort_order")
   imageUrl  String? @map("image_url")
   featured  Boolean @default(false)
   tags      String?
 
-  // Admin Info (keep existing)
+  // Admin Info
   createdBy String  @map("created_by")
   notes     String?
 
-  // Timestamps (keep existing)
+  // Timestamps
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   tickets      Ticket[]
-  pricingTiers PricingTier[] // ✅ NEW: One-to-many relation with pricing tiers
+  pricingTiers PricingTier[]
 
   @@map("ticket_types")
 }
 
-// ✅ NEW: PricingTier model for flexible pricing options
 model PricingTier {
   id           String @id @default(cuid())
   ticketTypeId String @map("ticket_type_id")
 
   // Tier Details
-  name        String // e.g., "Single", "Double Pack", "Mega Pack"
-  description String? // e.g., "Best value - Save €35!"
+  name        String
+  description String?
 
   // Pricing
-  priceInCents Int @map("price_in_cents") // €10 = 1000 cents
-  ticketCount  Int @map("ticket_count") // Number of tickets you get
+  priceInCents Int @map("price_in_cents")
+  ticketCount  Int @map("ticket_count")
 
-  // Calculated Fields (for easy querying)
-  pricePerTicket Int   @map("price_per_ticket") // Calculated: priceInCents / ticketCount
-  savingsAmount  Int   @map("savings_amount") // Calculated savings in cents
-  savingsPercent Float @map("savings_percent") // Calculated savings percentage
+  // Calculated Fields
+  pricePerTicket Int   @map("price_per_ticket")
+  savingsAmount  Int   @map("savings_amount")
+  savingsPercent Float @map("savings_percent")
 
   // Display
   sortOrder Int     @default(0) @map("sort_order")
@@ -179,17 +178,14 @@ model PricingTier {
 
   // Relations
   ticketType TicketType @relation(fields: [ticketTypeId], references: [id], onDelete: Cascade)
-  tickets    Ticket[] // Track which tier was selected
+  tickets    Ticket[]
 
   @@map("pricing_tiers")
 }
 
-// ✅ UPDATED: Ticket model to track tier selection
-
-// ✅ NEW: Pricing type enum
 enum PricingType {
-  FIXED // Traditional: €10 = 1 ticket
-  TIERED // New: €3 = 1 ticket, €4 = 2 tickets, €10 = 15 tickets
+  FIXED
+  TIERED
 }
 
 model Payment {
@@ -198,9 +194,9 @@ model Payment {
 
   // Payment Details
   stripePaymentId String @unique @map("stripe_payment_id")
-  amount          Int // Amount in cents (final amount after discounts)
-  originalAmount  Int    @map("original_amount") // Original amount before discounts
-  discountAmount  Int    @default(0) @map("discount_amount") // Discount applied
+  amount          Int
+  originalAmount  Int    @map("original_amount")
+  discountAmount  Int    @default(0) @map("discount_amount")
   currency        String @default("EUR")
 
   // Payment Status
@@ -244,7 +240,7 @@ model Coupon {
   emsClientsOnly Boolean @default(false) @map("ems_clients_only")
   publicOnly     Boolean @default(false) @map("public_only")
 
-  // Applicable Ticket Types (JSON array of ticket type IDs)
+  // Applicable Ticket Types
   applicableTicketTypes String? @map("applicable_ticket_types")
 
   // Admin Info

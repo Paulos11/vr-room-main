@@ -1,6 +1,4 @@
-// SOLUTION: Fixed src/utils/formValidation.ts
-// src/utils/formValidation.ts - Fixed validation logic with EMS required fields
-
+// UPDATED: src/utils/formValidation.ts - ID card optional, multiple registrations support
 import { RegistrationFormData } from '@/types/registration'
 
 export interface ValidationResult {
@@ -41,10 +39,11 @@ export function validateField(fieldName: string, value: any): FieldValidationRes
       return { isValid: true }
 
     case 'idCardNumber':
-      if (!value || value.trim().length < 3) {
-        return { isValid: false, error: 'Please enter your ID card number' }
+      // ✅ UPDATED: ID card is now optional, but if provided it should be valid
+      if (value && value.trim().length > 0 && value.trim().length < 3) {
+        return { isValid: false, error: 'ID card number must be at least 3 characters if provided' }
       }
-      return { isValid: true }
+      return { isValid: true } // Valid even if empty
 
     case 'selectedTickets':
       if (!Array.isArray(value) || value.length === 0) {
@@ -52,7 +51,7 @@ export function validateField(fieldName: string, value: any): FieldValidationRes
       }
       return { isValid: true }
 
-    // ✅ NEW: EMS Customer required field validations
+    // EMS Customer required field validations
     case 'customerName':
       if (!value || value.trim().length < 2) {
         return { isValid: false, error: 'Customer name is required' }
@@ -76,7 +75,7 @@ export function validateField(fieldName: string, value: any): FieldValidationRes
   }
 }
 
-// ✅ NEW: Helper function to validate EMS customer required fields
+// Helper function to validate EMS customer required fields
 export function validateEmsCustomerFields(formData: RegistrationFormData): boolean {
   if (!formData.isEmsClient) return true // Skip validation for non-EMS customers
   
@@ -94,12 +93,12 @@ export function validateStep(step: number, formData: RegistrationFormData): bool
       return validateField('firstName', formData.firstName).isValid &&
              validateField('lastName', formData.lastName).isValid &&
              validateField('email', formData.email).isValid &&
-             validateField('phone', formData.phone).isValid &&
-             validateField('idCardNumber', formData.idCardNumber).isValid
+             validateField('phone', formData.phone).isValid
+             // ✅ REMOVED: ID card validation is no longer required for step completion
 
     case 3: 
       if (formData.isEmsClient) {
-        // ✅ FIXED: EMS Customer Details step - validate required fields
+        // EMS Customer Details step - validate required fields
         return validateEmsCustomerFields(formData)
       } else {
         // Panel Interest step for public customers - always valid since it's optional
@@ -146,14 +145,17 @@ export function validateAllFields(formData: RegistrationFormData): ValidationRes
   const phoneValidation = validateField('phone', formData.phone)
   if (!phoneValidation.isValid) errors.push(`Phone: ${phoneValidation.error}`)
 
-  const idValidation = validateField('idCardNumber', formData.idCardNumber)
-  if (!idValidation.isValid) errors.push(`ID Card: ${idValidation.error}`)
+  // ✅ UPDATED: ID card validation only if provided
+  if (formData.idCardNumber && formData.idCardNumber.trim().length > 0) {
+    const idValidation = validateField('idCardNumber', formData.idCardNumber)
+    if (!idValidation.isValid) errors.push(`ID Card: ${idValidation.error}`)
+  }
 
   // Ticket selection validation
   const ticketValidation = validateField('selectedTickets', formData.selectedTickets)
   if (!ticketValidation.isValid) errors.push(`Tickets: ${ticketValidation.error}`)
 
-  // ✅ NEW: EMS Customer fields validation (if EMS customer)
+  // EMS Customer fields validation (if EMS customer)
   if (formData.isEmsClient) {
     const customerNameValidation = validateField('customerName', formData.customerName)
     if (!customerNameValidation.isValid) errors.push(`Customer name: ${customerNameValidation.error}`)
@@ -180,18 +182,26 @@ export function validateAllFields(formData: RegistrationFormData): ValidationRes
   }
 }
 
-// ✅ BONUS: Helper function to get specific field errors for real-time validation
+// Helper function to get specific field errors for real-time validation
 export function getFieldErrors(formData: RegistrationFormData): Record<string, string> {
   const fieldErrors: Record<string, string> = {}
   
-  // Personal fields
-  const personalFields = ['firstName', 'lastName', 'email', 'phone', 'idCardNumber']
+  // Personal fields (ID card is optional now)
+  const personalFields = ['firstName', 'lastName', 'email', 'phone']
   personalFields.forEach(field => {
     const validation = validateField(field, formData[field as keyof RegistrationFormData])
     if (!validation.isValid && validation.error) {
       fieldErrors[field] = validation.error
     }
   })
+
+  // Check ID card only if provided
+  if (formData.idCardNumber && formData.idCardNumber.trim().length > 0) {
+    const validation = validateField('idCardNumber', formData.idCardNumber)
+    if (!validation.isValid && validation.error) {
+      fieldErrors['idCardNumber'] = validation.error
+    }
+  }
   
   // EMS customer fields (if applicable)
   if (formData.isEmsClient) {

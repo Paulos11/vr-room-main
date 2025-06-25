@@ -1,10 +1,10 @@
-// FIXED: src/components/forms/steps/PersonalInfoStep.tsx - Tiered pricing support
+// UPDATED: src/components/forms/steps/PersonalInfoStep.tsx - Optional ID card + Multiple registrations support
 'use client'
 
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { User, AlertCircle, Tag, TrendingDown } from 'lucide-react'
+import { User, AlertCircle, Tag, TrendingDown, Info } from 'lucide-react'
 import { StepProps } from '@/types/registration'
 import { validateField } from '@/utils/realTimeValidation'
 
@@ -28,7 +28,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
     return `h-9 ${hasError ? 'border-red-500 focus:ring-red-500' : ''}`
   }
 
-  // ✅ FIXED: Calculate pricing with tiered pricing support
+  // Calculate pricing with tiered pricing support
   const calculatePricing = () => {
     if (formData.isEmsClient) {
       return { 
@@ -139,9 +139,24 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           </div>
         )}
         {!fieldErrors.email && (
-          <p className="text-xs text-gray-500 mt-1">
-            We'll send your ticket(s) to this email
-          </p>
+          <div className="space-y-1 mt-1">
+            <p className="text-xs text-gray-500">
+              We'll send your ticket(s) to this email
+            </p>
+            {/* ✅ NEW: Multiple registration notice */}
+            {!formData.isEmsClient && (
+              <p className="text-xs text-blue-600 flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                You can register multiple times with the same email
+              </p>
+            )}
+            {formData.isEmsClient && (
+              <p className="text-xs text-amber-600 flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                EMS customers: Only one pending registration allowed at a time
+              </p>
+            )}
+          </div>
         )}
       </div>
 
@@ -164,15 +179,17 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
         )}
       </div>
 
+      {/* ✅ UPDATED: ID Card now optional */}
       <div>
-        <Label htmlFor="idCard" className="text-sm">ID Card Number *</Label>
+        <Label htmlFor="idCard" className="text-sm">
+          ID Card Number <span className="text-gray-500 text-xs">(Optional)</span>
+        </Label>
         <Input 
           id="idCard"
-          placeholder="ID number"
-          value={formData.idCardNumber}
+          placeholder="ID number (optional)"
+          value={formData.idCardNumber || ''}
           onChange={(e) => handleFieldChange('idCardNumber', e.target.value)}
-          className={`${getFieldClasses('idCardNumber')} placeholder-gray-500`} 
-          required
+          className={`${getFieldClasses('idCardNumber')} placeholder-gray-500`}
         />
         {fieldErrors.idCardNumber && (
           <div className="flex items-center gap-1 mt-1">
@@ -181,13 +198,14 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           </div>
         )}
         {!fieldErrors.idCardNumber && (
-          <p className="text-xs text-gray-500 mt-1">
-            Required for event verification
+          <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+            <Info className="h-3 w-3" />
+            Helps with identity verification (optional)
           </p>
         )}
       </div>
 
-      {/* ✅ ENHANCED: Ticket Summary with Tiered Pricing Support */}
+      {/* Ticket Summary with Tiered Pricing Support */}
       {formData.selectedTickets.length > 0 && (
         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <h4 className="text-sm font-medium mb-2 text-blue-900 flex items-center gap-2">
@@ -196,7 +214,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
           </h4>
           
           <div className="space-y-2">
-            {/* ✅ IMPROVED: Ticket Details with Package Info */}
+            {/* Ticket Details with Package Info */}
             <div className="space-y-1">
               {formData.selectedTickets.map(ticket => (
                 <div key={ticket.ticketTypeId} className="space-y-1">
@@ -225,7 +243,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
               ))}
             </div>
 
-            {/* ✅ ENHANCED: Pricing Breakdown with Tier Savings */}
+            {/* Pricing Breakdown with Tier Savings */}
             {!pricing.showFree && (
               <div className="border-t pt-2 mt-2 space-y-1">
                 {/* Show original price if there are tier savings */}
@@ -272,7 +290,7 @@ export function PersonalInfoStep({ formData, onUpdate }: StepProps) {
                   </span>
                 </div>
 
-                {/* ✅ ENHANCED: Combined Savings Highlight */}
+                {/* Combined Savings Highlight */}
                 {(pricing.tierSavings > 0 || pricing.couponDiscount > 0) && (
                   <div className="text-center p-2 bg-green-100 border border-green-300 rounded mt-2">
                     <p className="text-sm font-medium text-green-800">

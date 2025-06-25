@@ -136,7 +136,7 @@ export default function PaymentCancelledPage() {
             {/* Help Text */}
             <div className="text-center pt-2">
               <p className="text-xs text-gray-500">
-                Need help? Contact us at support@ems-events.com or +356 2123 4567
+                Need help? Contact us at info@ems.com.mt or +356 2123 4567
               </p>
             </div>
           </CardContent>

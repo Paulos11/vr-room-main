@@ -1,4 +1,4 @@
-// FIXED: src/app/api/register/route.ts - Proper EMS approval flow
+// UPDATED: src/app/api/register/route.ts - Support multiple registrations
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
@@ -9,17 +9,17 @@ import { EmailService, RegistrationEmailData } from '@/lib/emailService'
 const SelectedTicketSchema = z.object({
   ticketTypeId: z.string(),
   name: z.string(),
-  priceInCents: z.number(), // ✅ This now contains the final calculated price (including tiers)
+  priceInCents: z.number(),
   quantity: z.number().min(1)
 });
 
-// Main registration schema for validating the request body
+// Updated registration schema - ID card number is optional
 const RegisterSchema = z.object({
   firstName: z.string().min(2).max(50),
   lastName: z.string().min(2).max(50),
   email: z.string().email(),
   phone: z.string().min(8),
-  idCardNumber: z.string().min(3),
+  idCardNumber: z.string().optional(), // ✅ CHANGED: Made optional
   isEmsClient: z.boolean(),
   selectedTickets: z.array(SelectedTicketSchema).min(1),
   customerName: z.string().optional(),
@@ -40,7 +40,7 @@ const RegisterSchema = z.object({
 interface TicketValidationDetail {
   ticketType: TicketType;
   selectedTicket: z.infer<typeof SelectedTicketSchema>;
-  effectivePrice: number; // ✅ NEW: The actual price to charge (including tier discounts)
+  effectivePrice: number;
   ticketTotal: number;
 }
 
@@ -56,27 +56,61 @@ export async function POST(request: NextRequest) {
       appliedDiscount: validatedData.appliedDiscount
     })
 
-    // Check for existing registrations to prevent duplicates
-    const [existingEmailRegistration, existingIdRegistration] = await Promise.all([
-      prisma.registration.findUnique({ where: { email: validatedData.email } }),
-      prisma.registration.findUnique({ where: { idCardNumber: validatedData.idCardNumber } })
-    ]);
+    // ✅ NEW: Updated duplicate checking logic
+    if (validatedData.isEmsClient) {
+      // For EMS customers: Only allow ONE pending registration at a time
+      const existingPendingEmsRegistration = await prisma.registration.findFirst({
+        where: {
+          email: validatedData.email,
+          isEmsClient: true,
+          status: {
+            in: ['PENDING', 'PAYMENT_PENDING'] // Check for any unresolved registrations
+          }
+        }
+      });
 
-    if (existingEmailRegistration) {
-      return NextResponse.json(
-        { success: false, message: 'This email address is already registered for the event' },
-        { status: 400 }
-      );
+      if (existingPendingEmsRegistration) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'You already have a pending EMS registration. Please wait for approval or contact support.',
+            existingRegistrationId: existingPendingEmsRegistration.id,
+            registrationStatus: existingPendingEmsRegistration.status
+          },
+          { status: 409 }
+        );
+      }
+
+      console.log('EMS customer check passed - no pending registrations found');
+    } else {
+      // For general/public customers: No restrictions - they can register multiple times
+      console.log('Public customer - multiple registrations allowed');
     }
 
-    if (existingIdRegistration) {
-      return NextResponse.json(
-        { success: false, message: 'This ID card number is already registered for the event' },
-        { status: 400 }
-      );
+    // ✅ UPDATED: Only check ID card uniqueness if provided and not empty
+    if (validatedData.idCardNumber && validatedData.idCardNumber.trim().length > 0) {
+      const existingIdRegistration = await prisma.registration.findFirst({
+        where: { 
+          idCardNumber: validatedData.idCardNumber.trim(),
+          // Only check within active registrations to allow reuse after cancellation
+          status: {
+            in: ['PENDING', 'VERIFIED', 'PAYMENT_PENDING', 'COMPLETED']
+          }
+        }
+      });
+
+      if (existingIdRegistration) {
+        return NextResponse.json(
+          { 
+            success: false, 
+            message: 'This ID card number is already in use for an active registration. Please use a different ID or contact support if this is an error.' 
+          },
+          { status: 400 }
+        );
+      }
     }
 
-    // ✅ FIXED: Validate tickets and use the pricing sent from frontend (which includes tier calculations)
+    // Validate tickets and use the pricing sent from frontend
     let totalOriginalAmount = 0;
     const ticketValidations: TicketValidationDetail[] = [];
 
@@ -99,9 +133,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ✅ FIXED: Use the price sent from frontend (already includes tier discounts)
       const effectivePrice = validatedData.isEmsClient ? 0 : selectedTicket.priceInCents;
-      const ticketTotal = effectivePrice; // This is already the total for all tickets in the selection
+      const ticketTotal = effectivePrice;
       totalOriginalAmount += ticketTotal;
 
       console.log(`Ticket validation for ${selectedTicket.name}:`, {
@@ -128,8 +161,8 @@ export async function POST(request: NextRequest) {
 
     if (!validatedData.isEmsClient && validatedData.couponCode && discountAmount > 0) {
       const coupon = await prisma.coupon.findUnique({
-        where: { 
-          code: validatedData.couponCode.toUpperCase(),
+        where: {
+           code: validatedData.couponCode.toUpperCase(),
           isActive: true
         }
       });
@@ -141,7 +174,6 @@ export async function POST(request: NextRequest) {
         const meetsMinAmount = !coupon.minOrderAmount || totalOriginalAmount >= coupon.minOrderAmount;
 
         if (isValidTime && hasUsageLeft && meetsMinAmount) {
-          // ✅ FIXED: Use the discount amount sent from frontend (already calculated correctly)
           totalFinalAmount = Math.max(0, totalOriginalAmount - discountAmount);
           appliedCoupon = coupon;
 
@@ -170,36 +202,35 @@ export async function POST(request: NextRequest) {
       finalAmount: totalFinalAmount
     })
 
-    // ✅ CRITICAL FIX: Create registration and handle both flows properly
+    // Create registration and handle both flows
     let result: { registration: any; tickets: any[] };
 
     if (validatedData.isEmsClient) {
       // ===== EMS CUSTOMER FLOW: Registration only, NO tickets yet =====
       result = await prisma.$transaction(async (tx) => {
-        // 1. Create the main registration record - STATUS: PENDING (awaiting admin approval)
+        // Create the main registration record - STATUS: PENDING
         const registration = await tx.registration.create({
           data: {
             firstName: validatedData.firstName,
             lastName: validatedData.lastName,
             email: validatedData.email,
             phone: validatedData.phone,
-            idCardNumber: validatedData.idCardNumber,
+            idCardNumber: validatedData.idCardNumber?.trim() || null, // ✅ UPDATED: Allow null
             isEmsClient: true,
             customerName: validatedData.customerName || null,
             orderNumber: validatedData.orderNumber || null,
             applicationNumber: validatedData.applicationNumber || null,
             orderDate: validatedData.orderDate ? new Date(validatedData.orderDate) : null,
-            originalAmount: 0, // EMS customers don't pay
+            originalAmount: 0,
             discountAmount: 0,
             finalAmount: 0,
             appliedCouponCode: appliedCoupon?.code || null,
             appliedCouponId: appliedCoupon?.id || null,
-            status: 'PENDING' // ✅ CRITICAL: EMS customers start as PENDING for admin approval
+            status: 'PENDING' // EMS customers start as PENDING
           }
         });
 
-        // ✅ IMPORTANT: Store ticket selections for later generation (after approval)
-        // We'll store this in a separate table or JSON field for admin to review
+        // Store ticket selections for later generation
         await tx.registration.update({
           where: { id: registration.id },
           data: {
@@ -211,7 +242,7 @@ export async function POST(request: NextRequest) {
           }
         });
 
-        // 2. Create a panel interest record if checked
+        // Create panel interest if checked
         if (validatedData.panelInterest) {
           await tx.panelInterest.create({
             data: {
@@ -223,10 +254,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // ✅ NO TICKET GENERATION YET - Tickets will be generated when admin approves
-        // ✅ NO STOCK DECREMENT YET - Stock will be decremented when admin approves
-
-        return { registration, tickets: [] }; // Empty tickets array for EMS customers
+        return { registration, tickets: [] };
       });
 
       console.log('EMS customer registration created - awaiting admin approval:', result.registration.id);
@@ -234,32 +262,31 @@ export async function POST(request: NextRequest) {
     } else {
       // ===== PUBLIC CUSTOMER FLOW: Full registration with tickets =====
       result = await prisma.$transaction(async (tx) => {
-        // 1. Create the main registration record
+        // Create the main registration record
         const registration = await tx.registration.create({
           data: {
             firstName: validatedData.firstName,
             lastName: validatedData.lastName,
             email: validatedData.email,
             phone: validatedData.phone,
-            idCardNumber: validatedData.idCardNumber,
+            idCardNumber: validatedData.idCardNumber?.trim() || null, // ✅ UPDATED: Allow null
             isEmsClient: false,
             originalAmount: totalOriginalAmount,
             discountAmount: discountAmount,
             finalAmount: totalFinalAmount,
             appliedCouponCode: appliedCoupon?.code || null,
             appliedCouponId: appliedCoupon?.id || null,
-            status: 'PAYMENT_PENDING' // Public customers need to pay
+            status: 'PAYMENT_PENDING'
           }
         });
 
-        // 2. Create individual tickets with the correct calculated price
+        // Create individual tickets
         const tickets = [];
         let ticketSequence = 1;
-        
+               
         for (const validation of ticketValidations) {
-          // Calculate price per individual ticket
           const pricePerIndividualTicket = Math.round(validation.effectivePrice / validation.selectedTicket.quantity);
-          
+                   
           for (let i = 0; i < validation.selectedTicket.quantity; i++) {
             const ticketNumber = `EMS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
             const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/staff/verify/${ticketNumber}`;
@@ -275,13 +302,13 @@ export async function POST(request: NextRequest) {
                 eventDate: new Date('2025-06-26'),
                 venue: 'Malta Fairs and Conventions Centre',
                 boothLocation: 'EMS Booth - MFCC',
-                status: 'GENERATED' // Public customers get tickets immediately
+                status: 'GENERATED'
               }
             });
             tickets.push(ticket);
           }
 
-          // 3. Update ticket stock atomically for public customers
+          // Update ticket stock
           await tx.ticketType.update({
             where: { id: validation.selectedTicket.ticketTypeId },
             data: {
@@ -291,7 +318,7 @@ export async function POST(request: NextRequest) {
           });
         }
 
-        // 4. Create a panel interest record if checked
+        // Create panel interest if checked
         if (validatedData.panelInterest) {
           await tx.panelInterest.create({
             data: {
@@ -307,13 +334,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 6. EMAIL INTEGRATION - Send appropriate emails based on customer type
+    // EMAIL INTEGRATION
     const customerName = `${validatedData.firstName} ${validatedData.lastName}`;
     let emailSent = false;
-    
+         
     try {
       if (validatedData.isEmsClient) {
-        // ✅ FIXED: For EMS clients - Send REGISTRATION RECEIVED email (NO tickets yet)
+        // For EMS clients - Send registration received email
         console.log('EMS customer registration - sending registration received email:', result.registration.id);
 
         const emailData: RegistrationEmailData = {
@@ -322,16 +349,15 @@ export async function POST(request: NextRequest) {
           email: validatedData.email,
           phone: validatedData.phone,
           isEmsClient: true,
-          ticketCount: validatedData.selectedTickets.reduce((sum, t) => sum + t.quantity, 0), // Requested ticket count
+          ticketCount: validatedData.selectedTickets.reduce((sum, t) => sum + t.quantity, 0),
           finalAmount: 0,
           appliedCouponCode: appliedCoupon?.code,
-          tickets: [] // ✅ NO TICKETS YET - will be generated after admin approval
+          tickets: []
         };
 
-        // ✅ Use the new email template that says "registration received, awaiting approval"
         emailSent = await EmailService.sendEmsRegistrationReceived(emailData);
         console.log('EMS customer registration received email sent:', emailSent);
-        
+               
         await prisma.emailLog.create({
           data: {
             registrationId: result.registration.id,
@@ -342,9 +368,9 @@ export async function POST(request: NextRequest) {
             errorMessage: emailSent ? null : 'Failed to send EMS registration received email'
           }
         });
-        
+               
       } else {
-        // For public customers: Send registration confirmation (payment required)
+        // For public customers: Send registration confirmation
         const emailData: RegistrationEmailData = {
           registrationId: result.registration.id,
           customerName,
@@ -368,7 +394,7 @@ export async function POST(request: NextRequest) {
 
         emailSent = await EmailService.sendRegistrationConfirmation(emailData);
         console.log('Public customer registration email sent:', emailSent);
-        
+               
         await prisma.emailLog.create({
           data: {
             registrationId: result.registration.id,
@@ -399,7 +425,7 @@ export async function POST(request: NextRequest) {
       isEmsClient: validatedData.isEmsClient,
       status: result.registration.status,
       finalAmount: validatedData.isEmsClient ? 0 : totalFinalAmount,
-      ticketCount: validatedData.isEmsClient ? 0 : result.tickets.length // EMS customers have 0 tickets until approved
+      ticketCount: validatedData.isEmsClient ? 0 : result.tickets.length
     })
 
     // Return success response
@@ -415,15 +441,15 @@ export async function POST(request: NextRequest) {
         status: result.registration.status,
         finalAmount: validatedData.isEmsClient ? 0 : totalFinalAmount,
         appliedCouponCode: appliedCoupon?.code,
-        ticketCount: validatedData.isEmsClient ? 0 : result.tickets.length, // EMS shows 0 until approved
+        ticketCount: validatedData.isEmsClient ? 0 : result.tickets.length,
         emailSent: emailSent,
-        awaitingApproval: validatedData.isEmsClient // Flag for frontend to show appropriate message
+        awaitingApproval: validatedData.isEmsClient
       }
     });
 
   } catch (error: any) {
     console.error('Registration Error:', error);
-    
+         
     // Handle specific Prisma errors
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === 'P2002') {
@@ -442,7 +468,7 @@ export async function POST(request: NextRequest) {
         }
       }
     }
-    
+         
     // Handle Zod validation errors
     if (error instanceof z.ZodError) {
       return NextResponse.json(

@@ -304,7 +304,7 @@ export default function RegistrationSuccessPage() {
             <div className="space-y-2 text-sm">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4 text-gray-600" />
-                <span>Email: support@ems-events.com</span>
+                <span>Email: info@ems.com.mt</span>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-gray-600" />

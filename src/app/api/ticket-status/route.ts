@@ -1,35 +1,64 @@
-// src/app/api/ticket-status/route.ts - Fixed for multiple tickets with proper data structure
+// CORRECTED: src/app/api/ticket-status/route.ts - Support multiple registrations per email
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 
 const SearchSchema = z.object({
   searchType: z.enum(['email', 'ticket']),
-  searchValue: z.string().min(1, 'Search value is required')
+  searchValue: z.string().min(1, 'Search value is required'),
+  // ✅ NEW: Optional parameter to get all registrations for an email
+  includeAllRegistrations: z.boolean().optional().default(false)
 })
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { searchType, searchValue } = SearchSchema.parse(body)
+    const { searchType, searchValue, includeAllRegistrations } = SearchSchema.parse(body)
 
-    let registration
+    console.log('Ticket status search:', { searchType, searchValue, includeAllRegistrations })
+
+    let registrations: any[] = []
     let specificTicket = null
 
     if (searchType === 'email') {
-      registration = await prisma.registration.findUnique({
-        where: { email: searchValue },
-        include: {
-          tickets: {
-            include: {
-              ticketType: true
+      // ✅ FIXED: Get all registrations for email or just the most recent one
+      if (includeAllRegistrations) {
+        // Get all registrations for this email
+        registrations = await prisma.registration.findMany({
+          where: { email: searchValue.toLowerCase().trim() },
+          include: {
+            tickets: {
+              include: {
+                ticketType: true
+              },
+              orderBy: { createdAt: 'desc' }
             },
-            orderBy: { createdAt: 'desc' }
+            payment: true,
+            panelInterests: true
           },
-          payment: true,
-          panelInterests: true
+          orderBy: { createdAt: 'desc' }
+        })
+      } else {
+        // Get only the most recent registration
+        const registration = await prisma.registration.findFirst({
+          where: { email: searchValue.toLowerCase().trim() },
+          include: {
+            tickets: {
+              include: {
+                ticketType: true
+              },
+              orderBy: { createdAt: 'desc' }
+            },
+            payment: true,
+            panelInterests: true
+          },
+          orderBy: { createdAt: 'desc' }
+        })
+        
+        if (registration) {
+          registrations = [registration]
         }
-      })
+      }
     } else {
       // Search by ticket number
       const ticket = await prisma.ticket.findUnique({
@@ -52,19 +81,71 @@ export async function POST(request: NextRequest) {
       })
       
       if (ticket) {
-        registration = ticket.registration
+        registrations = [ticket.registration]
         specificTicket = ticket
       }
     }
 
-    if (!registration) {
+    if (registrations.length === 0) {
       return NextResponse.json(
         { success: false, message: 'No registration found with the provided details' },
         { status: 404 }
       )
     }
 
-    // Get the primary ticket (either the searched ticket or the most recent one)
+    // ✅ NEW: Handle multiple registrations response
+    if (includeAllRegistrations && registrations.length > 1) {
+      // Return summary of all registrations
+      const allRegistrationsData = registrations.map((registration: any) => {
+        const primaryTicket = registration.tickets[0] || null
+        
+        return {
+          id: registration.id,
+          firstName: registration.firstName,
+          lastName: registration.lastName,
+          email: registration.email,
+          registrationStatus: registration.status,
+          isEmsClient: registration.isEmsClient,
+          createdAt: registration.createdAt,
+          customerName: registration.customerName,
+          
+          // Summary ticket info
+          ticketCount: registration.tickets.length,
+          ticketsSummary: {
+            total: registration.tickets.length,
+            generated: registration.tickets.filter((t: any) => t.status === 'GENERATED').length,
+            sent: registration.tickets.filter((t: any) => t.status === 'SENT').length,
+            collected: registration.tickets.filter((t: any) => t.status === 'COLLECTED').length,
+            used: registration.tickets.filter((t: any) => t.status === 'USED').length,
+            cancelled: registration.tickets.filter((t: any) => t.status === 'CANCELLED').length
+          },
+          
+          // Primary ticket for preview
+          primaryTicket: primaryTicket ? {
+            ticketNumber: primaryTicket.ticketNumber,
+            status: primaryTicket.status,
+            ticketType: primaryTicket.ticketType?.name
+          } : null,
+          
+          // Payment info
+          paymentStatus: registration.payment?.status || null,
+          totalAmount: registration.finalAmount,
+          
+          // Panel interest
+          hasPanelInterest: registration.panelInterests.length > 0
+        }
+      })
+
+      return NextResponse.json({
+        success: true,
+        multipleRegistrations: true,
+        totalRegistrations: registrations.length,
+        data: allRegistrationsData
+      })
+    }
+
+    // ✅ Single registration response (existing logic)
+    const registration = registrations[0]
     const primaryTicket = specificTicket || registration.tickets[0] || null
 
     // Format the response data
@@ -111,15 +192,15 @@ export async function POST(request: NextRequest) {
       // All tickets summary
       ticketsSummary: {
         total: registration.tickets.length,
-        generated: registration.tickets.filter(t => t.status === 'GENERATED').length,
-        sent: registration.tickets.filter(t => t.status === 'SENT').length,
-        collected: registration.tickets.filter(t => t.status === 'COLLECTED').length,
-        used: registration.tickets.filter(t => t.status === 'USED').length,
-        cancelled: registration.tickets.filter(t => t.status === 'CANCELLED').length
+        generated: registration.tickets.filter((t: any) => t.status === 'GENERATED').length,
+        sent: registration.tickets.filter((t: any) => t.status === 'SENT').length,
+        collected: registration.tickets.filter((t: any) => t.status === 'COLLECTED').length,
+        used: registration.tickets.filter((t: any) => t.status === 'USED').length,
+        cancelled: registration.tickets.filter((t: any) => t.status === 'CANCELLED').length
       },
       
       // All tickets list (for detailed view)
-      allTickets: registration.tickets.map(ticket => ({
+      allTickets: registration.tickets.map((ticket: any) => ({
         id: ticket.id,
         ticketNumber: ticket.ticketNumber,
         status: ticket.status,
@@ -127,6 +208,8 @@ export async function POST(request: NextRequest) {
         issuedAt: ticket.issuedAt,
         sentAt: ticket.sentAt,
         collectedAt: ticket.collectedAt,
+        purchasePrice: ticket.purchasePrice,
+        qrCode: ticket.qrCode,
         ticketType: ticket.ticketType ? {
           name: ticket.ticketType.name,
           description: ticket.ticketType.description
@@ -138,17 +221,31 @@ export async function POST(request: NextRequest) {
         status: registration.payment.status,
         amount: registration.payment.amount,
         currency: registration.payment.currency,
-        paidAt: registration.payment.paidAt
+        paidAt: registration.payment.paidAt,
+        stripePaymentId: registration.payment.stripePaymentId
       } : null,
       
       // Panel interests
-      panelInterests: registration.panelInterests.map(interest => ({
+      panelInterests: registration.panelInterests.map((interest: any) => ({
         id: interest.id,
         panelType: interest.panelType,
         interestLevel: interest.interestLevel,
         status: interest.status
-      }))
+      })),
+
+      // ✅ NEW: Indicate if there are other registrations for this email
+      hasMultipleRegistrations: searchType === 'email' && !includeAllRegistrations ? 
+        await prisma.registration.count({ 
+          where: { email: searchValue.toLowerCase().trim() } 
+        }) > 1 : false
     }
+
+    console.log('Ticket status found:', {
+      registrationId: responseData.id,
+      email: responseData.email,
+      ticketCount: responseData.ticketsSummary.total,
+      hasMultiple: responseData.hasMultipleRegistrations
+    })
 
     return NextResponse.json({
       success: true,
@@ -171,12 +268,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Optional: Add GET method for simpler searches
+// ✅ ENHANCED GET method with multiple registrations support
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams
     const email = searchParams.get('email')
     const ticketNumber = searchParams.get('ticket')
+    const includeAll = searchParams.get('includeAll') === 'true'
     
     if (!email && !ticketNumber) {
       return NextResponse.json(
@@ -190,7 +288,11 @@ export async function GET(request: NextRequest) {
     const searchValue = email || ticketNumber || ''
     
     // Create a mock request body and call POST
-    const mockBody = { searchType, searchValue }
+    const mockBody = { 
+      searchType, 
+      searchValue,
+      includeAllRegistrations: includeAll
+    }
     const mockRequest = {
       json: async () => mockBody
     } as NextRequest
