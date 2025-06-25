@@ -170,10 +170,12 @@ export async function POST(request: NextRequest) {
       finalAmount: totalFinalAmount
     })
 
-    // ✅ CRITICAL FIX: Different flows for EMS vs Public customers
+    // ✅ CRITICAL FIX: Create registration and handle both flows properly
+    let result: { registration: any; tickets: any[] };
+
     if (validatedData.isEmsClient) {
       // ===== EMS CUSTOMER FLOW: Registration only, NO tickets yet =====
-      const result = await prisma.$transaction(async (tx) => {
+      result = await prisma.$transaction(async (tx) => {
         // 1. Create the main registration record - STATUS: PENDING (awaiting admin approval)
         const registration = await tx.registration.create({
           data: {
@@ -231,7 +233,7 @@ export async function POST(request: NextRequest) {
 
     } else {
       // ===== PUBLIC CUSTOMER FLOW: Full registration with tickets =====
-      const result = await prisma.$transaction(async (tx) => {
+      result = await prisma.$transaction(async (tx) => {
         // 1. Create the main registration record
         const registration = await tx.registration.create({
           data: {
@@ -326,7 +328,7 @@ export async function POST(request: NextRequest) {
           tickets: [] // ✅ NO TICKETS YET - will be generated after admin approval
         };
 
-        // ✅ Use a different email template that says "registration received, awaiting approval"
+        // ✅ Use the new email template that says "registration received, awaiting approval"
         emailSent = await EmailService.sendEmsRegistrationReceived(emailData);
         console.log('EMS customer registration received email sent:', emailSent);
         
