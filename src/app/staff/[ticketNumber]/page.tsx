@@ -19,7 +19,11 @@ import {
   Shield,
   ArrowLeft,
   Lock,
-  Scan
+  Scan,
+  Ticket,
+  Calendar,
+  MapPin,
+  Euro
 } from 'lucide-react'
 
 interface StaffSession {
@@ -40,7 +44,13 @@ interface VerificationResult {
     email: string
     isEmsClient: boolean
     ticketType: string
+    ticketTypeDescription?: string
+    ticketTypeCategory?: string
     status: string
+    purchasePrice: number
+    eventDate: string
+    venue: string
+    boothLocation: string
   }
   checkIn?: {
     timestamp: string
@@ -355,7 +365,7 @@ export default function StaffVerificationPage() {
 
           <CardContent className="space-y-6">
             
-            {/* Ticket Details */}
+            {/* Enhanced Ticket Details */}
             {result?.ticket && (
               <div className="bg-white p-4 rounded-xl border space-y-4">
                 
@@ -381,7 +391,46 @@ export default function StaffVerificationPage() {
                   </div>
                 </div>
 
-                {/* Customer Type & Access */}
+                {/* Enhanced Ticket Type Information */}
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                    <Ticket className="h-4 w-4" />
+                    Ticket Information
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-blue-700">Access Type:</span>
+                      <Badge variant="outline" className="font-medium text-blue-800 bg-white">
+                        {result.ticket.ticketType}
+                      </Badge>
+                    </div>
+                    
+                    {result.ticket.ticketTypeCategory && (
+                      <div className="flex justify-between items-center">
+                        <span className="font-medium text-blue-700">Category:</span>
+                        <Badge variant="secondary" className="text-blue-700">
+                          {result.ticket.ticketTypeCategory}
+                        </Badge>
+                      </div>
+                    )}
+                    
+                    {result.ticket.ticketTypeDescription && (
+                      <div className="text-sm text-blue-600 italic p-2 bg-blue-100 rounded">
+                        {result.ticket.ticketTypeDescription}
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium text-blue-700">Price Paid:</span>
+                      <span className="font-semibold text-blue-800 flex items-center gap-1">
+                        <Euro className="h-3 w-3" />
+                        {result.ticket.isEmsClient ? 'FREE' : `€${(result.ticket.purchasePrice / 100).toFixed(2)}`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Customer Type & Status */}
                 <div className="grid grid-cols-1 gap-3">
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
                     <span className="font-medium text-gray-700">Customer Type:</span>
@@ -396,10 +445,35 @@ export default function StaffVerificationPage() {
                   </div>
 
                   <div className="flex justify-between items-center p-3 bg-gray-50 rounded-lg">
-                    <span className="font-medium text-gray-700">Access Type:</span>
-                    <Badge variant="outline" className="font-medium">
-                      {result.ticket.ticketType}
+                    <span className="font-medium text-gray-700">Ticket Status:</span>
+                    <Badge 
+                      variant={result.ticket.status === 'USED' ? 'secondary' : 'outline'} 
+                      className="font-medium"
+                    >
+                      {result.ticket.status}
                     </Badge>
+                  </div>
+                </div>
+
+                {/* Event Details */}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <h3 className="font-semibold text-green-900 mb-3 flex items-center gap-2">
+                    <MapPin className="h-4 w-4" />
+                    Event Details
+                  </h3>
+                  <div className="space-y-2 text-sm text-green-800">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3" />
+                      <span>{new Date(result.ticket.eventDate).toLocaleDateString()}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-3 w-3" />
+                      <span>{result.ticket.venue}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-green-600">📍</span>
+                      <span>{result.ticket.boothLocation}</span>
+                    </div>
                   </div>
                 </div>
 

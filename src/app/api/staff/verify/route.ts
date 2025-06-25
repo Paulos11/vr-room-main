@@ -39,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`🎫 Staff ${staffId} verifying ticket: ${ticketNumber}`)
 
-    // Get ticket from database with all related data
+    // Get ticket from database with all related data including ticket type details
     const ticket = await prisma.ticket.findUnique({
       where: { ticketNumber },
       include: {
@@ -53,7 +53,11 @@ export async function POST(request: NextRequest) {
           },
         },
         ticketType: {
-          select: { name: true },
+          select: { 
+            name: true,
+            description: true,
+            category: true,
+          },
         },
         checkIns: {
           orderBy: { checkedInAt: 'desc' },
@@ -70,13 +74,20 @@ export async function POST(request: NextRequest) {
       })
     }
     
+    // Enhanced ticket response with ticket type information
     const responseTicket = {
         ticketNumber: ticket.ticketNumber,
         customerName: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
         email: ticket.registration.email,
         isEmsClient: ticket.registration.isEmsClient,
         ticketType: ticket.ticketType?.name || 'Event Access',
+        ticketTypeDescription: ticket.ticketType?.description || null,
+        ticketTypeCategory: ticket.ticketType?.category || null,
         status: ticket.status,
+        purchasePrice: ticket.purchasePrice,
+        eventDate: ticket.eventDate.toISOString(),
+        venue: ticket.venue,
+        boothLocation: ticket.boothLocation,
     };
 
     if (ticket.registration.status !== 'COMPLETED') {
@@ -136,7 +147,6 @@ export async function POST(request: NextRequest) {
         console.error("DATABASE ERROR during check-in:", dbError);
         // Don't block entry if logging fails. The main checks passed.
     }
-
 
     return NextResponse.json({
       success: true,

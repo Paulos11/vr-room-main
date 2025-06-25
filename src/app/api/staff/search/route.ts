@@ -34,29 +34,90 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // 3. Perform the database search using `endsWith`
+    // 3. Perform the database search with ticket type information
     const tickets = await prisma.ticket.findMany({
       where: {
-        ticketNumber: {
-          endsWith: query.toUpperCase(),
-        },
+        OR: [
+          // Search by ticket number
+          {
+            ticketNumber: {
+              endsWith: query.toUpperCase(),
+            },
+          },
+          // Search by customer name
+          {
+            registration: {
+              OR: [
+                {
+                  firstName: {
+                    contains: query,
+                    mode: 'insensitive',
+                  },
+                },
+                {
+                  lastName: {
+                    contains: query,
+                    mode: 'insensitive',
+                  },
+                },
+              ],
+            },
+          },
+          // Search by ticket type name
+          {
+            ticketType: {
+              name: {
+                contains: query,
+                mode: 'insensitive',
+              },
+            },
+          },
+        ],
       },
       select: {
         ticketNumber: true,
         status: true,
+        purchasePrice: true,
         registration: {
           select: {
             firstName: true,
             lastName: true,
+            email: true,
+            isEmsClient: true,
+          },
+        },
+        ticketType: {
+          select: {
+            name: true,
+            category: true,
           },
         },
       },
-      take: 5, // Limit results to 5
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 10, // Increased limit to 10 results
     })
 
-    console.log(`Staff ${authResult.staffId} searched for "*${query}", found ${tickets.length} results.`)
+    // 4. Format the response with ticket type information
+    const formattedResults = tickets.map(ticket => ({
+      ticketNumber: ticket.ticketNumber,
+      status: ticket.status,
+      purchasePrice: ticket.purchasePrice,
+      ticketTypeName: ticket.ticketType?.name || 'Unknown',
+      ticketTypeCategory: ticket.ticketType?.category || null,
+      registration: {
+        firstName: ticket.registration.firstName,
+        lastName: ticket.registration.lastName,
+        email: ticket.registration.email,
+        isEmsClient: ticket.registration.isEmsClient,
+        fullName: `${ticket.registration.firstName} ${ticket.registration.lastName}`,
+      },
+    }))
 
-    return NextResponse.json(tickets)
+    console.log(`Staff ${authResult.staffId} searched for "${query}", found ${formattedResults.length} results.`)
+
+    return NextResponse.json(formattedResults)
 
   } catch (error) {
     console.error('❌ Ticket search API error:', error)
