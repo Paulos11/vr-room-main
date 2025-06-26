@@ -65,7 +65,7 @@ export const metadata: Metadata = {
     siteName: 'EMS Trade Fair',
     images: [
       {
-        url: '/og-image.jpg',
+        url: '/ems-tickets.jpg',
         width: 1200,
         height: 630,
         alt: 'EMS Trade Fair 2025 at MFCC Ta\' Qali Malta',
@@ -76,7 +76,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'EMS Trade Fair 2025 | MFCC Malta | FREE VIP Tickets',
     description: 'Join us at Malta Fairs & Conventions Centre Ta\' Qali for entertainment, solar panels & VIP experience!',
-    images: ['/twitter-image.jpg'],
+    images: ['/ems-tickets.jpg'],
   },
   alternates: {
     canonical: baseUrl,
@@ -97,6 +97,22 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
       <head>
+        {/* Google Ads Conversion Tracking */}
+        <script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=AW-17267533077"
+        />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', 'AW-17267533077');
+            `,
+          }}
+        />
+        
         {/* Additional SEO Meta Tags */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#10b981" />
@@ -147,7 +163,7 @@ export default function RootLayout({
                 "validFrom": "2025-01-01T00:00:00+02:00"
               },
               "image": [
-                `${baseUrl}/event-image.jpg`
+                `${baseUrl}/ems-tickets.jpg`
               ]
             })
           }}
