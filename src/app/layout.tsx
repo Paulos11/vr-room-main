@@ -21,7 +21,7 @@ const inter = Inter({
 
 // Fix metadataBase to resolve build warnings
 const baseUrl = process.env.NODE_ENV === 'production' 
-  ? 'https://tickets.ems.com.mt'
+  ? 'https://emstickets.com'
   : 'http://localhost:3000';
 
 export const metadata: Metadata = {
