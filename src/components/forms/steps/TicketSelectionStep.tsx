@@ -1,4 +1,4 @@
-// FIXED: src/components/forms/steps/TicketSelectionStep.tsx - Compact with quantity discounts
+// COMPLETE FIXED: src/components/forms/steps/TicketSelectionStep.tsx - Auto-select all tickets with EMS_ECOFLOW
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -15,10 +15,15 @@ import {
   Check, 
   X, 
   Loader2,
-  TrendingDown
+  TrendingDown,
+  Gift
 } from 'lucide-react'
 import { StepProps, TicketType, SelectedTicket, RegistrationFormData, CouponValidationResult } from '@/types/registration'
 import { toast } from '@/components/ui/use-toast'
+
+// ✅ FREE TICKET COUPON CONFIGURATION
+const FREE_TICKET_COUPON = 'EMS_ECOFLOW'
+const FREE_TICKET_COUPONS = ['EMS_ECOFLOW']
 
 export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const [availableTickets, setAvailableTickets] = useState<TicketType[]>([])
@@ -79,13 +84,73 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     }
   }
 
+  // ✅ Check if current coupon is a free ticket coupon
+  const isFreeTicketCoupon = (code: string): boolean => {
+    return FREE_TICKET_COUPONS.includes(code.toUpperCase())
+  }
+
+  // ✅ FIXED: Validate coupon with auto-select all tickets functionality
   const validateCoupon = async (code: string) => {
     if (!code.trim() || formData.isEmsClient) return
 
     setValidatingCoupon(true)
     try {
       const totalAmount = getTotalCost()
+      const totalTickets = getTotalTickets()
       
+      // ✅ SPECIAL HANDLING: Free ticket coupon
+      if (isFreeTicketCoupon(code)) {
+        console.log('Processing free ticket coupon:', code.toUpperCase())
+        
+        // ✅ FIXED: Always auto-select ALL available tickets (1 each)
+        const autoSelectedTickets: SelectedTicket[] = availableTickets.map(ticket => {
+          const pricing = calculatePriceForQuantity(ticket, 1)
+          return {
+            ticketTypeId: ticket.id,
+            name: ticket.name,
+            priceInCents: pricing.priceInCents,
+            quantity: 1,
+            maxPerOrder: ticket.maxPerOrder,
+            minPerOrder: ticket.minPerOrder
+          }
+        })
+        
+        // Update selected tickets to include all available tickets
+        onUpdate('selectedTickets', autoSelectedTickets)
+        
+        // Calculate total discount (all tickets at original price)
+        const totalTicketPrice = availableTickets.reduce((sum, ticket) => {
+          return sum + ticket.priceInCents
+        }, 0)
+        
+        // Set up fake coupon validation result for free ticket
+        setCouponValidation({
+          isValid: true,
+          coupon: {
+            id: 'free-ticket-special',
+            code: code.toUpperCase(),
+            name: 'Free Ticket Coupon 🎉',
+            discountType: 'FIXED_AMOUNT',
+            discountValue: totalTicketPrice,
+            description: 'Special promotion - All tickets free!'
+          },
+          discountAmount: totalTicketPrice,
+          message: 'Free ticket applied! All available tickets are now FREE! 🎉'
+        })
+        
+        onUpdate('couponCode', code.toUpperCase())
+        onUpdate('appliedDiscount', totalTicketPrice)
+        
+        toast({
+          title: "🎉 All Tickets FREE!",
+          description: `All ${availableTickets.length} ticket types selected and are now completely free!`,
+        })
+        
+        setValidatingCoupon(false)
+        return
+      }
+      
+      // ✅ REGULAR COUPON VALIDATION (existing logic)
       const validationData = {
         code: code.toUpperCase(),
         orderAmount: totalAmount,
@@ -171,6 +236,10 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     setCouponTouched(false)
     onUpdate('couponCode', '')
     onUpdate('appliedDiscount', 0)
+    // Reset tickets to empty when removing free coupon
+    if (isFreeTicketCoupon(formData.couponCode || '')) {
+      onUpdate('selectedTickets', [])
+    }
   }
 
   const getSelectedQuantity = (ticketTypeId: string): number => {
@@ -178,7 +247,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     return selected ? selected.quantity : 0
   }
 
-  // ✅ FIXED: Calculate price for quantity based on tiers
+  // ✅ Calculate price for quantity based on tiers
   const calculatePriceForQuantity = (ticket: TicketType, quantity: number) => {
     if (formData.isEmsClient || !ticket.hasTieredPricing || !ticket.pricingTiers) {
       return {
@@ -253,17 +322,47 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     
     onUpdate('selectedTickets', currentSelected)
     
-    if (couponValidation?.isValid && couponCode) {
+    // ✅ Re-validate free ticket coupon if active
+    if (isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid) {
+      setTimeout(() => {
+        // Recalculate total discount for all available tickets
+        const totalPrice = availableTickets.reduce((sum, ticket) => {
+          return sum + ticket.priceInCents
+        }, 0)
+        onUpdate('appliedDiscount', totalPrice)
+      }, 100)
+    } else if (couponValidation?.isValid && couponCode) {
       setTimeout(() => validateCoupon(couponCode), 100)
     }
   }
 
+  // ✅ Increase quantity with free ticket restrictions
   const increaseQuantity = (ticket: TicketType) => {
     const currentQty = getSelectedQuantity(ticket.id)
     const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
     
-    if (currentQty < maxQty) {
-      updateTicketQuantity(ticket, currentQty + 1)
+    // ✅ FREE TICKET RESTRICTION: Check if free coupon is active
+    const activeFreeTicketCoupon = isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid
+    
+    if (activeFreeTicketCoupon) {
+      // For free ticket coupon: Allow maximum 1 per ticket type
+      if (currentQty >= 1) {
+        toast({
+          title: "Free ticket limit reached",
+          description: "This coupon allows only 1 ticket per type",
+          variant: "destructive",
+        })
+        return
+      }
+      // Allow adding 1 ticket of this type
+      if (currentQty < 1) {
+        updateTicketQuantity(ticket, currentQty + 1)
+      }
+    } else {
+      // Normal quantity increase
+      if (currentQty < maxQty) {
+        updateTicketQuantity(ticket, currentQty + 1)
+      }
     }
   }
 
@@ -281,7 +380,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const getTotalCost = (): number => {
     if (formData.isEmsClient) return 0
     
-    // ✅ FIXED: Use the actual calculated price from selected tickets (which includes tier discounts)
+    // ✅ Use the actual calculated price from selected tickets (which includes tier discounts)
     return formData.selectedTickets.reduce((sum, ticket) => 
       sum + ticket.priceInCents, 0
     )
@@ -338,6 +437,19 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         </div>
       )}
 
+      {/* ✅ FREE TICKET COUPON ACTIVE NOTICE - Only show AFTER coupon is applied */}
+      {!formData.isEmsClient && isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid && (
+        <div className="p-3 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg">
+          <div className="flex items-center gap-2 text-sm text-purple-800">
+            <Gift className="h-4 w-4" />
+            <span className="font-medium">🎉 Free Ticket Coupon Active - All tickets FREE!</span>
+          </div>
+          <p className="text-xs text-purple-600 mt-1">
+            All available ticket types have been selected and are completely FREE! Each type is limited to quantity 1.
+          </p>
+        </div>
+      )}
+
       {/* Available Tickets - Compact View */}
       <div className="space-y-3">
         {availableTickets.length === 0 ? (
@@ -351,6 +463,11 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
             const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
             const isSelected = selectedQty > 0
             
+            // ✅ Apply free ticket restrictions
+            const activeFreeTicketCoupon = isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid
+            const finalMaxQty = activeFreeTicketCoupon ? 1 : maxQty
+            const canAddMore = selectedQty < finalMaxQty
+            
             // Calculate current pricing and savings
             const pricing = calculatePriceForQuantity(ticket, selectedQty)
             
@@ -359,7 +476,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                 key={ticket.id} 
                 className={`border rounded-lg transition-all duration-200 ${
                   isSelected ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-300' : 'hover:border-blue-300'
-                }`}
+                } ${activeFreeTicketCoupon && isSelected ? 'ring-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 border-purple-300' : ''}`}
               >
                 {/* Main Ticket Row */}
                 <div className="p-3">
@@ -378,14 +495,24 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                             Featured
                           </Badge>
                         )}
+                        {/* ✅ FREE TICKET INDICATOR - Only show after coupon applied */}
+                        {activeFreeTicketCoupon && isSelected && (
+                          <Badge className="text-xs px-1 py-0.5 bg-purple-100 text-purple-700 border-purple-300">
+                            FREE! 🎉
+                          </Badge>
+                        )}
                       </div>
                       
                       <div className="flex items-center gap-3 mb-2">
                         <span className={`text-sm font-bold ${
-                          formData.isEmsClient ? 'text-green-600' : 'text-blue-600'
+                          formData.isEmsClient ? 'text-green-600' : 
+                          (activeFreeTicketCoupon && isSelected) ? 'text-purple-600' : 'text-blue-600'
                         }`}>
-                          {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents)}
-                          {!formData.isEmsClient && <span className="text-xs font-normal text-gray-500 ml-1">per ticket</span>}
+                          {formData.isEmsClient ? 'FREE' : 
+                           (activeFreeTicketCoupon && isSelected) ? 'FREE' : formatPrice(ticket.priceInCents)}
+                          {!formData.isEmsClient && !(activeFreeTicketCoupon && isSelected) && (
+                            <span className="text-xs font-normal text-gray-500 ml-1">per ticket</span>
+                          )}
                         </span>
                         <span className="text-xs text-gray-500">
                           {ticket.availableStock} available
@@ -404,8 +531,8 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         </p>
                       )}
 
-                      {/* ✅ IMPROVED: Show ALL Tiered Pricing Offers */}
-                      {!formData.isEmsClient && ticket.hasTieredPricing && ticket.pricingTiers && ticket.pricingTiers.length > 0 && (
+                      {/* ✅ SHOW TIER PRICING ONLY IF NOT FREE COUPON OR COUPON NOT APPLIED */}
+                      {!formData.isEmsClient && !(activeFreeTicketCoupon) && ticket.hasTieredPricing && ticket.pricingTiers && ticket.pricingTiers.length > 0 && (
                         <div className="text-xs bg-green-50 border border-green-200 rounded px-2 py-1 mb-2">
                           <div className="flex items-center gap-1 text-green-700 mb-1">
                             <TrendingDown className="h-3 w-3" />
@@ -424,6 +551,16 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                                 </div>
                               )
                             })}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ✅ FREE TICKET INFO - Only show after coupon applied */}
+                      {activeFreeTicketCoupon && !isSelected && (
+                        <div className="text-xs bg-purple-50 border border-purple-200 rounded px-2 py-1 mb-2">
+                          <div className="flex items-center gap-1 text-purple-700">
+                            <Gift className="h-3 w-3" />
+                            <span className="font-medium">This ticket will be FREE with your coupon! 🎉</span>
                           </div>
                         </div>
                       )}
@@ -449,8 +586,9 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         variant="outline"
                         size="sm"
                         onClick={() => increaseQuantity(ticket)}
-                        disabled={selectedQty >= maxQty}
+                        disabled={!canAddMore}
                         className="h-8 w-8 p-0"
+                        title={activeFreeTicketCoupon && !canAddMore ? "Free coupon allows only 1 per ticket type" : ""}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -473,27 +611,39 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                       <div className="text-right">
                         {!formData.isEmsClient ? (
                           <div className="text-xs">
-                            {pricing.savings > 0 && (
-                              <div className="text-green-600 font-medium mb-1">
-                                💰 You saved €{(pricing.savings / 100).toFixed(2)}!
-                                {pricing.appliedTier && (
-                                  <div className="text-green-700">
-                                    ({pricing.appliedTier.name} discount applied)
+                            {/* ✅ FREE TICKET COUPON PRICING - Only show after applied */}
+                            {activeFreeTicketCoupon ? (
+                              <div className="text-purple-600 font-medium">
+                                🎉 FREE with coupon!
+                                <div className="text-gray-400 line-through text-xs">
+                                  Was: {formatPrice(pricing.priceInCents)}
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {pricing.savings > 0 && (
+                                  <div className="text-green-600 font-medium mb-1">
+                                    💰 You saved €{(pricing.savings / 100).toFixed(2)}!
+                                    {pricing.appliedTier && (
+                                      <div className="text-green-700">
+                                        ({pricing.appliedTier.name} discount applied)
+                                      </div>
+                                    )}
                                   </div>
                                 )}
-                              </div>
+                                <div>
+                                  <span className="text-gray-600">Total: </span>
+                                  <span className="font-medium text-blue-600">
+                                    {formatPrice(pricing.priceInCents)}
+                                  </span>
+                                  {pricing.savings > 0 && (
+                                    <span className="text-gray-400 line-through ml-1 text-xs">
+                                      {formatPrice(ticket.priceInCents * selectedQty)}
+                                    </span>
+                                  )}
+                                </div>
+                              </>
                             )}
-                            <div>
-                              <span className="text-gray-600">Total: </span>
-                              <span className="font-medium text-blue-600">
-                                {formatPrice(pricing.priceInCents)}
-                              </span>
-                              {pricing.savings > 0 && (
-                                <span className="text-gray-400 line-through ml-1 text-xs">
-                                  {formatPrice(ticket.priceInCents * selectedQty)}
-                                </span>
-                              )}
-                            </div>
                           </div>
                         ) : (
                           <div className="text-xs font-medium text-green-600">
@@ -575,7 +725,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
           )}
 
           {/* Email Warning */}
-          {!formData.email && couponCode && (
+          {!formData.email && couponCode && !isFreeTicketCoupon(couponCode) && (
             <div className="mt-2 text-xs text-amber-700 bg-amber-50 p-2 rounded border border-amber-200">
               <AlertTriangle className="h-3 w-3 inline mr-1" />
               Enter your email in the next step for accurate coupon validation
@@ -586,9 +736,18 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
 
       {/* Selection Summary */}
       {formData.selectedTickets.length > 0 && (
-        <div className="p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+        <div className={`p-4 border-2 rounded-lg ${
+          isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid
+            ? 'border-purple-200 bg-gradient-to-r from-purple-50 to-pink-50' 
+            : 'border-blue-200 bg-blue-50'
+        }`}>
           <div className="flex items-center justify-between mb-3">
-            <h4 className="text-sm font-medium">Order Summary</h4>
+            <h4 className="text-sm font-medium flex items-center gap-1">
+              Order Summary
+              {isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid && (
+                <Gift className="h-4 w-4 text-purple-600" />
+              )}
+            </h4>
             <span className="text-xs text-gray-600">{getTotalTickets()} tickets</span>
           </div>
           
@@ -597,7 +756,9 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
               <div key={ticket.ticketTypeId} className="flex justify-between text-xs">
                 <span className="truncate">{ticket.name} × {ticket.quantity}</span>
                 <span className="font-medium ml-2">
-                  {formData.isEmsClient ? 'FREE' : formatPrice(ticket.priceInCents)}
+                  {formData.isEmsClient ? 'FREE' : 
+                   (isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid) ? 'FREE' :
+                   formatPrice(ticket.priceInCents)}
                 </span>
               </div>
             ))}
@@ -610,18 +771,40 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                 </div>
                 
                 {getAppliedDiscount() > 0 && (
-                  <div className="flex justify-between text-xs text-green-600">
-                    <span>Discount ({formData.couponCode}):</span>
+                  <div className={`flex justify-between text-xs ${
+                    isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid ? 'text-purple-600' : 'text-green-600'
+                  }`}>
+                    <span>
+                      Discount ({formData.couponCode}):
+                      {isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid && ' 🎉'}
+                    </span>
                     <span>-{formatPrice(getAppliedDiscount())}</span>
                   </div>
                 )}
                 
                 <div className="flex justify-between font-bold text-sm border-t pt-1">
                   <span>Total:</span>
-                  <span className="text-blue-600">
-                    {formatPrice(getFinalCost())}
+                  <span className={`${
+                    isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid && getFinalCost() === 0 
+                      ? 'text-purple-600' 
+                      : 'text-blue-600'
+                  }`}>
+                    {getFinalCost() === 0 && isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid
+                      ? 'FREE! 🎉' 
+                      : formatPrice(getFinalCost())
+                    }
                   </span>
                 </div>
+
+                {/* ✅ FREE TICKET SUCCESS MESSAGE - Only after coupon applied */}
+                {isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid && getFinalCost() === 0 && (
+                  <div className="bg-purple-100 border border-purple-300 rounded-lg p-2 mt-2">
+                    <div className="text-xs text-purple-800 text-center">
+                      🎉 <strong>Congratulations!</strong> All your tickets are completely FREE!<br/>
+                      <span className="text-purple-600">No payment required - proceed to complete registration</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
@@ -633,6 +816,25 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ FREE TICKET USAGE RESTRICTIONS - Only show after coupon applied */}
+      {!formData.isEmsClient && isFreeTicketCoupon(formData.couponCode || '') && couponValidation?.isValid && (
+        <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="text-xs text-purple-800">
+            <div className="flex items-center gap-1 font-medium mb-1">
+              <AlertTriangle className="h-3 w-3" />
+              Free Ticket Coupon Terms:
+            </div>
+            <ul className="text-purple-700 space-y-1 ml-4">
+              <li>• Limited to 1 ticket per ticket type</li>
+              <li>• All available ticket types included</li>
+              <li>• Cannot be combined with other offers</li>
+              <li>• Valid for this event only</li>
+              <li>• Non-transferable</li>
+            </ul>
           </div>
         </div>
       )}

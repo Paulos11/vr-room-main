@@ -1,5 +1,4 @@
 // UPDATED: src/types/registration.ts - Optional ID card and multiple registrations support
-
 export interface RegistrationFormData {
   firstName: string
   lastName: string
@@ -26,7 +25,7 @@ export interface SelectedTicket {
   quantity: number
   maxPerOrder: number
   minPerOrder: number
-     
+        
   // For package deals
   originalTicketId?: string // Original ticket ID for packages
   tierId?: string // Which tier was selected
@@ -39,7 +38,7 @@ export interface SelectedTicket {
   }
 }
 
-// CouponValidationResult interface
+// ✅ FIXED: CouponValidationResult interface with all needed properties
 export interface CouponValidationResult {
   isValid: boolean
   message?: string
@@ -49,9 +48,18 @@ export interface CouponValidationResult {
     name: string
     discountType: 'PERCENTAGE' | 'FIXED_AMOUNT'
     discountValue: number
+    minOrderAmount?: number      // ✅ ADDED
+    maxUsesPerUser?: number      // ✅ ADDED - This was missing!
+    maxUses?: number             // ✅ ADDED
+    currentUses?: number         // ✅ ADDED
+    description?: string         // ✅ ADDED
   }
   discountAmount?: number
   appliedCouponCode?: string
+  // ✅ ADDED: Free ticket coupon support
+  couponType?: string            // For 'FREE_TICKET' type
+  maxTicketsAllowed?: number     // Max tickets allowed with free coupon
+  forceQuantityLimit?: boolean   // Force quantity restrictions
 }
 
 export interface TicketType {
@@ -82,13 +90,13 @@ export interface TicketType {
   notes?: string | null
   createdAt?: Date | string
   updatedAt?: Date | string
-     
+        
   // Computed properties
   formattedPrice: string
   isAvailable: boolean
   isFree: boolean
   hasTieredPricing?: boolean
-     
+        
   // For tiered pricing
   pricingTiers?: Array<{
     id: string
@@ -111,7 +119,7 @@ export interface TicketType {
       pricePerTicket: number
     }>
   }
-     
+        
   // For package deals
   originalTicketId?: string
   tierId?: string
