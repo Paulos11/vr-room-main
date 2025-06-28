@@ -1,4 +1,4 @@
-// CLEAN: Simple TicketTypeDialog - No confusing examples
+// FIXED: TicketTypeDialog - Now properly loads existing tiered pricing data
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -19,6 +19,16 @@ interface TicketType {
   soldStock: number
   availableStock: number
   isActive: boolean
+  pricingType: 'FIXED' | 'TIERED'
+  basePrice?: number
+  pricingTiers?: Array<{
+    id: string
+    name: string
+    priceInCents: number
+    ticketCount: number
+    isPopular: boolean
+    sortOrder: number
+  }>
 }
 
 interface TicketTypeDialogProps {
@@ -47,14 +57,36 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
     { name: 'Single', price: '', tickets: 1 }
   ])
 
-  // Load existing ticket data
+  // Load existing ticket data - FIXED VERSION
   useEffect(() => {
     if (ticket) {
       setName(ticket.name)
       setDescription(ticket.description || '')
-      setPrice((ticket.priceInCents / 100).toFixed(2))
       setStock(ticket.totalStock)
-      setPriceType('single') // Default to single for existing tickets
+      
+      // ✅ FIXED: Properly handle existing pricing type and data
+      if (ticket.pricingType === 'TIERED' && ticket.pricingTiers && ticket.pricingTiers.length > 0) {
+        // Load tiered pricing
+        setPriceType('packages')
+        
+        // Convert existing tiers to packages format
+        const existingPackages = ticket.pricingTiers
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map(tier => ({
+            name: tier.name,
+            price: (tier.priceInCents / 100).toFixed(2),
+            tickets: tier.ticketCount
+          }))
+        
+        setPackages(existingPackages)
+        setPrice('') // Clear single price
+      } else {
+        // Load fixed pricing
+        setPriceType('single')
+        setPrice((ticket.priceInCents / 100).toFixed(2))
+        // Reset packages to default
+        setPackages([{ name: 'Single', price: '', tickets: 1 }])
+      }
     } else {
       // Reset for new ticket
       setName('')
@@ -128,8 +160,8 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
         totalStock: stock,
         maxPerOrder: 10,
         minPerOrder: 1,
-        emsClientsOnly: false, // ✅ REMOVED: No more EMS restrictions
-        publicOnly: false,     // ✅ REMOVED: No more public restrictions
+        emsClientsOnly: false,
+        publicOnly: false,
         featured: false
       }
 
@@ -137,6 +169,8 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
         // Simple fixed pricing
         dataToSend.pricingType = 'FIXED'
         dataToSend.priceInCents = Math.round(parseFloat(price) * 100)
+        dataToSend.basePrice = null
+        dataToSend.pricingTiers = [] // Clear any existing tiers
       } else {
         // Package pricing (tiered)
         dataToSend.pricingType = 'TIERED'
@@ -378,6 +412,13 @@ export function TicketTypeDialog({ ticket, onSave, onCancel }: TicketTypeDialogP
                 <span>Revenue:</span>
                 <span className="text-green-600">
                   €{((ticket.soldStock * ticket.priceInCents) / 100).toFixed(2)}
+                </span>
+              </div>
+              {/* Show current pricing type */}
+              <div className="flex justify-between">
+                <span>Current Type:</span>
+                <span className="text-blue-600">
+                  {ticket.pricingType === 'TIERED' ? 'Tiered Pricing' : 'Fixed Price'}
                 </span>
               </div>
             </div>

@@ -1,4 +1,4 @@
-// COMPLETE FIXED: src/components/forms/steps/TicketSelectionStep.tsx - Auto-select all tickets with EMS_ECOFLOW
+// FIXED: src/components/forms/steps/TicketSelectionStep.tsx - 50 max for public, 1 for EMS
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -22,8 +22,8 @@ import { StepProps, TicketType, SelectedTicket, RegistrationFormData, CouponVali
 import { toast } from '@/components/ui/use-toast'
 
 // ✅ FREE TICKET COUPON CONFIGURATION
-const FREE_TICKET_COUPON = 'EMS_ECOFLOW'
-const FREE_TICKET_COUPONS = ['EMS_ECOFLOW']
+const FREE_TICKET_COUPON = 'EMS_ECOFLOW11'
+const FREE_TICKET_COUPONS = ['EMS_ECOFLOW11']
 
 export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
   const [availableTickets, setAvailableTickets] = useState<TicketType[]>([])
@@ -96,7 +96,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     setValidatingCoupon(true)
     try {
       const totalAmount = getTotalCost()
-      const totalTickets = getTotalTickets()
       
       // ✅ SPECIAL HANDLING: Free ticket coupon
       if (isFreeTicketCoupon(code)) {
@@ -336,9 +335,11 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
     }
   }
 
-  // ✅ Increase quantity with free ticket restrictions
+  // ✅ UPDATED: Increase quantity with proper limits
   const increaseQuantity = (ticket: TicketType) => {
     const currentQty = getSelectedQuantity(ticket.id)
+    
+    // ✅ UPDATED: EMS customers max 1, Public customers use ticket's maxPerOrder (now 50 by default)
     const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
     
     // ✅ FREE TICKET RESTRICTION: Check if free coupon is active
@@ -359,9 +360,20 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         updateTicketQuantity(ticket, currentQty + 1)
       }
     } else {
-      // Normal quantity increase
+      // ✅ UPDATED: Normal quantity increase - now respects the higher maxPerOrder
       if (currentQty < maxQty) {
         updateTicketQuantity(ticket, currentQty + 1)
+      } else {
+        // Show appropriate message based on limit type
+        const limitType = formData.isEmsClient ? "EMS customers are limited to 1 ticket per type" : 
+                         currentQty >= ticket.availableStock ? "Not enough tickets available" :
+                         `Maximum ${ticket.maxPerOrder} tickets per order for this type`
+        
+        toast({
+          title: "Quantity limit reached",
+          description: limitType,
+          variant: "destructive",
+        })
       }
     }
   }
@@ -422,7 +434,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         <p className="text-sm text-gray-600">
           {formData.isEmsClient 
             ? 'Choose your complimentary tickets (1 each)' 
-            : 'Choose tickets and quantities'
+            : 'Choose tickets and quantities (up to 50 each)'
           }
         </p>
       </div>
@@ -450,7 +462,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         </div>
       )}
 
-      {/* Available Tickets - Compact View */}
+      {/* Available Tickets */}
       <div className="space-y-3">
         {availableTickets.length === 0 ? (
           <div className="text-center py-8 text-gray-600">
@@ -460,6 +472,8 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
         ) : (
           availableTickets.map(ticket => {
             const selectedQty = getSelectedQuantity(ticket.id)
+            
+            // ✅ UPDATED: Calculate proper max quantity
             const maxQty = formData.isEmsClient ? 1 : Math.min(ticket.maxPerOrder, ticket.availableStock)
             const isSelected = selectedQty > 0
             
@@ -478,7 +492,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                   isSelected ? 'ring-2 ring-blue-500 bg-blue-50 border-blue-300' : 'hover:border-blue-300'
                 } ${activeFreeTicketCoupon && isSelected ? 'ring-purple-500 bg-gradient-to-r from-purple-50 to-pink-50 border-purple-300' : ''}`}
               >
-                {/* Main Ticket Row */}
                 <div className="p-3">
                   <div className="flex items-center justify-between">
                     {/* Ticket Info */}
@@ -495,7 +508,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                             Featured
                           </Badge>
                         )}
-                        {/* ✅ FREE TICKET INDICATOR - Only show after coupon applied */}
                         {activeFreeTicketCoupon && isSelected && (
                           <Badge className="text-xs px-1 py-0.5 bg-purple-100 text-purple-700 border-purple-300">
                             FREE! 🎉
@@ -517,6 +529,7 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         <span className="text-xs text-gray-500">
                           {ticket.availableStock} available
                         </span>
+                        
                         {ticket.category && (
                           <Badge variant="outline" className="text-xs">
                             {ticket.category}
@@ -524,15 +537,13 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         )}
                       </div>
                       
-                      {/* Description */}
                       {ticket.description && (
                         <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed mb-2">
                           {ticket.description}
                         </p>
                       )}
 
-                      {/* ✅ SHOW TIER PRICING ONLY IF NOT FREE COUPON OR COUPON NOT APPLIED */}
-                      {!formData.isEmsClient && !(activeFreeTicketCoupon) && ticket.hasTieredPricing && ticket.pricingTiers && ticket.pricingTiers.length > 0 && (
+                      {!formData.isEmsClient && !activeFreeTicketCoupon && ticket.hasTieredPricing && ticket.pricingTiers && ticket.pricingTiers.length > 0 && (
                         <div className="text-xs bg-green-50 border border-green-200 rounded px-2 py-1 mb-2">
                           <div className="flex items-center gap-1 text-green-700 mb-1">
                             <TrendingDown className="h-3 w-3" />
@@ -555,7 +566,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         </div>
                       )}
 
-                      {/* ✅ FREE TICKET INFO - Only show after coupon applied */}
                       {activeFreeTicketCoupon && !isSelected && (
                         <div className="text-xs bg-purple-50 border border-purple-200 rounded px-2 py-1 mb-2">
                           <div className="flex items-center gap-1 text-purple-700">
@@ -588,7 +598,12 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                         onClick={() => increaseQuantity(ticket)}
                         disabled={!canAddMore}
                         className="h-8 w-8 p-0"
-                        title={activeFreeTicketCoupon && !canAddMore ? "Free coupon allows only 1 per ticket type" : ""}
+                        title={
+                          activeFreeTicketCoupon && !canAddMore ? "Free coupon allows only 1 per ticket type" : 
+                          formData.isEmsClient && !canAddMore ? "EMS customers limited to 1 per ticket type" :
+                          selectedQty >= ticket.availableStock ? "No more tickets available" :
+                          selectedQty >= ticket.maxPerOrder ? `Maximum ${ticket.maxPerOrder} per order` : ""
+                        }
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
@@ -611,7 +626,6 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
                       <div className="text-right">
                         {!formData.isEmsClient ? (
                           <div className="text-xs">
-                            {/* ✅ FREE TICKET COUPON PRICING - Only show after applied */}
                             {activeFreeTicketCoupon ? (
                               <div className="text-purple-600 font-medium">
                                 🎉 FREE with coupon!
@@ -845,6 +859,24 @@ export function TicketSelectionStep({ formData, onUpdate }: StepProps) {
           <div className="flex items-center gap-2 text-sm text-orange-800">
             <AlertTriangle className="h-4 w-4" />
             <span>Please select at least one ticket to continue</span>
+          </div>
+        </div>
+      )}
+
+      {/* ✅ NEW: Public Customer Quantity Info */}
+      {!formData.isEmsClient && formData.selectedTickets.length > 0 && (
+        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="text-xs text-blue-800">
+            <div className="flex items-center gap-1 font-medium mb-1">
+              <Ticket className="h-3 w-3" />
+              Quantity Guidelines:
+            </div>
+            <ul className="text-blue-700 space-y-1 ml-4">
+              <li>• Maximum 50 tickets per ticket type per order</li>
+              <li>• No limit on total number of orders</li>
+              <li>• Volume discounts available for bulk purchases</li>
+              <li>• All tickets subject to availability</li>
+            </ul>
           </div>
         </div>
       )}

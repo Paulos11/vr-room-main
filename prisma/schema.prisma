@@ -122,7 +122,7 @@ model TicketType {
   isActive       Boolean   @default(true) @map("is_active")
   availableFrom  DateTime? @map("available_from")
   availableUntil DateTime? @map("available_until")
-  maxPerOrder    Int       @default(10) @map("max_per_order")
+  maxPerOrder    Int       @default(50) @map("max_per_order") // ✅ CHANGED: Increased from 10 to 50
   minPerOrder    Int       @default(1) @map("min_per_order")
 
   // Target Audience
