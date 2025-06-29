@@ -1,8 +1,9 @@
-// src/app/layout.tsx - Fixed hydration issues
+// src/app/layout.tsx - Updated with GDPR cookie consent
 import type { Metadata } from 'next'
 import { Poppins, Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
+import { ConsentWrapper } from '@/components/ConsentWrapper'
 
 // Primary font for headings and important text
 const poppins = Poppins({ 
@@ -97,7 +98,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
       <head>
-        {/* Google Ads Conversion Tracking */}
+        {/* Google Analytics with Consent Management */}
         <script
           async
           src="https://www.googletagmanager.com/gtag/js?id=AW-17267533077"
@@ -107,8 +108,25 @@ export default function RootLayout({
             __html: `
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
+              
+              // Set default consent state (denied) before any tracking
+              gtag('consent', 'default', {
+                ad_storage: 'denied',
+                ad_user_data: 'denied',
+                ad_personalization: 'denied', 
+                analytics_storage: 'denied',
+                functionality_storage: 'denied',
+                personalization_storage: 'denied',
+                security_storage: 'granted',
+                wait_for_update: 500,
+              });
+              
               gtag('js', new Date());
-              gtag('config', 'AW-17267533077');
+              gtag('config', 'AW-17267533077', {
+                anonymize_ip: true,
+                allow_google_signals: false,
+                allow_ad_personalization_signals: false
+              });
             `,
           }}
         />
@@ -178,8 +196,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className={`${inter.className} font-sans antialiased`}>
-        {children}
-        <Toaster />
+        <ConsentWrapper>
+          {children}
+          <Toaster />
+        </ConsentWrapper>
       </body>
     </html>
   )
