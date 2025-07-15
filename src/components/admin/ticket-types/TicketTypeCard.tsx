@@ -1,5 +1,3 @@
-// STEP 5: Enhanced src/components/admin/ticket-types/TicketTypeCard.tsx
-
 'use client'
 
 import { Button } from '@/components/ui/button'
@@ -45,7 +43,6 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
   const isLowStock = ticket.availableStock <= 10 && ticket.availableStock > 0
   const isOutOfStock = ticket.availableStock === 0
 
-  // Calculate statistics for tiered pricing
   const getTieredStats = () => {
     if (!ticket.pricingTiers || ticket.pricingTiers.length === 0) return null
 
@@ -64,6 +61,23 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
   }
 
   const tieredStats = getTieredStats()
+
+  // Safely parse ticket tags
+  let parsedTags: string[] = []
+  if (ticket.tags) {
+    try {
+      const parsed = JSON.parse(ticket.tags)
+      if (Array.isArray(parsed)) {
+        parsedTags = parsed
+      }
+    } catch (e) {
+      console.error("Failed to parse ticket tags:", e)
+      // Fallback for non-JSON strings (e.g., "tag1, tag2")
+      if (typeof ticket.tags === 'string') {
+        parsedTags = ticket.tags.split(',').map(t => t.trim()).filter(Boolean)
+      }
+    }
+  }
 
   return (
     <Card className={`transition-all duration-200 ${
@@ -149,7 +163,7 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
         </div>
 
         {/* Category and Tags */}
-        {(ticket.category || ticket.tags) && (
+        {(ticket.category || parsedTags.length > 0) && (
           <div className="flex flex-wrap gap-1 mt-2">
             {ticket.category && (
               <Badge variant="outline" className="text-xs">
@@ -157,7 +171,7 @@ export function TicketTypeCard({ ticket, onEdit, onToggleStatus, onDelete }: Tic
                 {ticket.category}
               </Badge>
             )}
-            {ticket.tags && JSON.parse(ticket.tags).map((tag: string, index: number) => (
+            {parsedTags.map((tag: string, index: number) => (
               <Badge key={index} variant="outline" className="text-xs">
                 {tag}
               </Badge>

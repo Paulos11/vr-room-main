@@ -1,51 +1,42 @@
-// src/app/layout.tsx - Updated with GDPR cookie consent
+// src/app/layout.tsx - Updated for VR Room Malta
 import type { Metadata } from 'next'
-import { Poppins, Inter } from 'next/font/google'
+import { Inter } from 'next/font/google'
 import './globals.css'
 import { Toaster } from '@/components/ui/toaster'
 import { ConsentWrapper } from '@/components/ConsentWrapper'
 
-// Primary font for headings and important text
-const poppins = Poppins({ 
-  subsets: ['latin'],
-  weight: ['300', '400', '500', '600', '700', '800', '900'],
-  variable: '--font-poppins',
-  display: 'swap',
-})
-
-// Secondary font for body text
+// Load Gordita Montserrat alternative (Inter is similar and more accessible)
 const inter = Inter({ 
   subsets: ['latin'],
+  weight: ['300', '400', '500', '600', '700', '800', '900'],
   variable: '--font-inter',
   display: 'swap',
 })
 
 // Fix metadataBase to resolve build warnings
 const baseUrl = process.env.NODE_ENV === 'production' 
-  ? 'https://emstickets.com'
+  ? 'https://vrroommalta.com'
   : 'http://localhost:3000';
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
-  title: 'EMS Trade Fair 2025 | MFCC Ta\' Qali Malta | VIP Tickets & Solar Panels',
-  description: 'Join EMS Trade Fair at Malta Fairs & Conventions Centre (MFCC) Ta\' Qali, Malta. June 26 - July 6, 2025. FREE VIP tickets, ice skating, VR games, magic shows, food & exclusive solar panel offers. Book now!',
+  title: 'VR Room Malta | Virtual Reality Gaming in Bugibba | Opening This Wednesday',
+  description: 'Experience cutting-edge virtual reality games at VR Room Malta in Bugibba! Just 50 meters from Bugibba Square. Immersive, unforgettable VR adventures await. Book your session today!',
   keywords: [
-    'EMS Trade Fair',
-    'MFCC Malta',
-    'Malta Fairs Conventions Centre',
-    'Ta Qali Malta',
-    'Solar Panels Malta',
-    'VIP Tickets',
-    'Trade Fair Malta 2025',
-    'EMS Panels',
-    'Malta Events',
-    'Ice Skating Malta',
-    'VR Games Malta',
-    'Magic Shows Malta'
+    'VR Room Malta',
+    'Virtual Reality Malta',
+    'VR Gaming Malta',
+    'Bugibba Entertainment',
+    'VR Experience Malta',
+    'Virtual Reality Games',
+    'Malta Gaming',
+    'VR Adventure Malta',
+    'Bugibba Square',
+    'Malta VR Center'
   ],
-  authors: [{ name: 'EMS Malta' }],
-  creator: 'EMS Malta',
-  publisher: 'EMS Malta',
+  authors: [{ name: 'VR Room Malta' }],
+  creator: 'VR Room Malta',
+  publisher: 'VR Room Malta',
   robots: {
     index: true,
     follow: true,
@@ -61,32 +52,32 @@ export const metadata: Metadata = {
     type: 'website',
     locale: 'en_MT',
     url: baseUrl,
-    title: 'EMS Trade Fair 2025 | MFCC Ta\' Qali Malta | FREE VIP Tickets',
-    description: 'Malta\'s premier trade fair at MFCC Ta\' Qali. Entertainment, solar panels, VIP experience. June 26 - July 6, 2025. Get your FREE VIP ticket now!',
-    siteName: 'EMS Trade Fair',
+    title: 'VR Room Malta | Virtual Reality Gaming in Bugibba',
+    description: 'Malta\'s premier VR gaming destination in Bugibba. Cutting-edge virtual reality experiences just 50 meters from Bugibba Square.',
+    siteName: 'VR Room Malta',
     images: [
       {
-        url: '/ems-tickets.jpg',
+        url: '/vr-room-malta-hero.jpg',
         width: 1200,
         height: 630,
-        alt: 'EMS Trade Fair 2025 at MFCC Ta\' Qali Malta',
+        alt: 'VR Room Malta - Virtual Reality Gaming in Bugibba',
       },
     ],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'EMS Trade Fair 2025 | MFCC Malta | FREE VIP Tickets',
-    description: 'Join us at Malta Fairs & Conventions Centre Ta\' Qali for entertainment, solar panels & VIP experience!',
-    images: ['/ems-tickets.jpg'],
+    title: 'VR Room Malta | Virtual Reality Gaming in Bugibba',
+    description: 'Experience cutting-edge VR games at Malta\'s newest VR destination in Bugibba!',
+    images: ['/vr-room-malta-hero.jpg'],
   },
   alternates: {
     canonical: baseUrl,
   },
   other: {
     'geo.region': 'MT',
-    'geo.placename': 'Ta\' Qali, Malta',
-    'geo.position': '35.8892;14.4209',
-    'ICBM': '35.8892, 14.4209',
+    'geo.placename': 'Bugibba, Malta',
+    'geo.position': '35.9503;14.4124',
+    'ICBM': '35.9503, 14.4124',
   },
 }
 
@@ -96,7 +87,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${poppins.variable} ${inter.variable}`}>
+    <html lang="en" className={inter.variable}>
       <head>
         {/* Google Analytics with Consent Management */}
         <script
@@ -109,7 +100,6 @@ export default function RootLayout({
               window.dataLayer = window.dataLayer || [];
               function gtag(){dataLayer.push(arguments);}
               
-              // Set default consent state (denied) before any tracking
               gtag('consent', 'default', {
                 ad_storage: 'denied',
                 ad_user_data: 'denied',
@@ -133,10 +123,9 @@ export default function RootLayout({
         
         {/* Additional SEO Meta Tags */}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="theme-color" content="#10b981" />
+        <meta name="theme-color" content="#01AEED" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="format-detection" content="telephone=+35627555597" />
         
         {/* Local Business Schema */}
         <script
@@ -144,45 +133,33 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: JSON.stringify({
               "@context": "https://schema.org",
-              "@type": "Event",
-              "name": "EMS Trade Fair 2025",
-              "description": "Malta's premier trade fair for Energy Management Solutions Malta and renewable energy at MFCC Ta' Qali",
-              "startDate": "2025-07-26T09:00:00+02:00",
-              "endDate": "2025-08-06T18:00:00+02:00",
-              "eventStatus": "https://schema.org/EventScheduled",
-              "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
-              "location": {
-                "@type": "Place",
-                "name": "Malta Fairs & Conventions Centre",
-                "address": {
-                  "@type": "PostalAddress",
-                  "streetAddress": "MFCC",
-                  "addressLocality": "Ta' Qali",
-                  "addressCountry": "Malta"
-                },
-                "geo": {
-                  "@type": "GeoCoordinates",
-                  "latitude": "35.8892",
-                  "longitude": "14.4209"
-                }
+              "@type": "LocalBusiness",
+              "name": "VR Room Malta",
+              "description": "Malta's premier virtual reality gaming center in Bugibba",
+              "openingHours": "Mo-Su 10:00-22:00",
+              "address": {
+                "@type": "PostalAddress",
+                "streetAddress": "50 meters from Bugibba Square",
+                "addressLocality": "Bugibba",
+                "addressRegion": "Northern Region",
+                "addressCountry": "Malta"
               },
-              "organizer": {
-                "@type": "Organization",
-                "name": "EMS Malta",
-                "url": "https://www.ems.com.mt",
-                "telephone": "+356-2755-5597"
+              "geo": {
+                "@type": "GeoCoordinates",
+                "latitude": "35.9503",
+                "longitude": "14.4124"
               },
-              "offers": {
-                "@type": "Offer",
-                "url": baseUrl,
-                "price": "0",
-                "priceCurrency": "EUR",
-                "availability": "https://schema.org/InStock",
-                "validFrom": "2025-01-01T00:00:00+02:00"
-              },
+              "url": baseUrl,
+              "telephone": "+356-XXXX-XXXX",
+              "priceRange": "€€",
               "image": [
-                `${baseUrl}/ems-tickets.jpg`
-              ]
+                `${baseUrl}/vr-room-malta-hero.jpg`
+              ],
+              "aggregateRating": {
+                "@type": "AggregateRating",
+                "ratingValue": "5.0",
+                "reviewCount": "1"
+              }
             })
           }}
         />
@@ -195,7 +172,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
-      <body className={`${inter.className} font-sans antialiased`}>
+      <body className={`${inter.className} font-sans antialiased bg-white`}>
         <ConsentWrapper>
           {children}
           <Toaster />

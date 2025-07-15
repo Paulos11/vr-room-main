@@ -1,9 +1,10 @@
-// UPDATED: src/components/tickets/TicketsFilters.tsx - Add ticket type filter
+// src/components/tickets/TicketsFilters.tsx - VR Room Malta themed filters
 import React from 'react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { Search, Filter, X, CheckCircle, AlertCircle, Ticket as TicketIcon, Tag } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
+import { Search, Gamepad2, Filter, Users } from 'lucide-react'
 
 interface TicketType {
   id: string
@@ -14,179 +15,220 @@ interface TicketType {
 interface TicketsFiltersProps {
   search: string
   statusFilter: string
-  ticketTypeFilter?: string // ✅ NEW: Ticket type filter
+  ticketTypeFilter: string
   onSearchChange: (value: string) => void
   onStatusChange: (value: string) => void
-  onTicketTypeChange?: (value: string) => void // ✅ NEW: Ticket type change handler
+  onTicketTypeChange: (value: string) => void
   resultCount: number
   totalCount: number
-  ticketTypes?: TicketType[] // ✅ NEW: Available ticket types
+  ticketTypes: TicketType[]
 }
 
 export const TicketsFilters = React.memo(function TicketsFilters({
   search,
   statusFilter,
-  ticketTypeFilter = 'all',
+  ticketTypeFilter,
   onSearchChange,
   onStatusChange,
   onTicketTypeChange,
   resultCount,
   totalCount,
-  ticketTypes = []
+  ticketTypes
 }: TicketsFiltersProps) {
-  return (
-    <div className="space-y-3">
-      {/* Enhanced Search & Filter Row */}
-      <div className="flex gap-3">
-        <div className="flex-1 relative group">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400 group-focus-within:text-green-500 transition-colors duration-200" />
-          <Input
-            placeholder="Search by ticket number, customer name, email, phone, or ticket type..."
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="pl-10 pr-10 h-10 text-sm border-2 border-gray-200 focus:border-green-400 focus:ring-green-400/20 transition-all duration-200 bg-white/80 backdrop-blur-sm"
-          />
-          {search && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onSearchChange('')}
-              className="absolute right-2 top-1/2 transform -translate-y-1/2 h-8 w-8 p-0 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all duration-200"
-              title="Clear search"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-        
-        {/* Status Filter */}
-        <Select value={statusFilter} onValueChange={onStatusChange}>
-          <SelectTrigger className="w-48 h-10 border-2 border-gray-200 focus:border-blue-400 focus:ring-blue-400/20 transition-all duration-200 bg-white/80 backdrop-blur-sm">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-500" />
-              <SelectValue placeholder="Status" />
-            </div>
-          </SelectTrigger>
-          <SelectContent className="border-2 bg-white/95 backdrop-blur-sm">
-            <SelectItem value="all" className="focus:bg-gray-50 cursor-pointer">
-              <div className="flex items-center gap-3 py-1">
-                <TicketIcon className="w-4 h-4 text-gray-500" />
-                <span>All Status</span>
-              </div>
-            </SelectItem>
-            
-            <SelectItem value="GENERATED" className="focus:bg-orange-50 cursor-pointer">
-              <div className="flex items-center gap-3 py-1">
-                <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                <span>Generated</span>
-              </div>
-            </SelectItem>
-            
-            <SelectItem value="SENT" className="focus:bg-blue-50 cursor-pointer">
-              <div className="flex items-center gap-3 py-1">
-                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                <span>Sent</span>
-              </div>
-            </SelectItem>
-            
-            {/* ✅ REMOVED: COLLECTED option (hidden from UI) */}
-            
-            <SelectItem value="USED" className="focus:bg-green-50 cursor-pointer">
-              <div className="flex items-center gap-3 py-1">
-                <CheckCircle className="w-4 h-4 text-green-500" />
-                <span>Used</span>
-              </div>
-            </SelectItem>
-            
-            <SelectItem value="EXPIRED" className="focus:bg-red-50 cursor-pointer">
-              <div className="flex items-center gap-3 py-1">
-                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                <span>Expired</span>
-              </div>
-            </SelectItem>
-            
-            <SelectItem value="CANCELLED" className="focus:bg-gray-50 cursor-pointer">
-              <div className="flex items-center gap-3 py-1">
-                <AlertCircle className="w-4 h-4 text-gray-500" />
-                <span>Cancelled</span>
-              </div>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+  
+  const statusOptions = [
+    { value: 'all', label: 'All Sessions', icon: '🎮' },
+    { value: 'GENERATED', label: 'Ready to Play', icon: '⚡' },
+    { value: 'SENT', label: 'Sent to Customer', icon: '📧' },
+    { value: 'USED', label: 'Completed', icon: '✅' },
+    { value: 'CANCELLED', label: 'Cancelled', icon: '❌' },
+    { value: 'EXPIRED', label: 'Expired', icon: '⏰' }
+  ]
 
-        {/* ✅ NEW: Ticket Type Filter */}
-        {ticketTypes.length > 0 && onTicketTypeChange && (
-          <Select value={ticketTypeFilter} onValueChange={onTicketTypeChange}>
-            <SelectTrigger className="w-52 h-10 border-2 border-gray-200 focus:border-purple-400 focus:ring-purple-400/20 transition-all duration-200 bg-white/80 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <Tag className="h-4 w-4 text-gray-500" />
-                <SelectValue placeholder="Ticket Type" />
-              </div>
-            </SelectTrigger>
-            <SelectContent className="border-2 bg-white/95 backdrop-blur-sm">
-              <SelectItem value="all" className="focus:bg-gray-50 cursor-pointer">
-                <div className="flex items-center gap-3 py-1">
-                  <Tag className="w-4 h-4 text-gray-500" />
-                  <span>All Types</span>
-                </div>
-              </SelectItem>
-              
-              {ticketTypes.map((type) => (
-                <SelectItem key={type.id} value={type.id} className="focus:bg-purple-50 cursor-pointer">
-                  <div className="flex items-center gap-3 py-1">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                    <span>{type.name}</span>
-                    {type.category && (
-                      <span className="text-xs text-purple-400 ml-auto">{type.category}</span>
-                    )}
+  return (
+    <Card className="bg-gradient-to-r from-purple-50 via-blue-50 to-cyan-50 border-purple-200">
+      <CardContent className="p-4">
+        <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search VR sessions, customers, or experiences..."
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              className="pl-10 bg-white border-purple-200 focus:border-purple-400 focus:ring-purple-400"
+            />
+          </div>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-purple-600" />
+            <Select value={statusFilter} onValueChange={onStatusChange}>
+              <SelectTrigger className="w-40 bg-white border-purple-200">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    <div className="flex items-center gap-2">
+                      <span>{option.icon}</span>
+                      <span>{option.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* VR Experience Filter */}
+          <div className="flex items-center gap-2">
+            <Gamepad2 className="h-4 w-4 text-blue-600" />
+            <Select value={ticketTypeFilter} onValueChange={onTicketTypeChange}>
+              <SelectTrigger className="w-48 bg-white border-blue-200">
+                <SelectValue placeholder="VR Experience" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">
+                  <div className="flex items-center gap-2">
+                    <span>🎮</span>
+                    <span>All Experiences</span>
                   </div>
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      {/* Enhanced Results Summary */}
-      {(search || statusFilter !== 'all' || ticketTypeFilter !== 'all') && (
-        <div className="flex items-center justify-between text-sm bg-gradient-to-r from-blue-50 to-green-50 px-4 py-3 rounded-lg border border-blue-200 shadow-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-            <span className="text-gray-700">
-              Showing <strong className="text-blue-700 font-semibold">{resultCount.toLocaleString()}</strong> of <strong className="font-semibold">{totalCount.toLocaleString()}</strong> tickets
-              {search && <span> matching "<strong className="text-green-700">{search}</strong>"</span>}
-              {statusFilter !== 'all' && <span> with status <strong className="text-purple-700">{statusFilter}</strong></span>}
-              {ticketTypeFilter !== 'all' && (
-                <span> of type <strong className="text-purple-700">
-                  {ticketTypes.find(t => t.id === ticketTypeFilter)?.name || 'Unknown'}
-                </strong></span>
-              )}
-            </span>
+                {ticketTypes.map((ticketType) => (
+                  <SelectItem key={ticketType.id} value={ticketType.id}>
+                    <div className="flex items-center gap-2">
+                      <span>{getExperienceIcon(ticketType.category)}</span>
+                      <span className="truncate">{ticketType.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              onSearchChange('')
-              onStatusChange('all')
-              onTicketTypeChange?.('all')
-            }}
-            className="h-7 text-xs hover:bg-blue-100 transition-all duration-200 text-blue-700 hover:text-blue-800"
-          >
-            <X className="h-3 w-3 mr-1" />
-            Clear filters
-          </Button>
-        </div>
-      )}
 
-      {/* Performance Indicator */}
-      {resultCount !== totalCount && (
-        <div className="text-xs text-gray-500 text-center">
-          <span className="bg-green-100 text-green-700 px-2 py-1 rounded">
-            ⚡ Instant filtering • {resultCount} results in 0ms
-          </span>
+          {/* Results Counter */}
+          <div className="flex items-center gap-2 ml-auto">
+            <Users className="h-4 w-4 text-gray-600" />
+            <div className="text-sm">
+              {resultCount === totalCount ? (
+                <span className="text-gray-700">
+                  <strong>{totalCount}</strong> total sessions
+                </span>
+              ) : (
+                <span className="text-gray-700">
+                  <strong>{resultCount}</strong> of <strong>{totalCount}</strong> sessions
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-      )}
-    </div>
+
+        {/* Active Filters Display */}
+        {(search || statusFilter !== 'all' || ticketTypeFilter !== 'all') && (
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-purple-200">
+            <span className="text-sm text-gray-600 flex items-center gap-1">
+              <Filter className="h-3 w-3" />
+              Active filters:
+            </span>
+            
+            {search && (
+              <Badge 
+                variant="outline" 
+                className="bg-white border-purple-300 text-purple-700"
+              >
+                Search: "{search}"
+              </Badge>
+            )}
+            
+            {statusFilter !== 'all' && (
+              <Badge 
+                variant="outline" 
+                className="bg-white border-blue-300 text-blue-700"
+              >
+                Status: {statusOptions.find(s => s.value === statusFilter)?.label}
+              </Badge>
+            )}
+            
+            {ticketTypeFilter !== 'all' && (
+              <Badge 
+                variant="outline" 
+                className="bg-white border-green-300 text-green-700"
+              >
+                Experience: {ticketTypes.find(t => t.id === ticketTypeFilter)?.name}
+              </Badge>
+            )}
+            
+            <button
+              onClick={() => {
+                onSearchChange('')
+                onStatusChange('all')
+                onTicketTypeChange('all')
+              }}
+              className="text-xs text-gray-500 hover:text-gray-700 underline ml-2"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
+        {/* Quick Filter Chips */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          <span className="text-xs text-gray-600">Quick filters:</span>
+          
+          <button
+            onClick={() => onStatusChange('GENERATED')}
+            className={`px-2 py-1 rounded-full text-xs transition-colors ${
+              statusFilter === 'GENERATED' 
+                ? 'bg-purple-600 text-white' 
+                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+            }`}
+          >
+            ⚡ Ready to Play
+          </button>
+          
+          <button
+            onClick={() => onStatusChange('USED')}
+            className={`px-2 py-1 rounded-full text-xs transition-colors ${
+              statusFilter === 'USED' 
+                ? 'bg-green-600 text-white' 
+                : 'bg-green-100 text-green-700 hover:bg-green-200'
+            }`}
+          >
+            ✅ Completed Sessions
+          </button>
+          
+          <button
+            onClick={() => onSearchChange('today')}
+            className={`px-2 py-1 rounded-full text-xs transition-colors ${
+              search.includes('today') 
+                ? 'bg-blue-600 text-white' 
+                : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            }`}
+          >
+            📅 Today's Sessions
+          </button>
+        </div>
+      </CardContent>
+    </Card>
   )
 })
+
+// Helper function to get VR experience icons
+function getExperienceIcon(category?: string): string {
+  if (!category) return '🎮'
+  
+  const categoryIcons: Record<string, string> = {
+    'VR_EXPERIENCE': '🥽',
+    'ADVENTURE': '🗡️',
+    'SPACE': '🚀', 
+    'HORROR': '👻',
+    'RACING': '🏎️',
+    'PUZZLE': '🧩',
+    'SHOOTER': '🔫',
+    'FANTASY': '🐉',
+    'SCI_FI': '🛸',
+    'SURVIVAL': '🏕️'
+  }
+  
+  return categoryIcons[category.toUpperCase()] || '🎮'
+}

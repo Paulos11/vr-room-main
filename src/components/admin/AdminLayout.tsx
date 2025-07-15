@@ -1,4 +1,4 @@
-// src/components/admin/AdminLayout.tsx - Fixed mobile responsiveness
+// src/components/admin/AdminLayout.tsx - VR Room Malta Theme with Dark Mode Toggle
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -13,61 +13,65 @@ import {
   LayoutDashboard, 
   Users, 
   Ticket, 
-  Zap, 
+  Calendar, 
   Settings, 
   Menu, 
   LogOut,
-  Building2,
+  Gamepad2,
   Package,
-  Gift
+  Gift,
+  PartyPopper,
+  Moon,
+  Sun
 } from 'lucide-react'
 
 interface AdminLayoutProps {
   children: React.ReactNode
 }
 
+// VR-themed navigation with appropriate icons and labels
 const navigation = [
   {
     name: 'Dashboard',
     href: '/admin',
     icon: LayoutDashboard,
-    color: 'text-green-600'
+    description: 'Overview & analytics'
   },
   {
-    name: 'Registrations',
+    name: 'VR Bookings',
     href: '/admin/registrations',
-    icon: Users,
-    color: 'text-blue-600'
+    icon: Calendar,
+    description: 'Experience reservations'
   },
   {
-    name: 'Tickets',
+    name: 'VR Sessions',
     href: '/admin/tickets',
-    icon: Ticket,
-    color: 'text-purple-600'
+    icon: Gamepad2,
+    description: 'Active & completed sessions'
   },
   {
-    name: 'Ticket Types',
+    name: 'Experience Types',
     href: '/admin/ticket-types',
     icon: Package,
-    color: 'text-indigo-600'
+    description: 'VR games & packages'
   },
   {
-    name: 'Coupons',
+    name: 'Promotions',
     href: '/admin/coupons',
     icon: Gift,
-    color: 'text-pink-600'
+    description: 'Discounts & offers'
   },
   {
-    name: 'Panel Leads',
+    name: 'Party Events',
     href: '/admin/panels',
-    icon: Zap,
-    color: 'text-orange-600'
+    icon: PartyPopper,
+    description: 'Birthday & group bookings'
   },
   {
     name: 'Settings',
     href: '/admin/settings',
     icon: Settings,
-    color: 'text-gray-600'
+    description: 'System configuration'
   }
 ]
 
@@ -76,6 +80,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const router = useRouter()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [darkMode, setDarkMode] = useState(false)
 
   useEffect(() => {
     try {
@@ -84,7 +89,19 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     } catch (error) {
       console.error('Error getting current user:', error)
     }
+
+    // Load dark mode preference from localStorage
+    const savedDarkMode = localStorage.getItem('vr-admin-dark-mode')
+    if (savedDarkMode) {
+      setDarkMode(JSON.parse(savedDarkMode))
+    }
   }, [])
+
+  const toggleDarkMode = () => {
+    const newDarkMode = !darkMode
+    setDarkMode(newDarkMode)
+    localStorage.setItem('vr-admin-dark-mode', JSON.stringify(newDarkMode))
+  }
 
   const handleLogout = () => {
     try {
@@ -93,7 +110,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       
       toast({
         title: "Logged Out",
-        description: "See you next time!",
+        description: "Thanks for managing VR Room Malta!",
       })
       
       router.push('/admin/login')
@@ -115,19 +132,39 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             href={item.href}
             onClick={onNavigate}
             className={cn(
-              'group flex items-center px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200',
+              'group flex items-center px-3 py-3 text-sm font-medium rounded-lg transition-all duration-200 border',
               isActive
-                ? 'bg-gradient-to-r from-green-100 to-blue-100 text-green-700 shadow-sm border-l-4 border-green-500'
-                : 'text-gray-600 hover:bg-gradient-to-r hover:from-green-50 hover:to-blue-50 hover:text-gray-900'
+                ? darkMode 
+                  ? 'bg-[#01AEED]/10 text-[#01AEED] border-[#01AEED]/30 shadow-sm backdrop-blur-sm'
+                  : 'bg-[#01AEED]/10 text-[#01AEED] border-[#01AEED]/30 shadow-sm'
+                : darkMode
+                  ? 'text-gray-300 hover:bg-white/10 hover:text-white border-transparent hover:border-white/20'
+                  : 'text-gray-600 hover:bg-[#01AEED]/5 hover:text-gray-900 border-transparent hover:border-[#01AEED]/20'
             )}
           >
             <item.icon className={cn(
               'mr-3 h-5 w-5 flex-shrink-0 transition-colors',
-              isActive ? 'text-green-600' : item.color
+              isActive 
+                ? 'text-[#01AEED]' 
+                : darkMode 
+                  ? 'text-gray-400 group-hover:text-white'
+                  : 'text-gray-500 group-hover:text-[#01AEED]'
             )} />
-            <span className="truncate">{item.name}</span>
+            <div className="flex-1 min-w-0">
+              <span className="truncate font-medium">{item.name}</span>
+              <p className={cn(
+                "text-xs truncate mt-0.5",
+                isActive 
+                  ? 'text-[#01AEED]/70' 
+                  : darkMode 
+                    ? 'text-gray-500 group-hover:text-gray-300'
+                    : 'text-gray-500 group-hover:text-gray-600'
+              )}>
+                {item.description}
+              </p>
+            </div>
             {isActive && (
-              <div className="ml-auto w-2 h-2 bg-green-500 rounded-full"></div>
+              <div className="w-2 h-2 bg-[#01AEED] rounded-full animate-pulse"></div>
             )}
           </Link>
         )
@@ -136,19 +173,64 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   )
 
   const UserSection = ({ mobile = false }) => (
-    <div className={`border-t border-gray-200 ${mobile ? 'p-3' : 'p-4'}`}>
+    <div className={cn(
+      "border-t p-4",
+      mobile ? 'p-3' : 'p-4',
+      darkMode ? 'border-gray-700/50' : 'border-gray-200'
+    )}>
       {currentUser && (
-        <div className="mb-3 px-3 py-2 bg-gradient-to-r from-green-50 to-blue-50 rounded-lg">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">Admin User</p>
-          <p className="text-sm font-semibold text-gray-900 truncate">
-            {currentUser.firstName || currentUser.email || 'Admin'}
+        <div className={cn(
+          "mb-3 px-3 py-3 rounded-lg border",
+          darkMode 
+            ? 'bg-[#01AEED]/10 backdrop-blur-sm border-[#01AEED]/30'
+            : 'bg-[#01AEED]/10 border-[#01AEED]/30'
+        )}>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-2 h-2 bg-[#01AEED] rounded-full animate-pulse"></div>
+            <p className="text-xs font-medium text-[#01AEED] uppercase tracking-wider">VR Admin</p>
+          </div>
+          <p className={cn(
+            "text-sm font-semibold truncate",
+            darkMode ? 'text-white' : 'text-gray-900'
+          )}>
+            {currentUser.firstName || currentUser.email || 'VR Manager'}
           </p>
         </div>
       )}
+      
+      {/* Dark Mode Toggle */}
+      <Button
+        variant="ghost"
+        onClick={toggleDarkMode}
+        className={cn(
+          "w-full justify-start mb-2 transition-colors border border-transparent",
+          darkMode 
+            ? 'text-gray-300 hover:text-[#01AEED] hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30'
+            : 'text-gray-600 hover:text-[#01AEED] hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30'
+        )}
+      >
+        {darkMode ? (
+          <>
+            <Sun className="mr-3 h-4 w-4" />
+            Light Mode
+          </>
+        ) : (
+          <>
+            <Moon className="mr-3 h-4 w-4" />
+            Dark Mode
+          </>
+        )}
+      </Button>
+
       <Button
         variant="ghost"
         onClick={handleLogout}
-        className="w-full justify-start text-gray-600 hover:text-red-600 hover:bg-red-50 transition-colors"
+        className={cn(
+          "w-full justify-start transition-colors border border-transparent",
+          darkMode 
+            ? 'text-gray-300 hover:text-red-400 hover:bg-red-500/10 hover:border-red-500/30'
+            : 'text-gray-600 hover:text-red-600 hover:bg-red-50 hover:border-red-200'
+        )}
       >
         <LogOut className="mr-3 h-4 w-4" />
         Sign Out
@@ -156,22 +238,60 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     </div>
   )
 
+  const VRLogo = ({ size = 'normal' }: { size?: 'normal' | 'small' }) => (
+    <div className="flex items-center gap-3">
+      <div className={cn(
+        "bg-gradient-to-r from-[#01AEED] to-blue-500 rounded-lg flex items-center justify-center",
+        size === 'small' ? 'w-8 h-8' : 'w-10 h-10'
+      )}>
+        <span className={cn(
+          "text-white font-bold",
+          size === 'small' ? 'text-sm' : 'text-lg'
+        )}>VR</span>
+      </div>
+      <div>
+        <h1 className={cn(
+          "font-bold",
+          size === 'small' ? 'text-lg' : 'text-xl',
+          darkMode ? 'text-white' : 'text-gray-900'
+        )}>
+          VR Room Malta
+        </h1>
+        <p className={cn(
+          "text-xs",
+          darkMode ? 'text-gray-400' : 'text-gray-500'
+        )}>
+          Admin Control Center
+        </p>
+      </div>
+    </div>
+  )
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-green-50/30">
+    <div className={cn(
+      "min-h-screen transition-colors duration-300",
+      darkMode 
+        ? 'bg-gradient-to-br from-gray-900 via-black to-gray-900'
+        : 'bg-gradient-to-br from-gray-50 via-white to-gray-100'
+    )}>
       {/* Mobile Sidebar */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetTrigger asChild>
-          {/* This trigger is hidden and controlled programmatically */}
           <div className="hidden" />
         </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-64 bg-white border-r border-gray-200">
+        <SheetContent side="left" className={cn(
+          "p-0 w-64 border-r transition-colors duration-300",
+          darkMode 
+            ? 'bg-gray-900/95 backdrop-blur-md border-gray-700/50'
+            : 'bg-white/95 backdrop-blur-md border-gray-200'
+        )}>
           <div className="flex h-full flex-col">
             {/* Mobile Header */}
-            <div className="flex h-14 items-center px-4 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50">
-              <Building2 className="h-6 w-6 text-green-600 mr-2" />
-              <h1 className="text-lg font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-                EMS Admin
-              </h1>
+            <div className={cn(
+              "flex h-14 items-center px-4 border-b",
+              darkMode ? 'border-gray-700/50' : 'border-gray-200'
+            )}>
+              <VRLogo size="small" />
             </div>
             
             <div className="flex-1 overflow-y-auto">
@@ -184,14 +304,19 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       </Sheet>
 
       {/* Desktop Sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-60 lg:flex-col">
-        <div className="flex min-h-0 flex-1 flex-col bg-white border-r border-gray-200 shadow-sm">
+      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+        <div className={cn(
+          "flex min-h-0 flex-1 flex-col border-r shadow-lg transition-colors duration-300",
+          darkMode 
+            ? 'bg-gray-900/95 backdrop-blur-md border-gray-700/50'
+            : 'bg-white/95 backdrop-blur-md border-gray-200'
+        )}>
           {/* Desktop Header */}
-          <div className="flex h-16 flex-shrink-0 items-center px-6 border-b border-gray-200 bg-gradient-to-r from-green-50 to-blue-50">
-            <Building2 className="h-7 w-7 text-green-600 mr-3" />
-            <h1 className="text-xl font-bold bg-gradient-to-r from-green-600 to-blue-600 bg-clip-text text-transparent">
-              EMS Admin
-            </h1>
+          <div className={cn(
+            "flex h-16 flex-shrink-0 items-center px-6 border-b",
+            darkMode ? 'border-gray-700/50' : 'border-gray-200'
+          )}>
+            <VRLogo />
           </div>
           
           <div className="flex flex-1 flex-col overflow-y-auto">
@@ -205,32 +330,72 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* Main Content */}
       <div className="lg:pl-60">
         {/* Top Bar */}
-        <div className="sticky top-0 z-40 flex h-14 flex-shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white/95 backdrop-blur-sm px-4 shadow-sm sm:px-6">
+        <div className={cn(
+          "sticky top-0 z-40 flex h-14 flex-shrink-0 items-center gap-x-4 border-b backdrop-blur-md px-4 shadow-sm sm:px-6 transition-colors duration-300",
+          darkMode 
+            ? 'border-gray-700/50 bg-gray-900/95'
+            : 'border-gray-200 bg-white/95'
+        )}>
           {/* Mobile Menu Button */}
           <Button 
             variant="ghost" 
             size="sm" 
-            className="lg:hidden hover:bg-green-50 -ml-2"
+            className={cn(
+              "lg:hidden -ml-2 border border-transparent transition-colors",
+              darkMode 
+                ? 'hover:bg-[#01AEED]/20 text-gray-300 hover:text-white hover:border-[#01AEED]/30'
+                : 'hover:bg-[#01AEED]/10 text-gray-600 hover:text-[#01AEED] hover:border-[#01AEED]/30'
+            )}
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5" />
-            <span className="sr-only">Open sidebar</span>
+            <span className="sr-only">Open VR admin menu</span>
           </Button>
 
           {/* Top Bar Content */}
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex flex-1"></div>
             <div className="flex items-center gap-x-2 sm:gap-x-4 lg:gap-x-6">
-              <div className="hidden sm:block text-sm text-gray-600">
-                <span className="font-medium text-green-600">Welcome,</span>{' '}
-                <span className="hidden md:inline">
-                  {currentUser?.firstName || 'Admin'}
+              {/* Dark Mode Toggle in Top Bar */}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleDarkMode}
+                className={cn(
+                  "transition-colors border border-transparent",
+                  darkMode 
+                    ? 'text-gray-300 hover:text-[#01AEED] hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30'
+                    : 'text-gray-600 hover:text-[#01AEED] hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30'
+                )}
+              >
+                {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              </Button>
+
+              <div className={cn(
+                "hidden sm:block text-sm",
+                darkMode ? 'text-gray-300' : 'text-gray-600'
+              )}>
+                <span className="font-medium text-[#01AEED]">Welcome,</span>{' '}
+                <span className={cn(
+                  "hidden md:inline",
+                  darkMode ? 'text-white' : 'text-gray-900'
+                )}>
+                  {currentUser?.firstName || 'VR Manager'}
                 </span>
-                <span className="md:hidden">
+                <span className={cn(
+                  "md:hidden",
+                  darkMode ? 'text-white' : 'text-gray-900'
+                )}>
                   {(currentUser?.firstName || 'Admin').split(' ')[0]}
                 </span>
               </div>
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 bg-[#01AEED] rounded-full animate-pulse"></div>
+                <span className={cn(
+                  "text-xs hidden sm:block",
+                  darkMode ? 'text-gray-400' : 'text-gray-500'
+                )}>Live</span>
+              </div>
             </div>
           </div>
         </div>

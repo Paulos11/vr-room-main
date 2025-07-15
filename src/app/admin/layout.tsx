@@ -1,5 +1,4 @@
-
-// src/app/admin/layout.tsx - Simplified and clean
+// src/app/admin/layout.tsx - VR Room Malta Admin Layout
 'use client'
 
 import { usePathname } from 'next/navigation'
@@ -17,7 +16,7 @@ export default function Layout({
   if (pathname === '/admin/login') {
     return (
       <AuthGuard>
-        <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50">
+        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
           {children}
         </div>
       </AuthGuard>

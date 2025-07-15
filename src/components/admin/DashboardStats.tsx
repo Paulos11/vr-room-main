@@ -1,10 +1,10 @@
-// src/components/admin/DashboardStats.tsx - Always fetch real data
+// src/components/admin/DashboardStats.tsx - VR Room Malta Theme
 'use client'
 
 import { useEffect, useState, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Users, UserCheck, Clock, Ticket, Zap, TrendingUp, ArrowUpRight, RefreshCw, AlertCircle } from 'lucide-react'
+import { Users, UserCheck, Clock, Ticket, Gamepad2, TrendingUp, ArrowUpRight, RefreshCw, AlertCircle, Calendar, Zap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 
@@ -56,9 +56,8 @@ export function DashboardStats() {
       if (showRefreshToast) setRefreshing(true)
       if (!isRetry) setError(null)
       
-      console.log('Fetching dashboard stats from API...')
+      console.log('Fetching VR dashboard stats from API...')
       
-      // ✅ FORCE FRESH DATA: Add timestamp and no-cache headers
       const timestamp = new Date().getTime()
       const response = await fetch(`/api/dashboard/stats?t=${timestamp}`, {
         method: 'GET',
@@ -85,7 +84,7 @@ export function DashboardStats() {
         setLastUpdated(new Date().toLocaleTimeString())
         setError(null)
         
-        console.log('✅ Real data loaded successfully:', {
+        console.log('✅ VR Room data loaded successfully:', {
           totalRegistrations: result.data.totalRegistrations,
           pendingVerifications: result.data.pendingVerifications,
           recentCount: result.data.recentRegistrations.length
@@ -93,26 +92,25 @@ export function DashboardStats() {
         
         if (showRefreshToast) {
           toast({
-            title: "✅ Data Refreshed",
-            description: "Dashboard updated with latest real data from database",
+            title: "🎮 Data Refreshed",
+            description: "VR Room dashboard updated with latest data",
           })
         }
       } else {
         throw new Error(result.message || 'API returned invalid data structure')
       }
     } catch (error: any) {
-      console.error('❌ Dashboard stats fetch error:', error)
+      console.error('❌ VR dashboard stats fetch error:', error)
       setError(error.message)
       
       if (showRefreshToast) {
         toast({
           title: "❌ Refresh Failed",
-          description: `Could not update dashboard: ${error.message}`,
+          description: `Could not update VR dashboard: ${error.message}`,
           variant: "destructive"
         })
       }
       
-      // ✅ REMOVED: No fallback to mock data - always show error state
       if (!stats && !isRetry) {
         console.log('Setting empty stats due to error')
         setStats({
@@ -135,36 +133,33 @@ export function DashboardStats() {
   }
 
   useEffect(() => {
-    console.log('DashboardStats component mounted, fetching initial data...')
+    console.log('VR DashboardStats component mounted, fetching initial data...')
     fetchStats()
     
-    // ✅ FORCE REFRESH: Auto-refresh every 15 seconds with real data
     const interval = setInterval(() => {
-      console.log('Auto-refreshing dashboard stats...')
+      console.log('Auto-refreshing VR dashboard stats...')
       fetchStats()
     }, 15000)
     
     return () => {
-      console.log('Cleaning up dashboard interval')
+      console.log('Cleaning up VR dashboard interval')
       clearInterval(interval)
     }
   }, [])
 
-  // ✅ CALCULATE REAL GROWTH RATES: Based on actual data patterns
+  // VR-themed stat calculations with improved names
   const statCards = useMemo(() => {
     if (!stats) return []
     
     const getGrowthRate = (current: number, category: string) => {
-      // Simple growth calculation based on current values
-      // In production, you'd compare with historical data
       if (current === 0) return 0
       
       const baseRates = {
-        registrations: Math.min(50, Math.max(-20, (current * 0.1) + (Math.random() * 10 - 5))),
-        pending: Math.max(-30, Math.min(5, -Math.abs(current * 0.05) + (Math.random() * 5 - 2.5))),
-        verified: Math.min(40, Math.max(0, (current * 0.08) + (Math.random() * 8 - 2))),
-        tickets: Math.min(35, Math.max(0, (current * 0.06) + (Math.random() * 6 - 1))),
-        leads: Math.min(60, Math.max(10, (current * 0.12) + (Math.random() * 15 - 5)))
+        bookings: Math.min(50, Math.max(-20, (current * 0.1) + (Math.random() * 10 - 5))),
+        queue: Math.max(-30, Math.min(5, -Math.abs(current * 0.05) + (Math.random() * 5 - 2.5))),
+        experiences: Math.min(40, Math.max(0, (current * 0.08) + (Math.random() * 8 - 2))),
+        sessions: Math.min(35, Math.max(0, (current * 0.06) + (Math.random() * 6 - 1))),
+        events: Math.min(60, Math.max(10, (current * 0.12) + (Math.random() * 15 - 5)))
       }
       
       return Math.round((baseRates[category as keyof typeof baseRates] || 0) * 10) / 10
@@ -172,49 +167,54 @@ export function DashboardStats() {
     
     return [
       {
-        title: 'Total Registrations',
+        title: 'Total Bookings',
         value: stats.totalRegistrations,
-        icon: Users,
-        description: 'All-time registrations',
-        color: 'text-green-600',
-        bgColor: 'bg-green-50',
-        change: getGrowthRate(stats.totalRegistrations, 'registrations')
+        icon: Calendar,
+        description: 'All VR experience bookings',
+        color: 'text-[#01AEED]',
+        bgColor: 'bg-[#01AEED]/10',
+        borderColor: 'border-[#01AEED]/20',
+        change: getGrowthRate(stats.totalRegistrations, 'bookings')
       },
       {
-        title: 'Pending Review',
+        title: 'Queue for VR',
         value: stats.pendingVerifications,
         icon: Clock,
-        description: 'Awaiting admin approval',
-        color: 'text-orange-600',
+        description: 'Waiting for experience slots',
+        color: 'text-orange-500',
         bgColor: 'bg-orange-50',
-        change: getGrowthRate(stats.pendingVerifications, 'pending')
+        borderColor: 'border-orange-200',
+        change: getGrowthRate(stats.pendingVerifications, 'queue')
       },
       {
-        title: 'Verified Clients',
+        title: 'Active Players',
         value: stats.verifiedClients,
-        icon: UserCheck,
-        description: 'Approved & completed',
-        color: 'text-blue-600',
-        bgColor: 'bg-blue-50',
-        change: getGrowthRate(stats.verifiedClients, 'verified')
+        icon: Gamepad2,
+        description: 'Currently in VR experiences',
+        color: 'text-green-600',
+        bgColor: 'bg-green-50',
+        borderColor: 'border-green-200',
+        change: getGrowthRate(stats.verifiedClients, 'experiences')
       },
       {
-        title: 'Tickets Issued',
+        title: 'VR Sessions',
         value: stats.ticketsGenerated,
         icon: Ticket,
-        description: 'Total tickets generated',
+        description: 'Total VR sessions completed',
         color: 'text-purple-600',
         bgColor: 'bg-purple-50',
-        change: getGrowthRate(stats.ticketsGenerated, 'tickets')
+        borderColor: 'border-purple-200',
+        change: getGrowthRate(stats.ticketsGenerated, 'sessions')
       },
       {
-        title: 'Solar Panel Leads',
+        title: 'Party Events',
         value: stats.panelInterests,
-        icon: Zap,
-        description: 'Panel interest submissions',
-        color: 'text-orange-600',
-        bgColor: 'bg-orange-50',
-        change: getGrowthRate(stats.panelInterests, 'leads')
+        icon: Users,
+        description: 'Birthday & group bookings',
+        color: 'text-pink-600',
+        bgColor: 'bg-pink-50',
+        borderColor: 'border-pink-200',
+        change: getGrowthRate(stats.panelInterests, 'events')
       }
     ]
   }, [stats])
@@ -235,29 +235,28 @@ export function DashboardStats() {
 
   const getStatusDisplay = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
-      'PENDING': { label: 'Pending', className: 'border-orange-300 text-orange-700 bg-orange-50' },
-      'VERIFIED': { label: 'Verified', className: 'border-green-300 text-green-700 bg-green-50' },
-      'COMPLETED': { label: 'Completed', className: 'border-green-300 text-green-700 bg-green-50' },
-      'REJECTED': { label: 'Rejected', className: 'border-red-300 text-red-700 bg-red-50' },
-      'PAYMENT_PENDING': { label: 'Payment Due', className: 'border-blue-300 text-blue-700 bg-blue-50' }
+      'PENDING': { label: 'In Queue', className: 'border-orange-300 text-orange-700 bg-orange-50' },
+      'VERIFIED': { label: 'Ready to Play', className: 'border-[#01AEED] text-[#01AEED] bg-[#01AEED]/10' },
+      'COMPLETED': { label: 'Experience Complete', className: 'border-green-300 text-green-700 bg-green-50' },
+      'REJECTED': { label: 'Cancelled', className: 'border-red-300 text-red-700 bg-red-50' },
+      'PAYMENT_PENDING': { label: 'Payment Required', className: 'border-purple-300 text-purple-700 bg-purple-50' }
     }
     
     return statusMap[status] || { label: status, className: 'border-gray-300 text-gray-700 bg-gray-50' }
   }
 
-  // ✅ LOADING STATE: Show proper loading skeleton
+  // Loading state with VR theme
   if (loading) {
     return (
       <div className="space-y-6">
-        <div className="flex items-center gap-2 text-sm text-blue-600 bg-blue-50 p-3 rounded-lg">
+        <div className="flex items-center gap-2 text-sm text-[#01AEED] bg-[#01AEED]/10 p-3 rounded-lg border border-[#01AEED]/20">
           <RefreshCw className="h-4 w-4 animate-spin" />
-          <span>Loading real-time data from database...</span>
+          <span>Loading VR Room real-time data...</span>
         </div>
         
-        {/* Stats Loading */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Card key={i} className="animate-pulse">
+            <Card key={i} className="animate-pulse bg-white shadow-sm">
               <CardHeader className="pb-3">
                 <div className="h-4 bg-gray-200 rounded w-20"></div>
                 <div className="h-8 bg-gray-200 rounded w-12"></div>
@@ -266,8 +265,7 @@ export function DashboardStats() {
           ))}
         </div>
         
-        {/* Recent Activity Loading */}
-        <Card className="animate-pulse">
+        <Card className="animate-pulse bg-white shadow-sm">
           <CardHeader>
             <div className="h-6 bg-gray-200 rounded w-32"></div>
           </CardHeader>
@@ -283,25 +281,25 @@ export function DashboardStats() {
     )
   }
 
-  // ✅ ERROR STATE: Show clear error with retry option
+  // Error state with VR theme
   if (error && !stats) {
     return (
-      <div className="text-center py-12">
-        <div className="w-16 h-16 bg-gradient-to-br from-red-100 to-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="text-center py-12 bg-white rounded-xl shadow-sm">
+        <div className="w-16 h-16 bg-gradient-to-br from-red-50 to-orange-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-red-200">
           <AlertCircle className="h-8 w-8 text-red-600" />
         </div>
-        <p className="text-gray-900 font-medium mb-2">Failed to load dashboard data</p>
-        <p className="text-gray-500 text-sm mb-1">Could not connect to database</p>
+        <p className="text-gray-900 font-medium mb-2">VR System Connection Failed</p>
+        <p className="text-gray-500 text-sm mb-1">Could not connect to VR Room database</p>
         <p className="text-gray-400 text-xs mb-4 max-w-md mx-auto">{error}</p>
         <Button 
           onClick={() => fetchStats(true, true)} 
           disabled={refreshing}
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-[#01AEED] hover:bg-[#01AEED]/90 text-white"
         >
           {refreshing ? (
             <>
               <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Retrying...
+              Reconnecting...
             </>
           ) : (
             'Retry Connection'
@@ -311,16 +309,16 @@ export function DashboardStats() {
     )
   }
 
-  // ✅ MAIN DASHBOARD: Display real data
+  // Main dashboard with VR theme
   return (
     <div className="space-y-6">
-      {/* ✅ REAL DATA INDICATOR */}
+      {/* Live data indicator */}
       {stats && (
-        <div className="flex items-center justify-between text-xs bg-green-50 border border-green-200 px-3 py-2 rounded-lg">
+        <div className="flex items-center justify-between text-xs bg-[#01AEED]/10 border border-[#01AEED]/20 px-4 py-3 rounded-xl">
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-            <span className="text-green-700 font-medium">
-              ✅ Live Data from Database {lastUpdated && `• Updated ${lastUpdated}`}
+            <div className="w-2 h-2 bg-[#01AEED] rounded-full animate-pulse"></div>
+            <span className="text-[#01AEED] font-medium">
+              🎮 VR Room Live Data {lastUpdated && `• Updated ${lastUpdated}`}
             </span>
           </div>
           <Button 
@@ -328,7 +326,7 @@ export function DashboardStats() {
             size="sm" 
             onClick={() => fetchStats(true)}
             disabled={refreshing}
-            className="h-6 text-xs border-green-300 hover:bg-green-100"
+            className="h-7 text-xs border-[#01AEED]/30 hover:bg-[#01AEED]/10 text-[#01AEED]"
           >
             <RefreshCw className={`h-3 w-3 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
@@ -338,10 +336,10 @@ export function DashboardStats() {
       {/* Stats Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         {statCards.map((stat, index) => (
-          <Card key={index} className="hover:shadow-lg transition-all duration-200 border-0 shadow-sm">
+          <Card key={index} className={`hover:shadow-lg transition-all duration-200 bg-white shadow-sm border ${stat.borderColor}`}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <div className={`w-10 h-10 rounded-lg ${stat.bgColor} flex items-center justify-center`}>
+                <div className={`w-10 h-10 rounded-lg ${stat.bgColor} flex items-center justify-center border ${stat.borderColor}`}>
                   <stat.icon className={`h-5 w-5 ${stat.color}`} />
                 </div>
                 <div className={`flex items-center text-xs font-medium ${
@@ -353,7 +351,7 @@ export function DashboardStats() {
               </div>
               <div>
                 <div className="text-2xl font-bold text-gray-900">{stat.value.toLocaleString()}</div>
-                <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                <p className="text-sm font-medium text-gray-700">{stat.title}</p>
                 <p className="text-xs text-gray-500">{stat.description}</p>
               </div>
             </CardHeader>
@@ -362,19 +360,19 @@ export function DashboardStats() {
       </div>
 
       {/* Recent Activity */}
-      <Card className="shadow-sm border-0">
-        <CardHeader className="pb-4 bg-gradient-to-r from-green-50/50 to-blue-50/50">
+      <Card className="shadow-sm bg-white border border-gray-200">
+        <CardHeader className="pb-4 bg-gradient-to-r from-[#01AEED]/5 to-blue-50/50">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg flex items-center gap-2 text-gray-800">
-                <div className="w-2 h-6 bg-gradient-to-b from-green-500 to-blue-500 rounded-full"></div>
-                Recent Activity
-                <Badge variant="outline" className="text-xs bg-white">
+                <div className="w-2 h-6 bg-gradient-to-b from-[#01AEED] to-blue-500 rounded-full"></div>
+                Recent VR Bookings
+                <Badge variant="outline" className="text-xs bg-white border-[#01AEED]/30 text-[#01AEED]">
                   {stats?.recentRegistrations.length || 0} Recent
                 </Badge>
               </CardTitle>
               <CardDescription className="text-gray-600">
-                Latest registrations from database {lastUpdated && `• Updated ${lastUpdated}`}
+                Latest VR experience bookings {lastUpdated && `• Updated ${lastUpdated}`}
               </CardDescription>
             </div>
             <Button 
@@ -382,7 +380,7 @@ export function DashboardStats() {
               size="sm" 
               onClick={() => fetchStats(true)}
               disabled={refreshing}
-              className="hover:bg-green-50"
+              className="hover:bg-[#01AEED]/10 border-[#01AEED]/30 text-[#01AEED]"
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
@@ -392,10 +390,10 @@ export function DashboardStats() {
           {!stats?.recentRegistrations.length ? (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Users className="h-8 w-8 text-gray-400" />
+                <Gamepad2 className="h-8 w-8 text-gray-400" />
               </div>
-              <p className="text-gray-500 font-medium">No recent registrations</p>
-              <p className="text-gray-400 text-sm mt-1">New registrations will appear here automatically</p>
+              <p className="text-gray-500 font-medium">No recent VR bookings</p>
+              <p className="text-gray-400 text-sm mt-1">New VR experience bookings will appear here</p>
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -406,15 +404,15 @@ export function DashboardStats() {
                 return (
                   <div 
                     key={client.id} 
-                    className={`flex items-center justify-between p-4 hover:bg-green-50/50 transition-colors ${
+                    className={`flex items-center justify-between p-4 hover:bg-[#01AEED]/5 transition-colors ${
                       isEven ? 'bg-white' : 'bg-gray-50/50'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold ${
                         client.isEmsClient 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-blue-100 text-blue-700'
+                          ? 'bg-[#01AEED]/10 text-[#01AEED] border border-[#01AEED]/30' 
+                          : 'bg-gray-100 text-gray-700 border border-gray-200'
                       }`}>
                         {client.firstName[0]}{client.lastName[0]}
                       </div>
@@ -434,16 +432,16 @@ export function DashboardStats() {
                       </span>
                       
                       {client.panelInterests.length > 0 && (
-                        <Badge variant="outline" className="text-xs border-orange-300 text-orange-700 bg-orange-50">
-                          <Zap className="h-3 w-3 mr-1" />
-                          Solar
+                        <Badge variant="outline" className="text-xs border-pink-300 text-pink-700 bg-pink-50">
+                          <Users className="h-3 w-3 mr-1" />
+                          Party
                         </Badge>
                       )}
                       
                       {client.ticketCount > 0 && (
                         <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 bg-purple-50">
-                          <Ticket className="h-3 w-3 mr-1" />
-                          {client.ticketCount}
+                          <Gamepad2 className="h-3 w-3 mr-1" />
+                          {client.ticketCount} VR
                         </Badge>
                       )}
                       
@@ -458,11 +456,11 @@ export function DashboardStats() {
                         variant={client.isEmsClient ? "default" : "outline"}
                         className={`text-xs ${
                           client.isEmsClient 
-                            ? 'bg-green-500 text-white' 
-                            : 'border-blue-300 text-blue-700'
+                            ? 'bg-[#01AEED] text-white border-[#01AEED]' 
+                            : 'border-gray-300 text-gray-700'
                         }`}
                       >
-                        {client.isEmsClient ? 'EMS' : 'Public'}
+                        {client.isEmsClient ? 'VIP' : 'Regular'}
                       </Badge>
                     </div>
                   </div>

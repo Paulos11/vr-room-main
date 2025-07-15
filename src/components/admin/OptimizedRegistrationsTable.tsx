@@ -1,104 +1,160 @@
-// src/components/admin/OptimizedRegistrationsTable.tsx - Speed optimized, compact table
+// src/components/admin/OptimizedRegistrationsTable.tsx - VR Room Malta themed
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Badge } from '@/components/ui/badge'
 import { toast } from '@/components/ui/use-toast'
 import { 
-  Plus, RefreshCw, Search, Filter, Users, CheckCircle, Clock, AlertCircle,
-  Building, Zap, Ticket, Copy, Eye, Check, X, CreditCard, Mail, Phone
+  Search, 
+  RefreshCw, 
+  Gamepad2, 
+  Users, 
+  Calendar,
+  Euro,
+  PlayCircle,
+  Eye,
+  Edit,
+  Trash2,
+  CheckCircle,
+  Clock,
+  Mail,
+  Phone,
+  Headphones,
+  AlertCircle,
+  Database,
+  Send
 } from 'lucide-react'
-import { AddUserDialog } from './AddUserDialog'
-import { RegistrationDetailsModal } from './RegistrationDetailsModal'
-import { StatusBadge } from './StatusBadge'
 
-// Minimal interface for performance
-interface CompactRegistration {
+interface VRBooking {
   id: string
-  name: string
-  email: string
-  phone: string
-  idCardNumber: string
-  status: string
-  isEmsClient: boolean
-  company?: string
-  emsCustomerId?: string
-  accountManager?: string
-  ticketCount: number
-  hasSolar: boolean
-  createdAt: string
-  lastTicket?: string
-  adminNotes?: string
-  verifiedAt?: string
-  verifiedBy?: string
-  rejectedReason?: string
-  // Full data for modal
   firstName: string
   lastName: string
-  tickets: Array<{
-    id: string
-    ticketNumber: string
-    status: string
-    ticketSequence: number
+  email: string
+  phone: string
+  status: string
+  isEmsClient: boolean
+  finalAmount: number
+  selectedTickets: Array<{
+    name: string
+    quantity: number
   }>
-  panelInterests: Array<{
-    id: string
-    panelType: string
-    interestLevel: string
-    status: string
-    notes?: string
-  }>
-}
-
-interface TableStats {
-  total: number
-  pending: number
-  completed: number
-  paymentPending: number
+  sessionCount: number
+  createdAt: string
+  paidAt?: string
 }
 
 export function OptimizedRegistrationsTable() {
-  const [allData, setAllData] = useState<CompactRegistration[]>([]) // Store all data
-  const [filteredData, setFilteredData] = useState<CompactRegistration[]>([]) // Filtered view
-  const [stats, setStats] = useState<TableStats>({ total: 0, pending: 0, completed: 0, paymentPending: 0 })
+  const router = useRouter()
+  const [bookings, setBookings] = useState<VRBooking[]>([])
+  const [filteredBookings, setFilteredBookings] = useState<VRBooking[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
-  const [processing, setProcessing] = useState<string | null>(null)
-  const [addUserOpen, setAddUserOpen] = useState(false)
-  const [selectedRegistration, setSelectedRegistration] = useState<CompactRegistration | null>(null)
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [actionNotes, setActionNotes] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [customerTypeFilter, setCustomerTypeFilter] = useState('all')
 
-  // Optimized fetch - load all data once, filter client-side
-  const fetchData = useCallback(async (showRefresh = false) => {
+  const fetchBookings = useCallback(async () => {
     try {
-      if (showRefresh) setLoading(false) // Keep UI responsive during refresh
-      else setLoading(true)
-
-      // Fetch ALL data once (no search/status params for server)
-      const response = await fetch('/api/admin/registrations/compact?all=true', {
-        headers: { 'Cache-Control': 'no-cache' }
-      })
+      setLoading(true)
+      setError(null)
       
-      const result = await response.json()
+      // Try multiple API endpoints
+      const endpoints = [
+        '/api/admin/registrations?limit=50',
+        '/api/dashboard/stats', // Fallback to dashboard data
+      ]
       
-      if (result.success) {
-        setAllData(result.data.registrations)
-        setStats(result.data.stats)
-      } else {
-        throw new Error(result.message)
+      let response
+      let result
+      
+      for (const endpoint of endpoints) {
+        try {
+          response = await fetch(endpoint, {
+            headers: { 'Cache-Control': 'no-cache' }
+          })
+          
+          if (response.ok) {
+            result = await response.json()
+            if (result.success) {
+              // Handle different API response structures
+              if (endpoint.includes('registrations')) {
+                setBookings(result.data.registrations || [])
+              } else if (endpoint.includes('dashboard')) {
+                // Convert dashboard data to bookings format
+                const dashboardBookings = (result.data.recentRegistrations || []).map((reg: any) => ({
+                  id: reg.id,
+                  firstName: reg.firstName,
+                  lastName: reg.lastName,
+                  email: reg.email,
+                  phone: reg.phone || 'N/A',
+                  status: reg.status,
+                  isEmsClient: reg.isEmsClient,
+                  finalAmount: 0, // Not available in dashboard data
+                  selectedTickets: [{ name: 'VR Session', quantity: reg.ticketCount || 1 }],
+                  sessionCount: reg.ticketCount || 1,
+                  createdAt: reg.createdAt,
+                  paidAt: reg.status === 'COMPLETED' ? reg.createdAt : undefined
+                }))
+                setBookings(dashboardBookings)
+              }
+              break
+            }
+          }
+        } catch (err) {
+          console.log(`Endpoint ${endpoint} failed, trying next...`)
+          continue
+        }
       }
-    } catch (error) {
-      console.error('Fetch error:', error)
+      
+      if (!result?.success) {
+        throw new Error('All API endpoints failed')
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to fetch VR bookings:', error)
+      setError(error.message)
+      
+      // Set mock data for demo purposes
+      const mockBookings: VRBooking[] = [
+        {
+          id: '1',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john.doe@email.com',
+          phone: '+356 2123 4567',
+          status: 'COMPLETED',
+          isEmsClient: false,
+          finalAmount: 2500,
+          selectedTickets: [{ name: 'VR Adventure Package', quantity: 2 }],
+          sessionCount: 2,
+          createdAt: new Date().toISOString(),
+          paidAt: new Date().toISOString()
+        },
+        {
+          id: '2',
+          firstName: 'Maria',
+          lastName: 'Garcia',
+          email: 'maria.garcia@email.com',
+          phone: '+356 2987 6543',
+          status: 'PAYMENT_PENDING',
+          isEmsClient: true,
+          finalAmount: 0,
+          selectedTickets: [{ name: 'VIP VR Experience', quantity: 1 }],
+          sessionCount: 1,
+          createdAt: new Date(Date.now() - 3600000).toISOString()
+        }
+      ]
+      setBookings(mockBookings)
+      
       toast({
-        title: "Error",
-        description: "Failed to load registrations",
+        title: "API Connection Issue",
+        description: "Showing demo data. Please check API endpoints.",
         variant: "destructive",
       })
     } finally {
@@ -106,417 +162,458 @@ export function OptimizedRegistrationsTable() {
     }
   }, [])
 
-  // Instant client-side filtering
-  const applyFilters = useMemo(() => {
-    let filtered = allData
+  // Filter bookings locally
+  useEffect(() => {
+    let filtered = bookings
 
-    // Apply status filter
-    if (status && status !== 'all') {
-      filtered = filtered.filter(reg => reg.status === status)
-    }
-
-    // Apply search filter
     if (search.trim()) {
-      const searchLower = search.toLowerCase().trim()
-      filtered = filtered.filter(reg => 
-        reg.name.toLowerCase().includes(searchLower) ||
-        reg.email.toLowerCase().includes(searchLower) ||
-        reg.phone.toLowerCase().includes(searchLower) ||
-        reg.id.toLowerCase().includes(searchLower) ||
-        (reg.company && reg.company.toLowerCase().includes(searchLower)) ||
-        (reg.emsCustomerId && reg.emsCustomerId.toLowerCase().includes(searchLower))
+      const searchLower = search.toLowerCase()
+      filtered = filtered.filter(booking => 
+        booking.firstName.toLowerCase().includes(searchLower) ||
+        booking.lastName.toLowerCase().includes(searchLower) ||
+        booking.email.toLowerCase().includes(searchLower) ||
+        booking.phone.includes(search) ||
+        booking.selectedTickets.some(ticket => 
+          ticket.name.toLowerCase().includes(searchLower)
+        )
       )
     }
 
-    return filtered
-  }, [allData, search, status])
-
-  // Update filtered data when filters change
-  useEffect(() => {
-    setFilteredData(applyFilters)
-  }, [applyFilters])
-
-  // Initial data load only
-  useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
-  // Fast action handler with optimistic updates
-  const handleAction = useCallback(async (id: string, action: 'APPROVE' | 'REJECT') => {
-    setProcessing(id)
-    
-    // Optimistic update on both datasets
-    const updateRegistration = (reg: CompactRegistration) => 
-      reg.id === id 
-        ? { ...reg, status: action === 'APPROVE' ? 'COMPLETED' : 'REJECTED' }
-        : reg
-
-    setAllData(prev => prev.map(updateRegistration))
-    setFilteredData(prev => prev.map(updateRegistration))
-    
-    try {
-      const response = await fetch('/api/admin/approve-registration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          registrationId: id, 
-          action,
-          notes: actionNotes
-        }),
-      })
-
-      const result = await response.json()
-
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: `Registration ${action.toLowerCase()}ed`,
-        })
-        
-        // Update with real data from server
-        const updateWithServerData = (reg: CompactRegistration) => 
-          reg.id === id 
-            ? { 
-                ...reg, 
-                status: action === 'APPROVE' ? 'COMPLETED' : 'REJECTED',
-                ticketCount: result.data?.tickets?.length || reg.ticketCount,
-                tickets: result.data?.tickets || reg.tickets
-              }
-            : reg
-
-        setAllData(prev => prev.map(updateWithServerData))
-        setFilteredData(prev => prev.map(updateWithServerData))
-        
-        // Close modal and refresh stats
-        setDetailsOpen(false)
-        setSelectedRegistration(null)
-        setActionNotes('')
-        setTimeout(() => fetchData(true), 500)
-      } else {
-        // Revert optimistic update
-        const revertUpdate = (reg: CompactRegistration) => 
-          reg.id === id 
-            ? { ...reg, status: 'PENDING' }
-            : reg
-
-        setAllData(prev => prev.map(revertUpdate))
-        setFilteredData(prev => prev.map(revertUpdate))
-        throw new Error(result.message)
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Action failed",
-        variant: "destructive",
-      })
-    } finally {
-      setProcessing(null)
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(booking => booking.status === statusFilter)
     }
-  }, [actionNotes, fetchData])
 
-  // Handle view details
-  const handleView = useCallback((id: string) => {
-    const registration = allData.find(r => r.id === id) // Look in all data
-    if (registration) {
-      setSelectedRegistration(registration)
-      setActionNotes(registration.adminNotes || '')
-      setDetailsOpen(true)
+    if (customerTypeFilter !== 'all') {
+      const isEms = customerTypeFilter === 'ems'
+      filtered = filtered.filter(booking => booking.isEmsClient === isEms)
     }
-  }, [allData])
 
-  // Memoized components for performance
-  const copyId = (id: string) => {
-    navigator.clipboard.writeText(id)
-    toast({ title: "Copied!", description: "ID copied to clipboard" })
+    setFilteredBookings(filtered)
+  }, [bookings, search, statusFilter, customerTypeFilter])
+
+  useEffect(() => {
+    fetchBookings()
+  }, [fetchBookings])
+
+  const formatCurrency = (cents: number) => {
+    return `€${(cents / 100).toFixed(2)}`
   }
 
-  // Instant search handler - no debouncing needed
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value) // Instant update
-  }, [])
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short', 
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
 
-  // Instant status filter - no debouncing needed
-  const handleStatusChange = useCallback((value: string) => {
-    setStatus(value) // Instant update
-  }, [])
+  const getStatusBadge = (status: string) => {
+    const configs = {
+      'COMPLETED': { bg: 'bg-green-100', text: 'text-green-800', icon: '🎮', label: 'Ready to Play' },
+      'PAYMENT_PENDING': { bg: 'bg-yellow-100', text: 'text-yellow-800', icon: '⏳', label: 'Payment Pending' },
+      'CANCELLED': { bg: 'bg-red-100', text: 'text-red-800', icon: '❌', label: 'Cancelled' },
+      'VERIFIED': { bg: 'bg-[#01AEED]/10', text: 'text-[#01AEED]', icon: '✅', label: 'Verified' },
+      'PENDING': { bg: 'bg-orange-100', text: 'text-orange-800', icon: '⌛', label: 'Pending' }
+    }
 
-  if (loading && allData.length === 0) {
+    const config = configs[status as keyof typeof configs] || { 
+      bg: 'bg-gray-100', 
+      text: 'text-gray-800', 
+      icon: '❓', 
+      label: status 
+    }
+
     return (
-      <div className="space-y-4">
-        {/* Compact header skeleton */}
-        <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-lg animate-pulse">
-          <div className="flex justify-between items-center">
-            <div>
-              <div className="h-6 bg-gray-200 rounded w-48 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-64"></div>
-            </div>
-            <div className="h-9 w-24 bg-gray-200 rounded"></div>
-          </div>
-        </div>
-        
-        {/* Table skeleton */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="p-4 border-b bg-gray-50">
-              <div className="h-10 bg-gray-200 rounded"></div>
-            </div>
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-12 border-b flex items-center px-4">
-                <div className="flex-1 grid grid-cols-7 gap-4">
-                  {Array.from({ length: 7 }).map((_, j) => (
-                    <div key={j} className="h-4 bg-gray-200 rounded"></div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+      <Badge className={`${config.bg} ${config.text} border-0`}>
+        <span className="mr-1">{config.icon}</span>
+        {config.label}
+      </Badge>
     )
   }
 
+  const statusOptions = [
+    { value: 'all', label: 'All Bookings' },
+    { value: 'COMPLETED', label: 'Ready to Play' },
+    { value: 'VERIFIED', label: 'Verified' },
+    { value: 'PAYMENT_PENDING', label: 'Payment Pending' },
+    { value: 'PENDING', label: 'Pending Review' },
+    { value: 'CANCELLED', label: 'Cancelled' }
+  ]
+
+  const customerTypeOptions = [
+    { value: 'all', label: 'All Customers' },
+    { value: 'ems', label: 'VIP Clients' },
+    { value: 'public', label: 'Regular Customers' }
+  ]
+
+  const handleViewBooking = (bookingId: string) => {
+    // Use Next.js router for proper navigation
+    router.push(`/admin/registrations/${bookingId}`)
+  }
+
+  const handleEditBooking = (bookingId: string) => {
+    // Use Next.js router for proper navigation
+    router.push(`/admin/registrations/${bookingId}/edit`)
+  }
+
+  const handleDeleteBooking = async (bookingId: string, customerName: string) => {
+    if (!confirm(`Are you sure you want to delete the VR booking for ${customerName}? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/admin/registrations/${bookingId}`, {
+        method: 'DELETE',
+        headers: { 'Cache-Control': 'no-cache' }
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        toast({
+          title: "✅ Booking Deleted",
+          description: `VR booking for ${customerName} has been removed successfully`,
+        })
+        // Refresh the bookings list
+        fetchBookings()
+      } else {
+        throw new Error(result.message || 'Failed to delete booking')
+      }
+    } catch (error: any) {
+      console.error('Delete booking error:', error)
+      toast({
+        title: "❌ Delete Failed",
+        description: error.message || 'Could not delete the VR booking',
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleResendTickets = async (bookingId: string, customerName: string, email: string) => {
+    try {
+      const response = await fetch(`/api/admin/registrations/${bookingId}/resend-tickets`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache' 
+        }
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        toast({
+          title: "🎫 Tickets Resent",
+          description: `VR tickets sent to ${email} successfully`,
+        })
+      } else {
+        throw new Error(result.message || 'Failed to resend tickets')
+      }
+    } catch (error: any) {
+      console.error('Resend tickets error:', error)
+      toast({
+        title: "❌ Resend Failed",
+        description: error.message || 'Could not resend VR tickets',
+        variant: "destructive"
+      })
+    }
+  }
+
   return (
-    <div className="space-y-4">
-      {/* Compact Header */}
-      <div className="bg-gradient-to-r from-green-50 to-blue-50 p-4 rounded-lg border border-green-200">
-        <div className="flex justify-between items-start mb-3">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-[#01AEED]/10 via-blue-50/50 to-[#01AEED]/10 backdrop-blur-sm p-6 rounded-xl border border-[#01AEED]/20 shadow-lg">
+        <div className="flex justify-between items-start mb-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-              <div className="w-1 h-6 bg-gradient-to-b from-green-500 to-blue-500 rounded"></div>
-              Registrations
-            </h2>
-            <p className="text-sm text-gray-600">Manage event registrations</p>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-10 h-10 bg-gradient-to-r from-[#01AEED] to-blue-500 rounded-lg flex items-center justify-center">
+                <Gamepad2 className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">VR Bookings Management</h2>
+                <p className="text-gray-600 text-sm">Manage customer VR session bookings and payments</p>
+              </div>
+            </div>
           </div>
           
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => fetchData(true)}>
+          <div className="flex items-center gap-2">
+            {error && (
+              <div className="flex items-center gap-1 text-orange-600 bg-orange-50 px-2 py-1 rounded-lg border border-orange-200">
+                <AlertCircle className="h-3 w-3" />
+                <span className="text-xs">API Issue</span>
+              </div>
+            )}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={fetchBookings}
+              disabled={loading}
+              className="hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30 text-[#01AEED]"
+            >
               <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-            <Button onClick={() => setAddUserOpen(true)} size="sm">
-              <Plus className="w-4 h-4 mr-1" />
-              Add User
             </Button>
           </div>
         </div>
         
-        {/* Compact Stats */}
-        <div className="flex gap-4 text-sm">
-          <div className="flex items-center gap-1">
-            <Users className="w-3 h-3 text-gray-500" />
-            <span className="text-gray-700">Total: <strong>{allData.length}</strong></span>
+        {/* Quick Stats */}
+        <div className="flex flex-wrap gap-4 text-sm">
+          <div className="flex items-center gap-2 bg-white/50 px-3 py-2 rounded-lg border border-gray-200/50">
+            <Database className="h-3 w-3 text-[#01AEED]" />
+            <span className="text-gray-700">Total: <strong>{bookings.length}</strong></span>
           </div>
-          <div className="flex items-center gap-1">
-            <Users className="w-3 h-3 text-blue-500" />
-            <span className="text-gray-700">Filtered: <strong>{filteredData.length}</strong></span>
+          <div className="flex items-center gap-2 bg-white/50 px-3 py-2 rounded-lg border border-gray-200/50">
+            <PlayCircle className="h-3 w-3 text-green-500" />
+            <span className="text-gray-700">Ready: <strong>{bookings.filter(b => b.status === 'COMPLETED').length}</strong></span>
           </div>
-          <div className="flex items-center gap-1">
-            <Clock className="w-3 h-3 text-orange-500" />
-            <span className="text-gray-700">Pending: <strong className="text-orange-600">{stats.pending}</strong></span>
+          <div className="flex items-center gap-2 bg-white/50 px-3 py-2 rounded-lg border border-gray-200/50">
+            <Clock className="h-3 w-3 text-yellow-500" />
+            <span className="text-gray-700">Pending: <strong>{bookings.filter(b => b.status === 'PAYMENT_PENDING' || b.status === 'PENDING').length}</strong></span>
           </div>
-          <div className="flex items-center gap-1">
-            <CheckCircle className="w-3 h-3 text-green-500" />
-            <span className="text-gray-700">Approved: <strong className="text-green-600">{stats.completed}</strong></span>
-          </div>
-          {stats.paymentPending > 0 && (
-            <div className="flex items-center gap-1">
-              <CreditCard className="w-3 h-3 text-blue-500" />
-              <span className="text-gray-700">Payment: <strong className="text-blue-600">{stats.paymentPending}</strong></span>
+          {filteredBookings.length !== bookings.length && (
+            <div className="flex items-center gap-2 bg-white/50 px-3 py-2 rounded-lg border border-gray-200/50">
+              <Search className="h-3 w-3 text-blue-500" />
+              <span className="text-gray-700">Filtered: <strong>{filteredBookings.length}</strong></span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Compact Table */}
-      <Card className="overflow-hidden">
-        <CardContent className="p-0">
-          {/* Compact Filters */}
-          <div className="p-4 bg-gray-50/50 border-b flex gap-3">
-            <div className="flex-1 relative">
+      {/* Filters */}
+      <Card className="bg-white shadow-sm border border-gray-200">
+        <CardContent className="p-4">
+          <div className="flex flex-col lg:flex-row gap-4">
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
               <Input
-                placeholder="Search registrations..."
+                placeholder="Search customers or VR experiences..."
                 value={search}
-                onChange={(e) => handleSearchChange(e.target.value)}
-                className="pl-10 h-9"
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-10 border-gray-200 focus:border-[#01AEED] focus:ring-[#01AEED]/20"
               />
-              {search && (
-                <button
-                  onClick={() => handleSearchChange('')}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
             </div>
-            <Select value={status} onValueChange={handleStatusChange}>
-              <SelectTrigger className="w-48 h-9">
-                <Filter className="h-4 w-4 mr-2" />
-                <SelectValue />
+
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-48 border-gray-200 focus:border-[#01AEED]">
+                <SelectValue placeholder="Booking Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="PENDING">Pending</SelectItem>
-                <SelectItem value="COMPLETED">Approved</SelectItem>
-                <SelectItem value="PAYMENT_PENDING">Payment Due</SelectItem>
-                <SelectItem value="REJECTED">Rejected</SelectItem>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={customerTypeFilter} onValueChange={setCustomerTypeFilter}>
+              <SelectTrigger className="w-48 border-gray-200 focus:border-[#01AEED]">
+                <SelectValue placeholder="Customer Type" />
+              </SelectTrigger>
+              <SelectContent>
+                {customerTypeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+        </CardContent>
+      </Card>
 
-          {/* Compact Table */}
+      {/* Bookings Table */}
+      <Card className="overflow-hidden shadow-sm border border-gray-200">
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="bg-gray-50">
-                <TableHead className="py-3 text-xs font-semibold">Customer</TableHead>
-                <TableHead className="py-3 text-xs font-semibold">Contact</TableHead>
-                <TableHead className="py-3 text-xs font-semibold">Type</TableHead>
-                <TableHead className="py-3 text-xs font-semibold">Status</TableHead>
-                <TableHead className="py-3 text-xs font-semibold">Tickets</TableHead>
-                <TableHead className="py-3 text-xs font-semibold">Date</TableHead>
-                <TableHead className="py-3 text-xs font-semibold">Actions</TableHead>
+              <TableRow className="bg-gradient-to-r from-[#01AEED]/5 to-blue-50/50 border-b border-gray-200">
+                <TableHead className="py-3 text-xs font-semibold text-gray-700">Customer</TableHead>
+                <TableHead className="py-3 text-xs font-semibold text-gray-700">VR Sessions</TableHead>
+                <TableHead className="py-3 text-xs font-semibold text-gray-700">Status</TableHead>
+                <TableHead className="py-3 text-xs font-semibold text-gray-700">Amount</TableHead>
+                <TableHead className="py-3 text-xs font-semibold text-gray-700">Booked</TableHead>
+                <TableHead className="py-3 text-xs font-semibold text-gray-700">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredData.length > 0 ? filteredData.map((reg, index) => (
-                <TableRow 
-                  key={reg.id} 
-                  className={`h-12 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} hover:bg-blue-50/30 transition-colors`}
-                >
-                  {/* Customer */}
-                  <TableCell className="py-2">
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <p className="font-medium text-sm text-gray-900">{reg.name}</p>
-                        <div className="flex items-center gap-1">
-                          <code className="text-xs bg-gray-100 px-1 rounded">{reg.id.slice(-6)}</code>
-                          <button onClick={() => copyId(reg.id)} className="text-xs text-blue-600 hover:text-blue-800">
-                            <Copy className="h-3 w-3" />
-                          </button>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <TableRow key={i} className="animate-pulse">
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j} className="py-3">
+                        <div className="h-4 bg-gray-200 rounded animate-pulse"></div>
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : filteredBookings.length > 0 ? (
+                filteredBookings.map((booking, index) => {
+                  const isEven = index % 2 === 0
+                  const rowBg = isEven ? 'bg-white' : 'bg-gray-50/50'
+
+                  return (
+                    <TableRow key={booking.id} className={`${rowBg} hover:bg-[#01AEED]/5 transition-colors`}>
+                      {/* Customer */}
+                      <TableCell className="py-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm">{booking.firstName} {booking.lastName}</p>
+                            <Badge variant={booking.isEmsClient ? "default" : "outline"} className={
+                              booking.isEmsClient 
+                                ? "bg-[#01AEED] text-white text-xs" 
+                                : "border-gray-300 text-gray-700 text-xs"
+                            }>
+                              {booking.isEmsClient ? '👑 VIP' : '👤 Regular'}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-600">
+                            <Mail className="h-3 w-3" />
+                            <span className="truncate max-w-32">{booking.email}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-500">
+                            <Phone className="h-3 w-3" />
+                            <span>{booking.phone}</span>
+                          </div>
                         </div>
-                      </div>
-                      {reg.isEmsClient && (
-                        <Badge variant="outline" className="text-xs bg-green-100 text-green-700 border-green-300">EMS</Badge>
-                      )}
-                    </div>
-                  </TableCell>
+                      </TableCell>
 
-                  {/* Contact */}
-                  <TableCell className="py-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-xs text-gray-700">
-                        <Mail className="h-3 w-3" />
-                        <span className="truncate max-w-32">{reg.email}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-gray-500">
-                        <Phone className="h-3 w-3" />
-                        <span>{reg.phone}</span>
-                      </div>
-                    </div>
-                  </TableCell>
+                      {/* VR Sessions */}
+                      <TableCell className="py-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Headphones className="h-4 w-4 text-[#01AEED]" />
+                            <span className="font-medium text-sm">{booking.sessionCount} sessions</span>
+                          </div>
+                          <div className="space-y-1">
+                            {booking.selectedTickets.slice(0, 2).map((ticket, idx) => (
+                              <div key={idx} className="text-xs text-gray-600 flex items-center gap-1">
+                                <Gamepad2 className="h-3 w-3 text-blue-500" />
+                                <span>{ticket.name} × {ticket.quantity}</span>
+                              </div>
+                            ))}
+                            {booking.selectedTickets.length > 2 && (
+                              <div className="text-xs text-gray-500">
+                                +{booking.selectedTickets.length - 2} more...
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </TableCell>
 
-                  {/* Type */}
-                  <TableCell className="py-2">
-                    <div className="space-y-1">
-                      <Badge variant={reg.isEmsClient ? "default" : "outline"} className="text-xs">
-                        {reg.isEmsClient ? (
-                          <><Building className="h-3 w-3 mr-1" />EMS</>
-                        ) : (
-                          <><Users className="h-3 w-3 mr-1" />Public</>
-                        )}
-                      </Badge>
-                      {reg.company && (
-                        <p className="text-xs text-gray-600 truncate max-w-24" title={reg.company}>
-                          {reg.company}
-                        </p>
-                      )}
-                    </div>
-                  </TableCell>
+                      {/* Status */}
+                      <TableCell className="py-3">
+                        {getStatusBadge(booking.status)}
+                      </TableCell>
 
-                  {/* Status */}
-                  <TableCell className="py-2">
-                    <StatusBadge status={reg.status} />
-                  </TableCell>
-
-                  {/* Tickets */}
-                  <TableCell className="py-2">
-                    <div className="space-y-1">
-                      {reg.ticketCount > 0 ? (
-                        <>
-                          <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
-                            <Ticket className="h-3 w-3 mr-1" />
-                            {reg.ticketCount}
-                          </Badge>
-                          {reg.lastTicket && (
-                            <p className="text-xs font-mono text-gray-600">{reg.lastTicket}</p>
+                      {/* Amount */}
+                      <TableCell className="py-3">
+                        <div className="text-sm">
+                          {booking.isEmsClient ? (
+                            <Badge className="bg-green-100 text-green-800">FREE VIP</Badge>
+                          ) : (
+                            <span className="font-medium">{formatCurrency(booking.finalAmount)}</span>
                           )}
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-400 italic">None</span>
-                      )}
-                      {reg.hasSolar && (
-                        <Badge variant="outline" className="text-xs border-orange-300 text-orange-700 bg-orange-50">
-                          <Zap className="h-3 w-3 mr-1" />Solar
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
+                        </div>
+                        {booking.paidAt && (
+                          <div className="text-xs text-green-600 flex items-center gap-1">
+                            <CheckCircle className="h-3 w-3" />
+                            Paid
+                          </div>
+                        )}
+                      </TableCell>
 
-                  {/* Date */}
-                  <TableCell className="py-2">
-                    <span className="text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded">
-                      {new Date(reg.createdAt).toLocaleDateString('en-US', { 
-                        month: 'short', 
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </span>
-                  </TableCell>
+                      {/* Booked Date */}
+                      <TableCell className="py-3">
+                        <div className="text-xs text-gray-600 flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          <span>{formatDate(booking.createdAt)}</span>
+                        </div>
+                      </TableCell>
 
-                  {/* Actions */}
-                  <TableCell className="py-2">
-                    <div className="flex gap-1">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        onClick={() => handleView(reg.id)}
-                        className="h-7 px-2 text-xs hover:bg-blue-50"
-                      >
-                        <Eye className="h-3 w-3" />
-                      </Button>
-                      
-                      {reg.status === 'PENDING' && (
-                        <>
+                      {/* Actions */}
+                      <TableCell className="py-3">
+                        <div className="flex gap-1">
                           <Button
                             size="sm"
-                            onClick={() => handleAction(reg.id, 'APPROVE')}
-                            disabled={processing === reg.id}
-                            className="h-7 px-2 text-xs bg-green-500 hover:bg-green-600"
+                            variant="outline"
+                            onClick={() => handleViewBooking(booking.id)}
+                            className="h-7 px-2 text-xs hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30"
+                            title="View Details"
                           >
-                            {processing === reg.id ? '...' : <Check className="h-3 w-3" />}
+                            <Eye className="h-3 w-3" />
                           </Button>
+                          
                           <Button
                             size="sm"
-                            variant="destructive"
-                            onClick={() => handleAction(reg.id, 'REJECT')}
-                            disabled={processing === reg.id}
-                            className="h-7 px-2 text-xs"
+                            variant="outline"
+                            onClick={() => handleEditBooking(booking.id)}
+                            className="h-7 px-2 text-xs hover:bg-green-50 hover:border-green-300 text-green-600"
+                            title="Edit Booking"
                           >
-                            <X className="h-3 w-3" />
+                            <Edit className="h-3 w-3" />
                           </Button>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )) : (
+                          
+                          {(booking.status === 'COMPLETED' || booking.status === 'VERIFIED') && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleResendTickets(booking.id, `${booking.firstName} ${booking.lastName}`, booking.email)}
+                              className="h-7 px-2 text-xs hover:bg-blue-50 hover:border-blue-300 text-blue-600"
+                              title="Resend VR Tickets"
+                            >
+                              <Send className="h-3 w-3" />
+                            </Button>
+                          )}
+                          
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteBooking(booking.id, `${booking.firstName} ${booking.lastName}`)}
+                            className="h-7 px-2 text-xs hover:bg-red-50 hover:border-red-300 text-red-600"
+                            title="Delete Booking"
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                          
+                          {booking.status === 'COMPLETED' && (
+                            <Button
+                              size="sm"
+                              className="h-7 px-2 text-xs bg-[#01AEED] hover:bg-[#01AEED]/90 text-white"
+                              title="Start VR Session"
+                            >
+                              <PlayCircle className="h-3 w-3" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
+              ) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center">
-                    <div className="flex flex-col items-center gap-3">
-                      <Users className="w-8 h-8 text-gray-400" />
+                  <TableCell colSpan={6} className="py-12 text-center">
+                    <div className="flex flex-col items-center gap-4">
+                      <div className="w-20 h-20 bg-gradient-to-br from-[#01AEED]/10 to-blue-100 rounded-full flex items-center justify-center shadow-sm">
+                        <Gamepad2 className="w-10 h-10 text-[#01AEED]" />
+                      </div>
                       <div>
-                        <p className="text-gray-500 font-medium">No registrations found</p>
-                        <p className="text-gray-400 text-sm">Try adjusting your filters</p>
+                        <p className="text-gray-500 font-medium text-lg">No VR bookings found</p>
+                        <p className="text-gray-400 text-sm mt-2">
+                          {search || statusFilter !== 'all' || customerTypeFilter !== 'all' 
+                            ? 'Try adjusting your filters to see more results'
+                            : 'VR session bookings will appear here once customers start booking'
+                          }
+                        </p>
+                        <Button 
+                          variant="outline"
+                          className="mt-4 hover:bg-[#01AEED]/10 hover:border-[#01AEED]/30 text-[#01AEED]"
+                          onClick={() => window.open('/book', '_blank')}
+                        >
+                          <PlayCircle className="w-4 h-4 mr-2" />
+                          Book VR Session
+                        </Button>
                       </div>
                     </div>
                   </TableCell>
@@ -527,25 +624,41 @@ export function OptimizedRegistrationsTable() {
         </CardContent>
       </Card>
 
-      <AddUserDialog 
-        open={addUserOpen}
-        onOpenChange={setAddUserOpen}
-        onSuccess={() => {
-          fetchData()
-          toast({ title: "Success", description: "User added successfully" })
-        }}
-      />
-
-      <RegistrationDetailsModal
-        registration={selectedRegistration}
-        open={detailsOpen}
-        onOpenChange={setDetailsOpen}
-        onApprove={(id) => handleAction(id, 'APPROVE')}
-        onReject={(id) => handleAction(id, 'REJECT')}
-        processing={processing === selectedRegistration?.id}
-        notes={actionNotes}
-        onNotesChange={setActionNotes}
-      />
+      {/* Footer Stats */}
+      {filteredBookings.length > 0 && (
+        <Card className="bg-gradient-to-r from-[#01AEED]/5 to-blue-50/50 border border-[#01AEED]/20 shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <Gamepad2 className="h-4 w-4 text-[#01AEED]" />
+                <span className="text-gray-700">
+                  Total VR Sessions: <strong>{filteredBookings.reduce((sum, b) => sum + b.sessionCount, 0)}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Euro className="h-4 w-4 text-green-600" />
+                <span className="text-gray-700">
+                  Total Revenue: <strong>
+                    {formatCurrency(filteredBookings.reduce((sum, b) => sum + b.finalAmount, 0))}
+                  </strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-[#01AEED]" />
+                <span className="text-gray-700">
+                  VIP Clients: <strong>{filteredBookings.filter(b => b.isEmsClient).length}</strong>
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <PlayCircle className="h-4 w-4 text-green-600" />
+                <span className="text-gray-700">
+                  Ready to Play: <strong>{filteredBookings.filter(b => b.status === 'COMPLETED').length}</strong>
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
