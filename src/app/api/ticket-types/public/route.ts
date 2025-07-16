@@ -128,11 +128,7 @@ export async function GET(request: NextRequest) {
         featured: ticket.featured,
         imageUrl: ticket.imageUrl,
         tags: ticket.tags ? ticket.tags.split(',').map(tag => tag.trim()) : [],
-        // VR-specific fields (you might want to add these to your database)
-        duration: 30, // Default duration
-        maxPlayers: 1, // Default single player
-        difficulty: 'Medium', // Default difficulty
-        ageRating: '8+', // Default age rating
+        
         
         // Computed fields
         isAvailable: ticket.availableStock > 0,

@@ -215,24 +215,11 @@ export function PaymentPageContent() {
     locationInfo: {
       venue: 'VR Room Malta',
       location: 'Bugibba Square, Malta',
-      duration: 'Sessions start Wednesday',
-      ageInfo: 'All ages welcome (8+ recommended)'
+     
     }
   } : {
     bgGradient: 'from-blue-50 to-indigo-100',
-    primaryColor: 'text-blue-600',
-    primaryBg: 'bg-blue-600',
-    primaryBorder: 'border-blue-600',
-    lightBg: 'bg-blue-50',
-    backLink: '/register',
-    brandName: 'EMS',
-    itemLabel: 'tickets',
-    locationInfo: {
-      venue: 'Malta Fairs and Conventions Centre',
-      location: 'Ta\' Qali, Malta',
-      duration: 'June 26 - July 6, 2025',
-      ageInfo: 'Professional trade event'
-    }
+    
   }
 
   if (loading) {
@@ -270,11 +257,7 @@ export function PaymentPageContent() {
             <p className="text-gray-600 mb-4 text-sm">
               {isVRBooking ? 'Please book your VR experience first.' : 'Please register first.'}
             </p>
-            <Link href={theme.backLink}>
-              <Button className={theme.primaryBg}>
-                {isVRBooking ? 'Book VR Experience' : 'Go to Registration'}
-              </Button>
-            </Link>
+           
           </CardContent>
         </Card>
       </div>
@@ -284,13 +267,7 @@ export function PaymentPageContent() {
   return (
     <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} p-4`}>
       <div className="max-w-md mx-auto pt-4">
-        {/* Back Button */}
-        <Link href={theme.backLink} className="inline-block mb-4">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
-        </Link>
+       
 
         <Card>
           <CardHeader className="pb-4">
@@ -464,27 +441,7 @@ export function PaymentPageContent() {
               </ul>
             </div>
 
-            {/* Location Info */}
-            <div className={`p-3 border rounded-lg ${theme.lightBg}`}>
-              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                {theme.locationInfo.venue}
-              </h3>
-              <div className="space-y-1 text-xs text-gray-700">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-3 w-3" />
-                  <span>{theme.locationInfo.location}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Clock className="h-3 w-3" />
-                  <span>{theme.locationInfo.duration}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-3 w-3" />
-                  <span>{theme.locationInfo.ageInfo}</span>
-                </div>
-              </div>
-            </div>
+            
 
             {/* Panel Interest - EMS only */}
             {!isVRBooking && registration.panelInterest && (

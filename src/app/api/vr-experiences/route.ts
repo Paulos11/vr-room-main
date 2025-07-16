@@ -40,11 +40,7 @@ export async function GET(request: NextRequest) {
       featured: experience.featured,
       tags: experience.tags ? experience.tags.split(',').map(tag => tag.trim()) : [],
       
-      // VR-specific fields (you can add these to your TicketType model)
-      duration: 30, // Default 5 Minutes - you can store this in the database
-      maxPlayers: 1, // Default single player - you can store this in the database
-      difficulty: 'Medium', // You can store this in tags or add a difficulty field
-      ageRating: '8+', // You can store this in description or add an age field
+     
       
       // Computed fields
       formattedPrice: `€${(experience.priceInCents / 100).toFixed(2)}`,

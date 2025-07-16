@@ -586,10 +586,7 @@ export function PaymentSuccessContent() {
                           <Clock className="h-3 w-3" />
                           <span><strong>Sessions:</strong> 5 Minutes each</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Users className="h-3 w-3" />
-                          <span><strong>Age:</strong> 8+ recommended</span>
-                        </div>
+                      
                       </div>
                     </div>
                   ) : (
