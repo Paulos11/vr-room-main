@@ -92,17 +92,6 @@ export default function ContactPage() {
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3">
-                  <Clock className="h-5 w-5 text-[#01AEED] mt-1 flex-shrink-0" />
-                  <div>
-                    <p className="text-white font-medium">Opening Hours</p>
-                    <div className="text-gray-300 text-sm">
-                      <p>Mon - Thu: 10:00 AM - 10:00 PM</p>
-                      <p>Fri - Sat: 10:00 AM - 11:00 PM</p>
-                      <p>Sunday: 11:00 AM - 9:00 PM</p>
-                    </div>
-                  </div>
-                </div>
               </div>
             </div>
           </div>

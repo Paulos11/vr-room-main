@@ -72,7 +72,7 @@ export function VRTermsStep({ formData, onUpdate }: VRStepProps) {
               </div>
               <div className="flex items-center gap-2">
                 <Clock className="h-3 w-3 text-[#01AEED]" />
-                <span><strong>Opening:</strong> 9:00am - 8:00pm</span>
+                <span><strong>Opening:</strong> 6:30pm - 11:00pm</span>
               </div>
             </div>
             <div className="space-y-1">
