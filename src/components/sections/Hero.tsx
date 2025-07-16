@@ -9,10 +9,10 @@ const heroSlides = [
   {
     id: 1,
     image: '/hero/1.jpg',
-    title: 'Full-Body VR with Friends',
+    title: 'VR with Friends',
     subtitle: 'VR ROOM MALTA',
     description: 'The Experience Everyone\'s Raving About',
-    subDescription: 'Come see why we\'re rated 5 stars by 150,000+ guests worldwide.',
+    subDescription: 'Come see why we\'re rated 5 stars.',
     buttonText: 'Book an Experience'
   },
   {
