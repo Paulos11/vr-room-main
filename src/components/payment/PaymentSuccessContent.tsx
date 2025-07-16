@@ -1,11 +1,10 @@
-// src/components/payment/PaymentSuccessContent.tsx - Enhanced with VR detection
+// src/components/payment/PaymentSuccessContent.tsx - Integrated VR design style
 'use client'
 
 import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, Ticket, Mail, Calendar, MapPin, Home, Download, Copy, FileText, Gift, Gamepad2, Clock, Users } from 'lucide-react'
+import { CheckCircle, Ticket, Mail, Calendar, MapPin, Home, Download, Copy, FileText, Gift, Gamepad2, Clock, Users, ArrowLeft, Star } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
@@ -41,10 +40,8 @@ export function PaymentSuccessContent() {
 
   useEffect(() => {
     if (sessionId) {
-      // Paid order - verify with Stripe session
       fetchPaymentDetails()
     } else if (isFreeOrder && registrationId) {
-      // Free order - get registration details directly
       fetchFreeOrderDetails()
     } else {
       setError('No session ID or registration ID provided')
@@ -58,7 +55,6 @@ export function PaymentSuccessContent() {
       const result = await response.json()
       
       if (result.success) {
-        // Auto-detect if this is a VR booking from the registration
         const registrationResponse = await fetch(`/api/registrations/${result.data.registrationId}`)
         const registrationResult = await registrationResponse.json()
         
@@ -87,13 +83,9 @@ export function PaymentSuccessContent() {
 
   const fetchFreeOrderDetails = async () => {
     try {
-      console.log('Fetching free order details for registration:', registrationId)
-      
-      // Try the direct registration details endpoint first
       const response = await fetch(`/api/registrations/details?id=${registrationId}`)
       
       if (!response.ok) {
-        console.log('Direct endpoint failed, trying fallback method')
         throw new Error('Direct endpoint failed')
       }
       
@@ -102,13 +94,11 @@ export function PaymentSuccessContent() {
       if (result.success) {
         const registration = result.data
         
-        // Auto-detect VR booking
         const detectedVRBooking = registration.adminNotes?.includes('VR Booking') || 
                                  registration.adminNotes?.includes('Selected experiences:') ||
                                  (!registration.isEmsClient && registration.allTickets?.length === 0) ||
                                  isVRBooking
         
-        // Map the registration data to PaymentSuccessData format
         setPaymentData({
           registrationId: registration.id,
           customerName: `${registration.firstName} ${registration.lastName}`,
@@ -122,48 +112,31 @@ export function PaymentSuccessContent() {
           appliedCouponCode: registration.appliedCouponCode,
           isVRBooking: detectedVRBooking
         })
-        
-        console.log('Free order data loaded successfully:', {
-          registrationId: registration.id,
-          quantity: registration.allTickets?.length || 0,
-          status: registration.registrationStatus,
-          isVRBooking: detectedVRBooking
-        })
       } else {
         throw new Error(result.message || 'Registration not found')
       }
     } catch (error) {
       console.error('Error fetching free order details:', error)
       
-      // Fallback: Try to get minimal data for the success page
-      try {
-        console.log('Attempting fallback data fetch...')
-        
-        // Set minimal data so the page doesn't fail completely
-        setPaymentData({
-          registrationId: registrationId || '',
-          customerName: 'Valued Customer',
-          email: '',
-          quantity: 0,
-          totalAmount: 0,
-          currency: 'eur',
-          paidAt: new Date().toISOString(),
-          ticketNumbers: [],
-          isFreeOrder: true,
-          appliedCouponCode: '',
-          isVRBooking: isVRBooking
-        })
-        
-        // But still show a warning
-        toast({
-          title: "Data Loading Issue",
-          description: "Your order was successful, but we couldn't load all details. Please check your email for confirmation.",
-          variant: "default",
-        })
-        
-      } catch (fallbackError) {
-        setError('Failed to fetch order details. Your order was successful - please check your email for confirmation.')
-      }
+      setPaymentData({
+        registrationId: registrationId || '',
+        customerName: 'Valued Customer',
+        email: '',
+        quantity: 0,
+        totalAmount: 0,
+        currency: 'eur',
+        paidAt: new Date().toISOString(),
+        ticketNumbers: [],
+        isFreeOrder: true,
+        appliedCouponCode: '',
+        isVRBooking: isVRBooking
+      })
+      
+      toast({
+        title: "Data Loading Issue",
+        description: "Your order was successful, but we couldn't load all details. Please check your email for confirmation.",
+        variant: "default",
+      })
     } finally {
       setLoading(false)
     }
@@ -175,12 +148,9 @@ export function PaymentSuccessContent() {
     setDownloadingPdf(true)
     
     try {
-      // For free orders, use registration ID; for paid orders, use session ID
       const downloadUrl = paymentData.isFreeOrder 
         ? `/api/tickets/download?registrationId=${paymentData.registrationId}`
         : `/api/tickets/download?sessionId=${sessionId}`
-      
-      console.log('Downloading PDF from:', downloadUrl)
       
       const response = await fetch(downloadUrl)
       
@@ -232,47 +202,48 @@ export function PaymentSuccessContent() {
     })
   }
 
-  // Theme and content based on VR vs EMS
+  // Theme based on VR vs EMS
   const isVR = paymentData?.isVRBooking
   const theme = isVR ? {
-    bgGradient: 'from-cyan-50 to-blue-100',
-    primaryColor: 'text-[#01AEED]',
     itemLabel: 'session',
     itemLabelPlural: 'sessions',
-    itemName: 'VR Experience',
     brandName: 'VR Room Malta',
     supportEmail: 'info@vrroom.mt',
-    thankYouMessage: 'Thank you for choosing VR Room Malta! We look forward to your virtual reality adventure.'
+    backLink: '/book'
   } : {
-    bgGradient: 'from-green-50 to-blue-100',
-    primaryColor: 'text-blue-600',
     itemLabel: 'ticket',
     itemLabelPlural: 'tickets',
-    itemName: 'VIP Ticket',
     brandName: 'EMS',
     supportEmail: 'info@ems.com.mt',
-    thankYouMessage: 'Thank you for choosing EMS! We look forward to seeing you at the trade fair.'
+    backLink: '/register'
   }
 
   if (loading) {
     return (
-      <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} p-4`}>
-        <div className="max-w-md mx-auto pt-8">
-          <Card>
-            <CardHeader>
-              <div className="animate-pulse space-y-2">
-                <div className="h-16 w-16 bg-gray-200 rounded-full mx-auto"></div>
-                <div className="h-6 bg-gray-200 rounded w-3/4 mx-auto"></div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="animate-pulse">
-                  <div className="h-16 bg-gray-200 rounded"></div>
+      <div className="min-h-screen bg-cover bg-center bg-fixed relative pt-20" 
+           style={{ 
+             backgroundImage: `linear-gradient(rgba(0,0,0,0.7), rgba(1,174,237,0.8)), url('/vr-background.jpg')`,
+           }}>
+        <div className="w-full min-h-screen">
+          <div className="w-full bg-black/40 backdrop-blur-sm border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-4 py-6">
+              <div className="flex items-center justify-center">
+                <div className="text-center">
+                  <h1 className="text-2xl font-bold text-white">Loading your confirmation...</h1>
+                  <div className="mt-4 animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+              </div>
+            </div>
+          </div>
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/20 p-8">
+              <div className="animate-pulse space-y-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="h-16 bg-gray-200 rounded"></div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -280,311 +251,458 @@ export function PaymentSuccessContent() {
 
   if (error || !paymentData) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-100 p-4 flex items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
-              <CheckCircle className="h-8 w-8 text-red-600" />
+      <div className="min-h-screen bg-cover bg-center bg-fixed relative pt-20" 
+           style={{ 
+             backgroundImage: `linear-gradient(rgba(0,0,0,0.7), rgba(1,174,237,0.8)), url('/vr-background.jpg')`,
+           }}>
+        <div className="w-full min-h-screen">
+          <div className="w-full bg-black/40 backdrop-blur-sm border-b border-white/10">
+            <div className="max-w-7xl mx-auto px-4 py-6">
+              <div className="text-center">
+                <h1 className="text-2xl font-bold text-white">Order Verification Failed</h1>
+                <p className="text-sm text-gray-300">{error}</p>
+              </div>
             </div>
-            <h2 className="text-xl font-bold mb-2 text-red-700">Order Verification Failed</h2>
-            <p className="text-gray-600 mb-4 text-sm">{error}</p>
-            <div className="space-y-2">
-              <Link href="/ticket-status">
-                <Button className="w-full">Check Ticket Status</Button>
-              </Link>
-              <Link href="/">
-                <Button variant="outline" className="w-full">Back to Home</Button>
-              </Link>
+          </div>
+          <div className="max-w-7xl mx-auto px-4 py-8">
+            <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/20 p-8 text-center">
+              <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <CheckCircle className="h-8 w-8 text-red-600" />
+              </div>
+              <div className="space-y-4">
+                <Link href="/ticket-status">
+                  <Button className="w-full">Check Ticket Status</Button>
+                </Link>
+                <Link href="/">
+                  <Button variant="outline" className="w-full">Back to Home</Button>
+                </Link>
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} p-4`}>
-      <div className="max-w-md mx-auto pt-8">
-        <Card>
-          <CardHeader className="text-center pb-4">
-            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              {paymentData.isFreeOrder ? (
-                <Gift className="h-8 w-8 text-green-600" />
-              ) : isVR ? (
-                <Gamepad2 className="h-8 w-8 text-[#01AEED]" />
-              ) : (
-                <CheckCircle className="h-8 w-8 text-green-600" />
-              )}
-            </div>
-            <CardTitle className={`text-xl ${isVR ? 'text-[#01AEED]' : 'text-green-700'}`}>
-              {paymentData.isFreeOrder ? 'Booking Confirmed! 🎉' : isVR ? 'VR Sessions Booked! 🎮' : 'Payment Successful! 🎉'}
-            </CardTitle>
-          </CardHeader>
-          
-          <CardContent className="space-y-4">
-            {/* Success Message */}
-            <div className="text-center">
-              <p className="text-gray-600 text-sm">
-                {paymentData.isFreeOrder ? (
-                  <>
-                    Your FREE {isVR ? 'VR session booking' : 'registration'} is complete! 
-                    {paymentData.quantity > 1 ? ` All ${paymentData.quantity} ${theme.itemLabelPlural} have` : paymentData.quantity === 1 ? ` Your ${theme.itemLabel} has` : ` Your ${theme.itemLabelPlural} have`} 
-                    been {isVR ? 'confirmed' : 'generated'} at no cost.
-                  </>
-                ) : (
-                  <>
-                    Your {isVR ? 'VR experience booking' : 'registration'} is complete! 
-                    {paymentData.quantity > 1 ? ` All ${paymentData.quantity} ${theme.itemLabelPlural} have` : ` Your ${theme.itemLabel} has`} 
-                    been {isVR ? 'confirmed' : 'generated'}.
-                  </>
-                )}
-              </p>
-            </div>
-
-            {/* Free Order Special Notice */}
-            {paymentData.isFreeOrder && (
-              <div className="p-4 border-2 border-purple-200 rounded-lg bg-purple-50">
-                <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                  <Gift className="h-4 w-4 text-purple-600" />
-                  100% Discount Applied!
-                </h3>
-                <div className="text-xs text-purple-800">
-                  {paymentData.appliedCouponCode && (
-                    <p>✓ Coupon "{paymentData.appliedCouponCode}" - 100% OFF</p>
+    <div className="min-h-screen bg-cover bg-center bg-fixed relative pt-20" 
+         style={{ 
+           backgroundImage: `linear-gradient(rgba(0,0,0,0.7), rgba(1,174,237,0.8)), url('/vr-background.jpg')`,
+         }}>
+      
+      {/* Full-width container */}
+      <div className="w-full min-h-screen">
+        
+        {/* Header Section */}
+        <div className="w-full bg-black/40 backdrop-blur-sm border-b border-white/10">
+          <div className="max-w-7xl mx-auto px-4 py-6">
+            <div className="flex items-center justify-between">
+              {/* Success Title */}
+              <div>
+                <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+                  {paymentData.isFreeOrder ? (
+                    <>
+                      <Gift className="h-6 w-6 text-green-400" />
+                      Booking Confirmed! 🎉
+                    </>
+                  ) : isVR ? (
+                    <>
+                      <Gamepad2 className="h-6 w-6 text-[#01AEED]" />
+                      VR Sessions Booked! 🎮
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-6 w-6 text-green-400" />
+                      Payment Successful! 🎉
+                    </>
                   )}
-                  <p>✓ No payment required</p>
-                  <p>✓ Your {theme.itemLabelPlural} are completely FREE</p>
-                  <p>✓ Full {isVR ? 'VR experience' : 'VIP'} access included</p>
+                </h1>
+                <p className="text-sm text-gray-300">
+                  {paymentData.isFreeOrder ? (
+                    `Your FREE ${isVR ? 'VR sessions are' : 'tickets are'} ready for download`
+                  ) : (
+                    `Your ${isVR ? 'VR experience booking' : 'registration'} is complete`
+                  )}
+                </p>
+              </div>
+              
+              {/* Success Indicator */}
+              <div className="hidden md:flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center">
+                    <CheckCircle className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="text-white font-medium">Order Complete</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-[#01AEED] flex items-center justify-center">
+                    <Mail className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="text-white font-medium">Email Sent</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
+                    <Download className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="text-white font-medium">Ready to Download</span>
                 </div>
               </div>
-            )}
+              
+              {/* Order Summary */}
+              <div className="text-right">
+                <div className={`font-bold text-lg ${paymentData.isFreeOrder ? 'text-green-400' : 'text-white'}`}>
+                  {paymentData.isFreeOrder ? 'FREE' : `€${(paymentData.totalAmount / 100).toFixed(2)}`}
+                </div>
+                <div className="text-sm text-gray-300">
+                  {paymentData.quantity} {paymentData.quantity > 1 ? theme.itemLabelPlural : theme.itemLabel}
+                </div>
+              </div>
+            </div>
+            
+            {/* Mobile Progress */}
+            <div className="mt-4 md:hidden">
+              <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
+                <span>✅ Order Complete</span>
+                <span>📧 Email Sent</span>
+                <span>📄 Ready to Download</span>
+              </div>
+              <div className="w-full bg-white/20 rounded-full h-2">
+                <div className="bg-green-500 h-2 rounded-full w-full"></div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-            {/* PDF Download Section */}
-            <div className={`p-4 border-2 rounded-lg ${isVR ? 'border-[#01AEED]/20 bg-[#01AEED]/5' : 'border-green-200 bg-green-50'}`}>
-              <h3 className={`font-medium mb-3 text-sm flex items-center gap-2`}>
-                <FileText className={`h-4 w-4 ${isVR ? 'text-[#01AEED]' : 'text-green-600'}`} />
-                Download Your {isVR ? 'Session' : 'Ticket'}{paymentData.quantity > 1 ? 's' : ''}
-              </h3>
-              <div className="space-y-3">
-                <div className={`text-xs ${isVR ? 'text-[#262624]' : 'text-green-800'}`}>
-                  <p>✓ Professional PDF {theme.itemLabel}{paymentData.quantity > 1 ? 's' : ''} ready for download</p>
-                  <p>✓ {paymentData.quantity > 1 ? `Each ${theme.itemLabel} has a unique number` : `Unique ${theme.itemLabel} number included`}</p>
-                  <p>✓ Print or save to your phone for easy access</p>
+        {/* Main Content Area */}
+        <div className="max-w-7xl mx-auto px-4 py-8">
+          
+          {/* Back Button */}
+          <Link href={theme.backLink} className="inline-block mb-4">
+            <Button variant="ghost" size="sm" className="text-white hover:bg-white/10">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to {isVR ? 'VR Booking' : 'Registration'}
+            </Button>
+          </Link>
+          
+          {/* Success Content */}
+          <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/20 overflow-hidden">
+            
+            {/* Content Body */}
+            <div className="p-8 space-y-6">
+              
+              {/* Success Message */}
+              <div className="text-center">
+                <div className="mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-4" 
+                     style={{ background: 'linear-gradient(135deg, #10B981, #059669)' }}>
+                  {paymentData.isFreeOrder ? (
+                    <Gift className="h-10 w-10 text-white" />
+                  ) : isVR ? (
+                    <Gamepad2 className="h-10 w-10 text-white" />
+                  ) : (
+                    <CheckCircle className="h-10 w-10 text-white" />
+                  )}
+                </div>
+                <p className="text-gray-600 text-lg leading-relaxed">
+                  {paymentData.isFreeOrder ? (
+                    <>
+                      Your FREE {isVR ? 'VR session booking' : 'registration'} is complete! 
+                      {paymentData.quantity > 1 ? ` All ${paymentData.quantity} ${theme.itemLabelPlural} have` : ` Your ${theme.itemLabel} has`} 
+                      been {isVR ? 'confirmed' : 'generated'} at no cost.
+                    </>
+                  ) : (
+                    <>
+                      Your {isVR ? 'VR experience booking' : 'registration'} is complete! 
+                      {paymentData.quantity > 1 ? ` All ${paymentData.quantity} ${theme.itemLabelPlural} have` : ` Your ${theme.itemLabel} has`} 
+                      been {isVR ? 'confirmed' : 'generated'}.
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {/* Free Order Special Notice */}
+              {paymentData.isFreeOrder && (
+                <div className="p-6 border-2 border-purple-200 rounded-xl bg-gradient-to-r from-purple-50 to-pink-50">
+                  <h3 className="font-semibold mb-3 text-lg flex items-center gap-2">
+                    <Gift className="h-5 w-5 text-purple-600" />
+                    🎉 100% Discount Applied!
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm text-purple-800">
+                    <div className="space-y-1">
+                      {paymentData.appliedCouponCode && (
+                        <p>✓ Coupon "{paymentData.appliedCouponCode}" - 100% OFF</p>
+                      )}
+                      <p>✓ No payment required</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p>✓ Your {theme.itemLabelPlural} are completely FREE</p>
+                      <p>✓ Full {isVR ? 'VR experience' : 'VIP'} access included</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Download Section - Primary CTA */}
+              <div className={`p-6 border-2 rounded-xl ${isVR ? 'border-[#01AEED]/20 bg-gradient-to-r from-[#01AEED]/5 to-cyan-50' : 'border-green-200 bg-gradient-to-r from-green-50 to-emerald-50'}`}>
+                <h3 className={`font-semibold mb-4 text-lg flex items-center gap-2`}>
+                  <FileText className={`h-5 w-5 ${isVR ? 'text-[#01AEED]' : 'text-green-600'}`} />
+                  <Star className="h-4 w-4 text-yellow-500" />
+                  Download Your {isVR ? 'Session' : 'Ticket'}{paymentData.quantity > 1 ? 's' : ''}
+                </h3>
+                <div className="grid md:grid-cols-2 gap-4 mb-4">
+                  <div className={`text-sm ${isVR ? 'text-[#262624]' : 'text-green-800'}`}>
+                    <p>✓ Professional PDF {theme.itemLabel}{paymentData.quantity > 1 ? 's' : ''} ready</p>
+                    <p>✓ {paymentData.quantity > 1 ? `Each ${theme.itemLabel} has unique number` : `Unique ${theme.itemLabel} number included`}</p>
+                  </div>
+                  <div className={`text-sm ${isVR ? 'text-[#262624]' : 'text-green-800'}`}>
+                    <p>✓ Print or save to your phone</p>
+                    <p>✓ QR codes for easy scanning</p>
+                  </div>
                 </div>
                 
                 <Button 
                   onClick={downloadTicketPDF}
                   disabled={downloadingPdf}
-                  className={`w-full ${isVR ? 'bg-[#01AEED] hover:bg-[#01AEED]/90' : 'bg-green-600 hover:bg-green-700'}`}
+                  className={`w-full text-lg py-4 ${isVR ? 'bg-gradient-to-r from-[#01AEED] to-[#262624] hover:from-[#01AEED]/90 hover:to-[#262624]/90' : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700'}`}
+                  size="lg"
                 >
                   {downloadingPdf ? (
                     <>
-                      <Download className="mr-2 h-4 w-4 animate-bounce" />
+                      <Download className="mr-2 h-5 w-5 animate-bounce" />
                       Generating PDF...
                     </>
                   ) : (
                     <>
-                      <Download className="mr-2 h-4 w-4" />
+                      <Download className="mr-2 h-5 w-5" />
                       Download PDF {isVR ? 'Session' : 'Ticket'}{paymentData.quantity > 1 ? 's' : ''}
                     </>
                   )}
                 </Button>
               </div>
-            </div>
 
-            {/* Order Summary */}
-            <div className={`p-3 border rounded-lg ${isVR ? 'bg-[#01AEED]/5' : 'bg-blue-50'}`}>
-              <h3 className="font-medium mb-2 text-sm">Booking Confirmation</h3>
-              <div className="space-y-1 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Customer:</span>
-                  <span className="font-medium">{paymentData.customerName || 'Valued Customer'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">{isVR ? 'Sessions:' : 'Tickets:'}</span>
-                  <span className="font-medium">{paymentData.quantity} {theme.itemName}{paymentData.quantity > 1 ? 's' : ''}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">
-                    {paymentData.isFreeOrder ? 'Total Value:' : 'Amount Paid:'}
-                  </span>
-                  <span className="font-medium">
-                    {paymentData.isFreeOrder ? (
-                      <span className="text-green-600 font-bold">FREE</span>
-                    ) : (
-                      `€${(paymentData.totalAmount / 100).toFixed(2)}`
-                    )}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Order Date:</span>
-                  <span className="font-medium">{new Date(paymentData.paidAt).toLocaleDateString()}</span>
-                </div>
-                {paymentData.appliedCouponCode && (
-                  <div className="flex justify-between">
-                    <span className="text-gray-600">Coupon:</span>
-                    <span className="font-medium text-purple-600">{paymentData.appliedCouponCode}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Ticket/Session Numbers */}
-            {paymentData.ticketNumbers && paymentData.ticketNumbers.length > 0 && (
-              <div className="p-3 border rounded-lg bg-purple-50">
-                <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                  {isVR ? <Gamepad2 className="h-4 w-4 text-purple-600" /> : <Ticket className="h-4 w-4 text-purple-600" />}
-                  Your {isVR ? 'Session' : 'Ticket'} Number{paymentData.quantity > 1 ? 's' : ''}
-                </h3>
-                <div className="space-y-2">
-                  {paymentData.ticketNumbers.map((ticketNumber, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
-                      <span className="font-mono text-sm font-bold">{ticketNumber}</span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyToClipboard(ticketNumber, `${isVR ? 'Session' : 'Ticket'} ${index + 1}`)}
-                      >
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Email Confirmation */}
-            <div className="p-3 border rounded-lg bg-orange-50">
-              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                <Mail className="h-4 w-4 text-orange-600" />
-                Email Confirmation
-              </h3>
-              <div className="space-y-1 text-xs text-orange-800">
-                {paymentData.email && (
-                  <p>✓ Confirmation sent to: <strong>{paymentData.email}</strong></p>
-                )}
-                {!paymentData.isFreeOrder && <p>✓ Payment receipt included</p>}
-                <p>✓ {isVR ? 'Session details and instructions' : 'Event details and instructions'} attached</p>
-                <p className="text-orange-600 mt-2">
-                  <strong>Tip:</strong> Download the PDF and save to your phone for easy access!
-                </p>
-              </div>
-            </div>
-
-            {/* VR vs EMS Event Information */}
-            {isVR ? (
-              <div className="p-3 border rounded-lg bg-[#01AEED]/10">
-                <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                  <Gamepad2 className="h-4 w-4 text-[#01AEED]" />
-                  VR Experience Details
-                </h3>
-                <div className="space-y-2 text-xs text-[#262624]">
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3 w-3" />
-                    <span><strong>Location:</strong> VR Room Malta, Bugibba Square</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-3 w-3" />
-                    <span><strong>Sessions:</strong> 30 minutes each</span>
-                  </div>
+              {/* Two Column Layout */}
+              <div className="grid lg:grid-cols-2 gap-6">
                 
-                </div>
-              </div>
-            ) : (
-              <div className="p-3 border rounded-lg bg-indigo-50">
-                <h3 className="font-medium mb-2 text-sm">Event Details</h3>
-                <div className="space-y-2 text-xs text-indigo-800">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-3 w-3" />
-                    <span><strong>Dates:</strong> June 26 - July 6, 2025</span>
+                {/* Left Column */}
+                <div className="space-y-4">
+                  
+                  {/* Order Summary */}
+                  <div className={`p-4 border rounded-xl ${isVR ? 'bg-[#01AEED]/5' : 'bg-blue-50'}`}>
+                    <h4 className="font-medium mb-3 text-base">Booking Confirmation</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Customer:</span>
+                        <span className="font-medium">{paymentData.customerName || 'Valued Customer'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">{isVR ? 'Sessions:' : 'Tickets:'}</span>
+                        <span className="font-medium">{paymentData.quantity} {paymentData.quantity > 1 ? theme.itemLabelPlural : theme.itemLabel}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">
+                          {paymentData.isFreeOrder ? 'Total Value:' : 'Amount Paid:'}
+                        </span>
+                        <span className="font-medium">
+                          {paymentData.isFreeOrder ? (
+                            <span className="text-green-600 font-bold">FREE</span>
+                          ) : (
+                            `€${(paymentData.totalAmount / 100).toFixed(2)}`
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Order Date:</span>
+                        <span className="font-medium">{new Date(paymentData.paidAt).toLocaleDateString()}</span>
+                      </div>
+                      {paymentData.appliedCouponCode && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Coupon:</span>
+                          <span className="font-medium text-purple-600">{paymentData.appliedCouponCode}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="h-3 w-3" />
-                    <span><strong>Venue:</strong> Malta Fairs and Conventions Centre, Ta' Qali</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Ticket className="h-3 w-3" />
-                    <span><strong>EMS Booth:</strong> MFCC Main Hall</span>
-                  </div>
-                </div>
-              </div>
-            )}
 
-            {/* Important Instructions - Only for EMS */}
-            {!isVR && (
-              <div className="p-3 border rounded-lg bg-yellow-50">
-                <h3 className="font-medium mb-2 text-sm">Important Instructions</h3>
-                <ul className="text-xs text-yellow-800 space-y-1">
-                  <li>• Present your ticket (digital or printed) at the event</li>
-                  <li>• Bring valid ID matching your registration name</li>
-                  <li>• Arrive 30 minutes early for smooth check-in</li>
-                  <li>• Visit EMS booth in MFCC Main Hall for VIP access</li>
-                  {paymentData.quantity > 1 && (
-                    <li>• Each person needs their individual ticket for entry</li>
+                  {/* Ticket Numbers */}
+                  {paymentData.ticketNumbers && paymentData.ticketNumbers.length > 0 && (
+                    <div className="p-4 border border-purple-200 rounded-xl bg-purple-50">
+                      <h4 className="font-medium mb-3 text-base flex items-center gap-2">
+                        {isVR ? <Gamepad2 className="h-4 w-4 text-purple-600" /> : <Ticket className="h-4 w-4 text-purple-600" />}
+                        Your {isVR ? 'Session' : 'Ticket'} Number{paymentData.quantity > 1 ? 's' : ''}
+                      </h4>
+                      <div className="space-y-2">
+                        {paymentData.ticketNumbers.map((ticketNumber, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 bg-white rounded-lg border">
+                            <span className="font-mono text-sm font-bold">{ticketNumber}</span>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => copyToClipboard(ticketNumber, `${isVR ? 'Session' : 'Ticket'} ${index + 1}`)}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </ul>
+                </div>
+
+                {/* Right Column */}
+                <div className="space-y-4">
+                  
+                  {/* Email Confirmation */}
+                  <div className="p-4 border border-orange-200 rounded-xl bg-orange-50">
+                    <h4 className="font-medium mb-3 text-base flex items-center gap-2">
+                      <Mail className="h-4 w-4 text-orange-600" />
+                      Email Confirmation
+                    </h4>
+                    <div className="space-y-2 text-sm text-orange-800">
+                      {paymentData.email && (
+                        <p>✓ Confirmation sent to: <strong>{paymentData.email}</strong></p>
+                      )}
+                      {!paymentData.isFreeOrder && <p>✓ Payment receipt included</p>}
+                      <p>✓ {isVR ? 'Session details and instructions' : 'Event details and instructions'} attached</p>
+                      <p className="text-orange-600 mt-2 font-medium">
+                        💡 Tip: Download the PDF and save to your phone for easy access!
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Location Information */}
+                  {isVR ? (
+                    <div className="p-4 border border-[#01AEED]/20 rounded-xl bg-[#01AEED]/10">
+                      <h4 className="font-medium mb-3 text-base flex items-center gap-2">
+                        <Gamepad2 className="h-4 w-4 text-[#01AEED]" />
+                        VR Experience Details
+                      </h4>
+                      <div className="space-y-2 text-sm text-[#262624]">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3 w-3" />
+                          <span><strong>Location:</strong> VR Room Malta, Bugibba Square</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3 w-3" />
+                          <span><strong>Sessions:</strong> 30 minutes each</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="h-3 w-3" />
+                          <span><strong>Age:</strong> 8+ recommended</span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 border border-indigo-200 rounded-xl bg-indigo-50">
+                      <h4 className="font-medium mb-3 text-base">Event Details</h4>
+                      <div className="space-y-2 text-sm text-indigo-800">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-3 w-3" />
+                          <span><strong>Dates:</strong> June 26 - July 6, 2025</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <MapPin className="h-3 w-3" />
+                          <span><strong>Venue:</strong> Malta Fairs and Conventions Centre</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Ticket className="h-3 w-3" />
+                          <span><strong>EMS Booth:</strong> MFCC Main Hall</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+              
+                </div>
               </div>
-            )}
 
            
 
-            {/* Contact Information */}
-            <div className="p-3 border rounded-lg bg-gray-50">
-              <h3 className="font-medium mb-2 text-sm">Need Help?</h3>
-              <div className="space-y-1 text-xs">
-                <div className="flex items-center gap-2">
-                  <Mail className="h-3 w-3 text-gray-600" />
-                  <span>{theme.supportEmail}</span>
+              {/* Important Instructions - Only for EMS */}
+              {!isVR && (
+                <div className="p-4 border border-yellow-200 rounded-xl bg-yellow-50">
+                  <h4 className="font-medium mb-3 text-base">Important Instructions</h4>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <ul className="text-sm text-yellow-800 space-y-1">
+                      <li>• Present your ticket (digital or printed) at the event</li>
+                      <li>• Bring valid ID matching your registration name</li>
+                      <li>• Arrive 30 minutes early for smooth check-in</li>
+                    </ul>
+                    <ul className="text-sm text-yellow-800 space-y-1">
+                      <li>• Visit EMS booth in MFCC Main Hall for VIP access</li>
+                      {paymentData.quantity > 1 && (
+                        <li>• Each person needs their individual ticket for entry</li>
+                      )}
+                      <li>• Event runs June 26 - July 6, 2025</li>
+                    </ul>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-600">📞</span>
-                  <span>+356 2123 4567</span>
+              )}
+            </div>
+            
+            {/* Action Footer */}
+            <div className="bg-gray-50 px-8 py-6 border-t border-gray-200">
+              <div className="grid md:grid-cols-3 gap-4">
+                <Button 
+                  onClick={downloadTicketPDF}
+                  disabled={downloadingPdf}
+                  className={`${isVR ? 'bg-[#01AEED] hover:bg-[#01AEED]/90' : 'bg-green-600 hover:bg-green-700'}`}
+                >
+                  {downloadingPdf ? (
+                    <>
+                      <Download className="mr-2 h-4 w-4 animate-bounce" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Again
+                    </>
+                  )}
+                </Button>
+                
+                <Link href="/" className="block">
+                  <Button className="w-full" variant="outline">
+                    <Home className="mr-2 h-4 w-4" />
+                    Back to Home
+                  </Button>
+                </Link>
+                
+                <Link href="/ticket-status" className="block">
+                  <Button className="w-full" variant="outline">
+                    {isVR ? <Gamepad2 className="mr-2 h-4 w-4" /> : <Ticket className="mr-2 h-4 w-4" />}
+                    Manage {isVR ? 'Sessions' : 'Tickets'}
+                  </Button>
+                </Link>
+              </div>
+
+              {/* Trust Indicators */}
+              <div className="flex items-center justify-center gap-6 pt-6 border-t border-gray-200 mt-4">
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span>Instant Delivery</span>
+                </div>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  <Mail className="h-4 w-4 text-blue-500" />
+                  <span>Email Confirmation</span>
+                </div>
+                <div className="flex items-center gap-1 text-sm text-gray-500">
+                  {isVR ? <Gamepad2 className="h-4 w-4 text-[#01AEED]" /> : <Ticket className="h-4 w-4 text-green-500" />}
+                  <span>Ready to Use</span>
                 </div>
               </div>
-            </div>
 
-            {/* Action Buttons */}
-            <div className="space-y-2">
-              <Button 
-                onClick={downloadTicketPDF}
-                disabled={downloadingPdf}
-                className={`w-full ${isVR ? 'bg-[#01AEED] hover:bg-[#01AEED]/90' : 'bg-green-600 hover:bg-green-700'}`}
-              >
-                {downloadingPdf ? (
-                  <>
-                    <Download className="mr-2 h-4 w-4 animate-bounce" />
-                    Generating PDF...
-                  </>
-                ) : (
-                  <>
-                    <Download className="mr-2 h-4 w-4" />
-                    Download PDF Again
-                  </>
-                )}
-              </Button>
-              
-              <Link href="/" className="block">
-                <Button className="w-full" variant="outline">
-                  <Home className="mr-2 h-4 w-4" />
-                  Back to Home
-                </Button>
-              </Link>
-              
-              <Link href="/ticket-status" className="block">
-                <Button className="w-full" variant="outline">
-                  {isVR ? <Gamepad2 className="mr-2 h-4 w-4" /> : <Ticket className="mr-2 h-4 w-4" />}
-                  Manage Your {isVR ? 'Sessions' : 'Tickets'}
-                </Button>
-              </Link>
+              <div className="text-center pt-4">
+                <p className="text-sm text-gray-500">
+                  {isVR 
+                    ? 'Thank you for choosing VR Room Malta! We look forward to your virtual reality adventure.' 
+                    : 'Thank you for choosing EMS! We look forward to seeing you at the trade fair.'
+                  }
+                </p>
+              </div>
             </div>
-
-            <div className="text-center pt-2">
-              <p className="text-xs text-gray-500">
-                {theme.thankYouMessage}
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   )

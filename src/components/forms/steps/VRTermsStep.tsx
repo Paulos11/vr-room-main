@@ -3,8 +3,9 @@
 
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
-import { FileText, Shield, Gamepad2, AlertTriangle, MapPin, Clock } from 'lucide-react'
+import { FileText, Shield, Gamepad2, AlertTriangle, MapPin, Clock, ExternalLink } from 'lucide-react'
 import { VRStepProps } from '@/types/vr-registration'
+import Link from 'next/link'
 
 export function VRTermsStep({ formData, onUpdate }: VRStepProps) {
   return (
@@ -82,41 +83,41 @@ export function VRTermsStep({ formData, onUpdate }: VRStepProps) {
           </div>
         </div>
 
-
-        {/* Session Policies */}
+        {/* Links to Detailed Information */}
         <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl">
-          <h4 className="text-sm font-semibold mb-2 text-gray-800">Session Policies:</h4>
-          <div className="text-xs text-gray-700 space-y-1">
-            <p>• Sessions must be used within 30 days of purchase</p>
-            <p>• Late arrivals may result in shortened sessions</p>
-            <p>• Group bookings require all participants to arrive together</p>
-            <p>• Photography/filming may occur for promotional purposes</p>
-            <p>• VR Room Malta reserves the right to refuse service for safety reasons</p>
-            <p>• No outside food or drinks allowed in VR areas</p>
+          <h4 className="text-sm font-semibold mb-3 text-gray-800">Need More Information?</h4>
+          <div className="space-y-2">
+            <Link 
+              href="/session-policies" 
+              className="flex items-center gap-2 text-sm text-[#01AEED] hover:text-[#01AEED]/80 transition-colors"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <FileText className="h-4 w-4" />
+              View Session Policies & Guidelines
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+            
+            <Link 
+              href="/booking-details" 
+              className="flex items-center gap-2 text-sm text-[#01AEED] hover:text-[#01AEED]/80 transition-colors"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Gamepad2 className="h-4 w-4" />
+              What to Expect After Booking
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+
+            <Link 
+              href="/contact" 
+              className="flex items-center gap-2 text-sm text-[#01AEED] hover:text-[#01AEED]/80 transition-colors"
+            >
+              <Shield className="h-4 w-4" />
+              Contact Us for Questions
+            </Link>
           </div>
         </div>
-
-        {/* Booking Confirmation */}
-        {formData.selectedTickets.length > 0 && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-xl">
-            <h4 className="text-sm font-semibold mb-2 text-green-800 flex items-center gap-2">
-              <Gamepad2 className="h-4 w-4" />
-              Ready to Experience VR?
-            </h4>
-            <div className="text-xs text-green-700">
-              <p className="mb-2">
-                You've selected {formData.selectedTickets.reduce((sum, t) => sum + t.quantity, 0)} VR session{formData.selectedTickets.reduce((sum, t) => sum + t.quantity, 0) > 1 ? 's' : ''} 
-                at VR Room Malta. After payment, you'll receive:
-              </p>
-              <ul className="space-y-1 ml-4">
-                <li>• Email confirmation with booking details</li>
-                <li>• QR code for easy check-in</li>
-                <li>• Detailed location and parking information</li>
-                <li>• Pre-session safety briefing materials</li>
-              </ul>
-            </div>
-          </div>
-        )}
 
         {/* Contact Information */}
         <div className="text-center p-3 bg-[#01AEED]/5 border border-[#01AEED]/20 rounded-lg">

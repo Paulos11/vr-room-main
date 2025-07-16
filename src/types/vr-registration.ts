@@ -1,4 +1,4 @@
-// src/types/vr-registration.ts - Enhanced VR-specific types with tiered pricing
+// src/types/vr-registration.ts - Enhanced VR-specific types with payment step
 export interface VRRegistrationFormData {
   firstName: string
   lastName: string
@@ -40,13 +40,13 @@ export interface VRTicketType {
   ageRating?: string
   createdAt?: Date | string
   updatedAt?: Date | string
-  
+     
   // ✅ ADDED: Tiered pricing properties
   pricingType?: 'FIXED' | 'TIERED'
   hasTieredPricing?: boolean
   isAvailable?: boolean
   isFree?: boolean
-  
+     
   // Tiered pricing hint for display
   tieredPricingNote?: {
     message: string
@@ -60,7 +60,7 @@ export interface VRTicketType {
       savingsPercent: number
     }>
   }
-  
+     
   // Full pricing tier data from database
   pricingTiers?: Array<{
     id: string
@@ -79,6 +79,29 @@ export interface VRTicketType {
 export interface VRStepProps {
   formData: VRRegistrationFormData
   onUpdate: (field: keyof VRRegistrationFormData, value: any) => void
+}
+
+// ✅ NEW: Payment step props
+export interface VRPaymentStepProps {
+  registrationData: {
+    id: string
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    originalAmount: number
+    discountAmount: number
+    finalAmount: number
+    appliedCouponCode?: string
+    sessionCount: number
+    bookedExperiences?: Array<{
+      experienceName: string
+      quantity: number
+      totalPrice: number
+    }>
+  }
+  onPaymentComplete: () => void
+  isFreeOrder: boolean
 }
 
 export interface CouponValidationResult {
@@ -110,6 +133,11 @@ export interface VRRegistrationResponse {
     appliedCouponCode?: string
     sessionCount: number
     emailSent: boolean
+    bookedExperiences?: Array<{
+      experienceName: string
+      quantity: number
+      totalPrice: number
+    }>
   }
   errors?: any[]
 }
