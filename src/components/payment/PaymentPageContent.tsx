@@ -1,4 +1,4 @@
-// src/components/payment/PaymentPageContent.tsx - Fixed with free order handling
+// src/components/payment/PaymentPageContent.tsx - Enhanced with VR detection
 'use client'
 
 import { useState, useEffect } from 'react'
@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket, Tag, Gift } from 'lucide-react'
+import { CreditCard, Shield, CheckCircle, Clock, ArrowLeft, Euro, Ticket, Tag, Gift, Gamepad2, MapPin, Users } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from '@/components/ui/use-toast'
 
@@ -24,6 +24,7 @@ interface RegistrationData {
   discountAmount: number
   finalAmount: number
   appliedCouponCode?: string
+  adminNotes?: string
   tickets: Array<{
     id: string
     ticketNumber: string
@@ -31,6 +32,13 @@ interface RegistrationData {
       name: string
       priceInCents: number
     }
+  }>
+  // VR-specific fields
+  sessionCount?: number
+  bookedExperiences?: Array<{
+    experienceName: string
+    quantity: number
+    totalPrice: number
   }>
 }
 
@@ -42,6 +50,7 @@ export function PaymentPageContent() {
   const [registration, setRegistration] = useState<RegistrationData | null>(null)
   const [loading, setLoading] = useState(true)
   const [processing, setProcessing] = useState(false)
+  const [isVRBooking, setIsVRBooking] = useState(false)
 
   useEffect(() => {
     if (registrationId) {
@@ -59,6 +68,34 @@ export function PaymentPageContent() {
       if (result.success) {
         const data = result.data
         
+        // ✅ DETECT VR BOOKING
+        const isVR = data.adminNotes?.includes('VR Booking') || 
+                    data.adminNotes?.includes('Selected experiences:') ||
+                    (!data.isEmsClient && data.tickets?.length === 0)
+
+        setIsVRBooking(isVR)
+
+        // Parse VR experiences if this is a VR booking
+        let bookedExperiences = []
+        let sessionCount = 0
+        
+        if (isVR && data.adminNotes) {
+          try {
+            const match = data.adminNotes.match(/Selected experiences: (\[.*\])/)
+            if (match) {
+              const selectedTickets = JSON.parse(match[1])
+              bookedExperiences = selectedTickets.map((ticket: any) => ({
+                experienceName: ticket.name,
+                quantity: ticket.quantity,
+                totalPrice: ticket.priceInCents
+              }))
+              sessionCount = selectedTickets.reduce((sum: number, ticket: any) => sum + ticket.quantity, 0)
+            }
+          } catch (parseError) {
+            console.warn('Failed to parse VR experiences:', parseError)
+          }
+        }
+        
         setRegistration({
           id: data.id,
           firstName: data.firstName,
@@ -68,29 +105,35 @@ export function PaymentPageContent() {
           status: data.status,
           isEmsClient: data.isEmsClient,
           panelInterest: data.panelInterests && data.panelInterests.length > 0,
-          quantity: data.tickets ? data.tickets.length : 0,
+          quantity: isVR ? sessionCount : (data.tickets ? data.tickets.length : 0),
           originalAmount: data.originalAmount || 0,
           discountAmount: data.discountAmount || 0,
           finalAmount: data.finalAmount || 0,
           appliedCouponCode: data.appliedCouponCode,
-          tickets: data.tickets || []
+          adminNotes: data.adminNotes,
+          tickets: data.tickets || [],
+          sessionCount,
+          bookedExperiences
         })
 
-        // Redirect if payment not needed
+        // Redirect logic
         if (data.isEmsClient || data.status === 'COMPLETED') {
-          router.push(`/register/success?id=${registrationId}`)
+          const successUrl = isVR 
+            ? `/payment/success?registration_id=${registrationId}&vr_booking=true`
+            : `/register/success?id=${registrationId}`
+          router.push(successUrl)
         }
       } else {
         toast({
-          title: "Registration not found",
-          description: "Please register first",
+          title: isVRBooking ? "VR booking not found" : "Registration not found",
+          description: isVRBooking ? "Please book your VR experience first" : "Please register first",
           variant: "destructive",
         })
-        router.push('/register')
+        router.push(isVRBooking ? '/book' : '/register')
       }
     } catch (error) {
       console.error('Error fetching registration:', error)
-      router.push('/register')
+      router.push(isVRBooking ? '/book' : '/register')
     } finally {
       setLoading(false)
     }
@@ -116,21 +159,23 @@ export function PaymentPageContent() {
 
       if (result.success) {
         if (result.isFreeOrder) {
-          // Handle free order - redirect to success page
           console.log('🎉 Free order completed!')
           toast({
-            title: "Order Completed!",
-            description: "Your free tickets have been generated and sent to your email.",
+            title: isVRBooking ? "VR Sessions Confirmed!" : "Order Completed!",
+            description: isVRBooking 
+              ? "Your free VR sessions have been booked successfully."
+              : "Your free tickets have been generated and sent to your email.",
           })
           
-          // Redirect to success page for free orders
           if (result.redirectUrl) {
             window.location.href = result.redirectUrl
           } else {
-            router.push(`/payment/success?free_order=true&registration_id=${registration.id}`)
+            const successUrl = isVRBooking
+              ? `/payment/success?free_order=true&registration_id=${registration.id}&vr_booking=true`
+              : `/payment/success?free_order=true&registration_id=${registration.id}`
+            router.push(successUrl)
           }
         } else if (result.checkoutUrl) {
-          // Regular paid order - redirect to Stripe
           window.location.href = result.checkoutUrl
         } else {
           throw new Error('Invalid response from checkout API')
@@ -155,13 +200,44 @@ export function PaymentPageContent() {
   }
 
   const formatPrice = (cents: number) => `€${(cents / 100).toFixed(2)}`
-  
-  // Check if this is a free order
   const isFreeOrder = registration && registration.finalAmount <= 0
+
+  // VR vs EMS theming
+  const theme = isVRBooking ? {
+    bgGradient: 'from-cyan-50 to-blue-100',
+    primaryColor: 'text-[#01AEED]',
+    primaryBg: 'bg-[#01AEED]',
+    primaryBorder: 'border-[#01AEED]',
+    lightBg: 'bg-[#01AEED]/5',
+    backLink: '/book',
+    brandName: 'VR Room Malta',
+    itemLabel: isVRBooking ? 'sessions' : 'tickets',
+    locationInfo: {
+      venue: 'VR Room Malta',
+      location: 'Bugibba Square, Malta',
+      duration: 'Sessions start Wednesday',
+      ageInfo: 'All ages welcome (8+ recommended)'
+    }
+  } : {
+    bgGradient: 'from-blue-50 to-indigo-100',
+    primaryColor: 'text-blue-600',
+    primaryBg: 'bg-blue-600',
+    primaryBorder: 'border-blue-600',
+    lightBg: 'bg-blue-50',
+    backLink: '/register',
+    brandName: 'EMS',
+    itemLabel: 'tickets',
+    locationInfo: {
+      venue: 'Malta Fairs and Conventions Centre',
+      location: 'Ta\' Qali, Malta',
+      duration: 'June 26 - July 6, 2025',
+      ageInfo: 'Professional trade event'
+    }
+  }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} p-4`}>
         <div className="max-w-md mx-auto pt-8">
           <Card>
             <CardHeader>
@@ -185,13 +261,19 @@ export function PaymentPageContent() {
 
   if (!registration) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} flex items-center justify-center p-4`}>
         <Card className="w-full max-w-md">
           <CardContent className="pt-6 text-center">
-            <h2 className="text-lg font-bold mb-2">Registration Not Found</h2>
-            <p className="text-gray-600 mb-4 text-sm">Please register first.</p>
-            <Link href="/register">
-              <Button>Go to Registration</Button>
+            <h2 className="text-lg font-bold mb-2">
+              {isVRBooking ? 'VR Booking Not Found' : 'Registration Not Found'}
+            </h2>
+            <p className="text-gray-600 mb-4 text-sm">
+              {isVRBooking ? 'Please book your VR experience first.' : 'Please register first.'}
+            </p>
+            <Link href={theme.backLink}>
+              <Button className={theme.primaryBg}>
+                {isVRBooking ? 'Book VR Experience' : 'Go to Registration'}
+              </Button>
             </Link>
           </CardContent>
         </Card>
@@ -200,10 +282,10 @@ export function PaymentPageContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} p-4`}>
       <div className="max-w-md mx-auto pt-4">
         {/* Back Button */}
-        <Link href="/" className="inline-block mb-4">
+        <Link href={theme.backLink} className="inline-block mb-4">
           <Button variant="ghost" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back
@@ -216,26 +298,32 @@ export function PaymentPageContent() {
               {isFreeOrder ? (
                 <>
                   <Gift className="h-5 w-5 text-green-600" />
-                  Free Order Confirmation
+                  {isVRBooking ? 'Free VR Sessions' : 'Free Order Confirmation'}
                 </>
               ) : (
                 <>
-                  <Euro className="h-5 w-5" />
-                  Secure Payment
+                  {isVRBooking ? (
+                    <Gamepad2 className={`h-5 w-5 ${theme.primaryColor}`} />
+                  ) : (
+                    <Euro className="h-5 w-5" />
+                  )}
+                  {isVRBooking ? 'VR Payment' : 'Secure Payment'}
                 </>
               )}
             </CardTitle>
             <CardDescription className="text-sm">
               {isFreeOrder 
-                ? "Complete your free registration" 
-                : "Complete your registration with secure payment"}
+                ? `Complete your free ${isVRBooking ? 'VR session booking' : 'registration'}` 
+                : `Complete your ${isVRBooking ? 'VR experience' : 'registration'} with secure payment`}
             </CardDescription>
           </CardHeader>
           
           <CardContent className="space-y-4">
             {/* Registration Summary */}
-            <div className="p-3 border rounded-lg bg-gray-50">
-              <h3 className="font-medium mb-2 text-sm">Order Summary</h3>
+            <div className={`p-3 border rounded-lg ${theme.lightBg}`}>
+              <h3 className="font-medium mb-2 text-sm">
+                {isVRBooking ? 'VR Booking Summary' : 'Order Summary'}
+              </h3>
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Name:</span>
@@ -246,8 +334,12 @@ export function PaymentPageContent() {
                   <span className="font-medium truncate ml-2">{registration.email}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">Tickets:</span>
-                  <span className="font-medium">{registration.quantity} ticket{registration.quantity > 1 ? 's' : ''}</span>
+                  <span className="text-gray-600">
+                    {isVRBooking ? 'Sessions:' : 'Tickets:'}
+                  </span>
+                  <span className="font-medium">
+                    {registration.quantity} {theme.itemLabel}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
@@ -258,27 +350,51 @@ export function PaymentPageContent() {
               </div>
             </div>
 
-            {/* Ticket Details */}
-            <div className="p-3 border rounded-lg bg-blue-50">
-              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                <Ticket className="h-4 w-4" />
-                Ticket Details
-              </h3>
-              <div className="space-y-1">
-                {registration.tickets.map((ticket, index) => (
-                  <div key={ticket.id} className="flex justify-between text-xs">
-                    <span className="text-gray-700">{ticket.ticketType.name}</span>
-                    <span className="font-medium">
-                      {isFreeOrder ? "FREE" : formatPrice(ticket.ticketType.priceInCents)}
-                    </span>
-                  </div>
-                ))}
+            {/* VR Experience Details or Ticket Details */}
+            {isVRBooking && registration.bookedExperiences && registration.bookedExperiences.length > 0 ? (
+              <div className="p-3 border rounded-lg bg-gradient-to-r from-[#01AEED]/5 to-cyan-50">
+                <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
+                  <Gamepad2 className="h-4 w-4 text-[#01AEED]" />
+                  Your VR Experiences
+                </h3>
+                <div className="space-y-1">
+                  {registration.bookedExperiences.map((experience, index) => (
+                    <div key={index} className="flex justify-between text-xs">
+                      <span className="text-gray-700">{experience.experienceName} × {experience.quantity}</span>
+                      <span className="font-medium">
+                        {isFreeOrder ? "FREE" : formatPrice(experience.totalPrice)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className={`p-3 border rounded-lg ${theme.lightBg}`}>
+                <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
+                  <Ticket className="h-4 w-4" />
+                  {isVRBooking ? 'VR Session Details' : 'Ticket Details'}
+                </h3>
+                <div className="space-y-1">
+                  {registration.tickets.map((ticket, index) => (
+                    <div key={ticket.id} className="flex justify-between text-xs">
+                      <span className="text-gray-700">{ticket.ticketType.name}</span>
+                      <span className="font-medium">
+                        {isFreeOrder ? "FREE" : formatPrice(ticket.ticketType.priceInCents)}
+                      </span>
+                    </div>
+                  ))}
+                  {registration.tickets.length === 0 && isVRBooking && (
+                    <div className="text-xs text-gray-500 italic">
+                      VR sessions will be confirmed after payment
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Price Breakdown */}
             <div className={`p-4 border-2 rounded-lg ${
-              isFreeOrder ? 'border-green-200 bg-green-50' : 'border-blue-200 bg-blue-50'
+              isFreeOrder ? 'border-green-200 bg-green-50' : `${theme.primaryBorder}/20 ${theme.lightBg}`
             }`}>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
@@ -286,7 +402,6 @@ export function PaymentPageContent() {
                   <span>{formatPrice(registration.originalAmount)}</span>
                 </div>
                 
-                {/* Show discount if applied */}
                 {registration.discountAmount > 0 && registration.appliedCouponCode && (
                   <div className="flex justify-between text-sm text-green-600">
                     <span className="flex items-center gap-1">
@@ -301,14 +416,13 @@ export function PaymentPageContent() {
                   <div className="flex justify-between items-center">
                     <span className="font-bold text-lg">Total:</span>
                     <span className={`font-bold text-2xl ${
-                      isFreeOrder ? 'text-green-900' : 'text-blue-900'
+                      isFreeOrder ? 'text-green-900' : theme.primaryColor
                     }`}>
                       {isFreeOrder ? "FREE" : formatPrice(registration.finalAmount)}
                     </span>
                   </div>
                 </div>
 
-                {/* Savings highlight */}
                 {registration.discountAmount > 0 && (
                   <div className={`text-center p-2 border rounded mt-2 ${
                     isFreeOrder 
@@ -328,23 +442,57 @@ export function PaymentPageContent() {
               </div>
             </div>
 
-            {/* VIP Benefits */}
+            {/* What's Included */}
             <div className="p-3 border rounded-lg bg-green-50">
               <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
                 <CheckCircle className="h-4 w-4 text-green-600" />
                 What's Included
               </h3>
               <ul className="space-y-1 text-xs text-green-800">
-                <li>• Access to EMS Trade Fair 2025</li>
-                <li>• Malta Fairs and Conventions Centre</li>
-                <li>• Event dates: June 26 - July 6, 2025</li>
-                <li>• Direct consultation with EMS experts</li>
-                <li>• Product demonstrations and displays</li>
+                {isVRBooking ? (
+                  <>
+                    <li>• Premium VR experiences with latest technology</li>
+                    <li>• 30-minute sessions per experience</li>
+                    <li>• Professional guidance and setup</li>
+                    <li>• Sanitized equipment for safety</li>
+                    <li>• Located at Bugibba Square, Malta</li>
+                  </>
+                ) : (
+                  <>
+                    <li>• Access to EMS Trade Fair 2025</li>
+                    <li>• Malta Fairs and Conventions Centre</li>
+                    <li>• Event dates: June 26 - July 6, 2025</li>
+                    <li>• Direct consultation with EMS experts</li>
+                    <li>• Product demonstrations and displays</li>
+                  </>
+                )}
               </ul>
             </div>
 
-            {/* Panel Interest */}
-            {registration.panelInterest && (
+            {/* Location Info */}
+            <div className={`p-3 border rounded-lg ${theme.lightBg}`}>
+              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
+                <MapPin className="h-4 w-4" />
+                {theme.locationInfo.venue}
+              </h3>
+              <div className="space-y-1 text-xs text-gray-700">
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-3 w-3" />
+                  <span>{theme.locationInfo.location}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-3 w-3" />
+                  <span>{theme.locationInfo.duration}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-3 w-3" />
+                  <span>{theme.locationInfo.ageInfo}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Panel Interest - EMS only */}
+            {!isVRBooking && registration.panelInterest && (
               <div className="p-3 border rounded-lg bg-orange-50">
                 <h3 className="font-medium mb-1 text-sm flex items-center gap-2">
                   <CheckCircle className="h-4 w-4 text-orange-600" />
@@ -356,7 +504,7 @@ export function PaymentPageContent() {
               </div>
             )}
 
-            {/* Security & Trust - Only show for paid orders */}
+            {/* Security & Trust */}
             {!isFreeOrder && (
               <div className="p-3 border rounded-lg bg-gray-50 flex items-start gap-2">
                 <Shield className="h-4 w-4 text-gray-600 mt-0.5 flex-shrink-0" />
@@ -374,7 +522,7 @@ export function PaymentPageContent() {
               className={`w-full ${
                 isFreeOrder 
                   ? 'bg-green-600 hover:bg-green-700' 
-                  : 'bg-blue-600 hover:bg-blue-700'
+                  : `${theme.primaryBg} hover:${theme.primaryBg}/90`
               }`}
               size="lg"
             >
@@ -386,7 +534,7 @@ export function PaymentPageContent() {
               ) : isFreeOrder ? (
                 <>
                   <Gift className="mr-2 h-4 w-4" />
-                  Complete Free Order
+                  {isVRBooking ? 'Confirm Free Sessions' : 'Complete Free Order'}
                 </>
               ) : (
                 <>
@@ -405,15 +553,15 @@ export function PaymentPageContent() {
                 </div>
               )}
               <div className="flex items-center gap-1 text-xs text-gray-500">
-                <CheckCircle className="h-3 w-3" />
+                {isVRBooking ? <Gamepad2 className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}
                 <span>Instant Delivery</span>
               </div>
             </div>
 
             <p className="text-xs text-gray-500 text-center">
               {isFreeOrder 
-                ? "Your free tickets will be generated and emailed to you immediately."
-                : "You'll be redirected to Stripe's secure checkout. Your tickets will be emailed immediately after payment."
+                ? `Your free ${isVRBooking ? 'VR sessions will be confirmed and we\'ll contact you to schedule' : 'tickets will be generated and emailed to you immediately'}.`
+                : `You'll be redirected to Stripe's secure checkout. Your ${isVRBooking ? 'session tickets' : 'tickets'} will be emailed immediately after payment.`
               }
             </p>
           </CardContent>

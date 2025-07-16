@@ -1,4 +1,4 @@
-// src/types/vr-registration.ts - VR-specific types
+// src/types/vr-registration.ts - Enhanced VR-specific types with tiered pricing
 export interface VRRegistrationFormData {
   firstName: string
   lastName: string
@@ -40,6 +40,40 @@ export interface VRTicketType {
   ageRating?: string
   createdAt?: Date | string
   updatedAt?: Date | string
+  
+  // ✅ ADDED: Tiered pricing properties
+  pricingType?: 'FIXED' | 'TIERED'
+  hasTieredPricing?: boolean
+  isAvailable?: boolean
+  isFree?: boolean
+  
+  // Tiered pricing hint for display
+  tieredPricingNote?: {
+    message: string
+    bestOffer: string
+    allOffers: string[]
+    tiers: Array<{
+      quantity: number
+      totalPrice: number
+      pricePerTicket: number
+      savings: number
+      savingsPercent: number
+    }>
+  }
+  
+  // Full pricing tier data from database
+  pricingTiers?: Array<{
+    id: string
+    name: string
+    description?: string
+    ticketCount: number
+    priceInCents: number // Total price for this quantity
+    pricePerTicket: number // Price per individual ticket
+    savingsAmount: number
+    savingsPercent: number
+    isPopular: boolean
+    sortOrder: number
+  }>
 }
 
 export interface VRStepProps {
@@ -78,4 +112,19 @@ export interface VRRegistrationResponse {
     emailSent: boolean
   }
   errors?: any[]
+}
+
+// ✅ ADDED: Helper interface for pricing calculations
+export interface VRPricingCalculation {
+  totalPrice: number
+  pricePerTicket: number
+  savings: number
+  savingsPercent: number
+  tierName?: string | null
+  isOptimalTier: boolean
+  tierInfo?: {
+    tierPackages: number
+    tierName: string
+    remainingTickets: number
+  } | null
 }

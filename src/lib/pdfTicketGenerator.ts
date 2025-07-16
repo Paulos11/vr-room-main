@@ -1,4 +1,4 @@
-// COMPACT: src/lib/pdfTicketGenerator.ts - 6 tickets per page layout
+// ENHANCED: src/lib/pdfTicketGenerator.ts - VR Room Malta support
 import { PDFDocument, StandardFonts, rgb, PDFPage } from 'pdf-lib'
 import QRCode from 'qrcode'
 
@@ -13,6 +13,9 @@ interface TicketData {
   isEmsClient: boolean
   ticketTypeName?: string
   ticketTypePrice?: number
+  isVRTicket?: boolean // ✅ NEW: VR ticket flag
+  venue?: string // ✅ NEW: Venue info
+  boothLocation?: string // ✅ NEW: Location info
 }
 
 export class PDFTicketGenerator {
@@ -23,22 +26,32 @@ export class PDFTicketGenerator {
     x: number, 
     y: number
   ): Promise<void> {
-    // Ticket dimensions - increased height for better fit
+    // Ticket dimensions
     const ticketWidth = 260;
-    const ticketHeight = 180; // ✅ Increased from 160 to 180
+    const ticketHeight = 180;
     
     // Get fonts
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
     const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     
-    // Color scheme
-    const primaryBlue = rgb(0.1, 0.3, 0.6);     // EMS Blue
-    const lightBlue = rgb(0.9, 0.95, 1);        // Light blue background
-    const darkGray = rgb(0.2, 0.2, 0.2);        // Dark text
-    const mediumGray = rgb(0.5, 0.5, 0.5);      // Medium gray
-    const lightGray = rgb(0.9, 0.9, 0.9);       // Light gray
+    // ✅ UPDATED: Different color schemes for VR vs EMS
+    const isVR = ticketData.isVRTicket || ticketData.venue === 'VR Room Malta'
+    
+    // VR Room Malta colors (cyan/teal theme)
+    const vrBlue = rgb(0.004, 0.682, 0.929); // #01AEED
+    const vrDark = rgb(0.149, 0.149, 0.141); // #262624
+    const vrLight = rgb(0.9, 0.98, 1); // Light cyan background
+    
+    // EMS colors (traditional blue theme)
+    const emsBlue = rgb(0.1, 0.3, 0.6);
+    const emsLight = rgb(0.9, 0.95, 1);
+    
+    const primaryColor = isVR ? vrBlue : emsBlue;
+    const lightBackground = isVR ? vrLight : emsLight;
+    const darkGray = rgb(0.2, 0.2, 0.2);
+    const mediumGray = rgb(0.5, 0.5, 0.5);
+    const lightGray = rgb(0.9, 0.9, 0.9);
     const white = rgb(1, 1, 1);
-    const gold = rgb(0.85, 0.65, 0.13);         // Accent color
     
     // Main ticket background
     page.drawRectangle({
@@ -51,17 +64,20 @@ export class PDFTicketGenerator {
       borderWidth: 2,
     });
     
-    // Header section background - ✅ FIXED: Fill completely to the top
+    // Header section background
     page.drawRectangle({
       x: x,
       y: y + ticketHeight - 40,
       width: ticketWidth,
-      height: 40, // ✅ Changed from 35 to 40 to fill completely
-      color: primaryBlue,
+      height: 40,
+      color: primaryColor,
     });
     
-    // Main title - EMS TICKETS
-    page.drawText('EMS TICKETS', {
+    // ✅ UPDATED: Different titles for VR vs EMS
+    const mainTitle = isVR ? 'VR ROOM MALTA' : 'EMS TICKETS';
+    const subtitle = isVR ? 'Bugibba Square, Malta' : 'MFCC, Malta 2025';
+    
+    page.drawText(mainTitle, {
       x: x + 12,
       y: y + ticketHeight - 20,
       size: 12,
@@ -69,8 +85,7 @@ export class PDFTicketGenerator {
       color: white,
     });
     
-    // Subtitle - MFCC, Malta 2025
-    page.drawText('MFCC, Malta 2025', {
+    page.drawText(subtitle, {
       x: x + 12,
       y: y + ticketHeight - 32,
       size: 7,
@@ -82,7 +97,7 @@ export class PDFTicketGenerator {
     let currentY = y + ticketHeight - 50;
     
     // Ticket Number Section
-    page.drawText('TICKET NUMBER:', {
+    page.drawText(isVR ? 'SESSION NUMBER:' : 'TICKET NUMBER:', {
       x: x + 12,
       y: currentY,
       size: 7,
@@ -90,14 +105,14 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 15; // ✅ Increased from 12 to 15 for more gap
+    currentY -= 15;
     page.drawRectangle({
       x: x + 12,
       y: currentY - 2,
-      width: ticketWidth - 100, // Leave space for QR code
+      width: ticketWidth - 100,
       height: 12,
-      color: lightBlue,
-      borderColor: primaryBlue,
+      color: lightBackground,
+      borderColor: primaryColor,
       borderWidth: 1,
     });
     
@@ -106,34 +121,29 @@ export class PDFTicketGenerator {
       y: currentY + 2,
       size: 8,
       font: boldFont,
-      color: primaryBlue,
+      color: primaryColor,
     });
-    
-    // Sequence indicator for multiple tickets - REMOVED
-    // ✅ REMOVED: No more sequence numbers behind QR code
     
     currentY -= 18;
     
-    // ✅ SIMPLIFIED: Ticket Type Name - Small and Simple (No title, no background, no price)
+    // ✅ UPDATED: Show VR experience name or ticket type
     if (ticketData.ticketTypeName && ticketData.ticketTypeName !== 'General Admission') {
-      console.log('✅ Drawing simple ticket type for:', ticketData.ticketTypeName)
+      const displayName = isVR 
+        ? ticketData.ticketTypeName.replace('VR ', '').toUpperCase()
+        : ticketData.ticketTypeName.toUpperCase();
       
-      // Simple ticket type name - small and clean
-      page.drawText(ticketData.ticketTypeName.toUpperCase(), {
+      page.drawText(displayName, {
         x: x + 12,
         y: currentY,
         size: 7,
         font: regularFont,
-        color: mediumGray, // Subtle gray color
+        color: mediumGray,
       });
       
-      currentY -= 12; // Reduced spacing to bring customer info closer
-    } else {
-      console.log('❌ No ticket type name to display or is General Admission')
+      currentY -= 12;
     }
     
-    // ✅ REMOVED "CUSTOMER:" label - customer info directly under ticket type
-    // Customer Name - More compact layout
+    // Customer Name
     const displayName = ticketData.customerName.length > 32 
       ? ticketData.customerName.substring(0, 32) + '...'
       : ticketData.customerName;
@@ -146,9 +156,9 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 9; // Reduced spacing
+    currentY -= 9;
     
-    // Email - More compact
+    // Email
     const displayEmail = ticketData.email.length > 35 
       ? ticketData.email.substring(0, 35) + '...'
       : ticketData.email;
@@ -161,9 +171,9 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 9; // Reduced spacing
+    currentY -= 9;
     
-    // Phone - More compact
+    // Phone
     page.drawText(ticketData.phone, {
       x: x + 12,
       y: currentY,
@@ -172,10 +182,10 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    // Event Details Section - More compact
-    currentY -= 12; // Reduced spacing
+    // ✅ UPDATED: Different event details for VR vs EMS
+    currentY -= 12;
     
-    page.drawText('EVENT:', {
+    page.drawText(isVR ? 'EXPERIENCE:' : 'EVENT:', {
       x: x + 12,
       y: currentY,
       size: 7,
@@ -183,46 +193,90 @@ export class PDFTicketGenerator {
       color: darkGray,
     });
     
-    currentY -= 9; // Reduced spacing
+    currentY -= 9;
     
-    page.drawText('June 26 - July 6, 2025', {
-      x: x + 12,
-      y: currentY,
-      size: 6,
-      font: regularFont,
-      color: darkGray,
-    });
+    if (isVR) {
+      // VR-specific details
+      page.drawText('Virtual Reality Experience', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+      
+      currentY -= 8;
+      
+      page.drawText('VR Room Malta', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+      
+      currentY -= 8;
+      
+      page.drawText('Bugibba Square, Malta', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+      
+      currentY -= 8;
+      
+      page.drawText('Duration: 30 minutes', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+    } else {
+      // EMS-specific details
+      page.drawText('June 26 - July 6, 2025', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+      
+      currentY -= 8;
+      
+      page.drawText('MFCC, Ta\' Qali, Malta', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+      
+      currentY -= 8;
+      
+      page.drawText('EMS Booth - Main Hall', {
+        x: x + 12,
+        y: currentY,
+        size: 6,
+        font: regularFont,
+        color: darkGray,
+      });
+    }
     
-    currentY -= 8; // Reduced spacing
-    
-    page.drawText('MFCC, Ta\' Qali, Malta', {
-      x: x + 12,
-      y: currentY,
-      size: 6,
-      font: regularFont,
-      color: darkGray,
-    });
-    
-    currentY -= 8; // Reduced spacing
-    
-    page.drawText('EMS Booth - Main Hall', {
-      x: x + 12,
-      y: currentY,
-      size: 6,
-      font: regularFont,
-      color: darkGray,
-    });
-    
-    // QR Code Section (positioned on the right side) - adjusted for new height
+    // QR Code Section
     const qrX = x + ticketWidth - 65;
-    const qrY = y + ticketHeight - 130; // ✅ Adjusted for new height
+    const qrY = y + ticketHeight - 130;
     
     try {
-      // QR Code generation
+      // ✅ UPDATED: Different QR code URLs for VR vs EMS
       const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://emstickets.com';
-      const verificationUrl = `${baseUrl}/staff/verify/${ticketData.ticketNumber}`;
+      const verificationUrl = isVR 
+        ? `${baseUrl}/vr/checkin/${ticketData.ticketNumber}`
+        : `${baseUrl}/staff/verify/${ticketData.ticketNumber}`;
       
-      console.log('Generating QR code for:', verificationUrl);
+      console.log(`Generating QR code for ${isVR ? 'VR' : 'EMS'}:`, verificationUrl);
       
       const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
         width: 50,
@@ -253,8 +307,6 @@ export class PDFTicketGenerator {
         width: 50,
         height: 50,
       });
-      
-      // ✅ REMOVED: QR Code labels completely removed
       
     } catch (error) {
       console.error('QR code generation error:', error);
@@ -287,8 +339,10 @@ export class PDFTicketGenerator {
       color: rgb(0.95, 0.95, 0.95),
     });
     
-    // Support contact
-    page.drawText('info@ems.com.mt', {
+    // ✅ UPDATED: Different contact info for VR vs EMS
+    const contactEmail = isVR ? 'info@vrroom.mt' : 'info@ems.com.mt';
+    
+    page.drawText(contactEmail, {
       x: x + 12,
       y: y + 12,
       size: 6,
@@ -296,30 +350,22 @@ export class PDFTicketGenerator {
       color: mediumGray,
     });
     
-    // Important notice
-    page.drawText('Valid ID Required • Non-Transferable', {
-      x: x + 12,
-      y: y + 5,
-      size: 5,
-      font: regularFont,
-      color: mediumGray,
-    });
-    
-    // Sequential number in footer (for multiple tickets) - RESTORED
+
+    // Sequential number in footer
     if (ticketData.totalTickets > 1) {
       page.drawText(`#${ticketData.sequence}`, {
         x: x + ticketWidth - 20,
         y: y + 8,
         size: 7,
         font: boldFont,
-        color: primaryBlue,
+        color: primaryColor,
       });
     }
   }
   
   static async generateTicketPDF(ticketData: TicketData): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage([260, 160]);
+    const page = pdfDoc.addPage([260, 180]);
     
     await this.drawSingleTicket(page, pdfDoc, ticketData, 0, 0);
     
@@ -330,13 +376,17 @@ export class PDFTicketGenerator {
   static async generateAllTicketsPDF(tickets: TicketData[]): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
     
-    // DEBUG: Log what we're receiving
-    console.log('🎫 PDF Generator called with', tickets.length, 'tickets')
+    // Check if this is a VR booking
+    const isVRBooking = tickets.some(t => t.isVRTicket || t.venue === 'VR Room Malta')
+    
+    console.log(`🎫 PDF Generator: ${tickets.length} ${isVRBooking ? 'VR' : 'EMS'} tickets`)
+    
     tickets.forEach((ticket, index) => {
       console.log(`📄 PDF TICKET ${index + 1}:`)
       console.log('  - ticketNumber:', ticket.ticketNumber)
       console.log('  - ticketTypeName:', ticket.ticketTypeName)
-      console.log('  - isEmsClient:', ticket.isEmsClient)
+      console.log('  - isVRTicket:', ticket.isVRTicket)
+      console.log('  - venue:', ticket.venue)
     })
     
     // A4 page dimensions
@@ -346,10 +396,10 @@ export class PDFTicketGenerator {
     const ticketHeight = 180;
     const margin = 15;
     
-    // ✅ FIXED LAYOUT: Exactly 6 tickets per page (2 columns × 3 rows)
+    // Layout: 6 tickets per page (2 columns × 3 rows)
     const ticketsPerRow = 2;
     const ticketsPerCol = 3;
-    const ticketsPerPage = 6; // Fixed at 6
+    const ticketsPerPage = 6;
     
     // Calculate total pages needed
     const totalPages = Math.ceil(tickets.length / ticketsPerPage);
@@ -368,12 +418,16 @@ export class PDFTicketGenerator {
         const titleFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
         const regularFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
         
-        currentPage.drawText('EMS TICKETS - 2025', {
+        // ✅ UPDATED: Different header titles for VR vs EMS
+        const headerTitle = isVRBooking ? 'VR ROOM MALTA - SESSION TICKETS' : 'EMS TICKETS - 2025';
+        const headerColor = isVRBooking ? rgb(0.004, 0.682, 0.929) : rgb(0.1, 0.3, 0.6); // VR cyan or EMS blue
+        
+        currentPage.drawText(headerTitle, {
           x: margin,
           y: pageHeight - 30,
           size: 16,
           font: titleFont,
-          color: rgb(0.1, 0.3, 0.6),
+          color: headerColor,
         });
         
         // Customer info in header
@@ -402,7 +456,9 @@ export class PDFTicketGenerator {
             color: rgb(0.5, 0.5, 0.5),
           });
           
-          currentPage.drawText(`Total Tickets: ${tickets.length}`, {
+          // ✅ UPDATED: Different labels for VR vs EMS
+          const ticketLabel = isVRBooking ? 'Total Sessions:' : 'Total Tickets:';
+          currentPage.drawText(`${ticketLabel} ${tickets.length}`, {
             x: pageWidth - 200,
             y: pageHeight - 50,
             size: 8,
@@ -429,9 +485,10 @@ export class PDFTicketGenerator {
       
       // Draw the ticket
       if (currentPage) {
-        console.log(`🎨 Drawing ticket ${i + 1} on page ${Math.floor(i / ticketsPerPage) + 1}: ${tickets[i].ticketNumber}`)
+        console.log(`🎨 Drawing ${isVRBooking ? 'VR session' : 'ticket'} ${i + 1} on page ${Math.floor(i / ticketsPerPage) + 1}: ${tickets[i].ticketNumber}`)
         console.log(`   Position: Row ${row + 1}, Column ${col + 1} (${positionOnPage + 1}/6 on page)`)
         console.log('   Ticket type name:', tickets[i].ticketTypeName)
+        console.log('   Is VR ticket:', tickets[i].isVRTicket)
         
         await this.drawSingleTicket(currentPage, pdfDoc, tickets[i], x, y);
         
@@ -461,7 +518,7 @@ export class PDFTicketGenerator {
       }
     }
     
-    console.log(`✅ PDF generated successfully: ${tickets.length} tickets across ${totalPages} pages`);
+    console.log(`✅ PDF generated successfully: ${tickets.length} ${isVRBooking ? 'VR session' : 'EMS'} tickets across ${totalPages} pages`);
     
     const pdfBytes = await pdfDoc.save();
     return Buffer.from(pdfBytes);
@@ -473,19 +530,30 @@ export class PDFTicketGenerator {
   static async generateTicketsFromRegistration(registration: any): Promise<Buffer> {
     const customerName = `${registration.firstName} ${registration.lastName}`;
     
-    const ticketDataArray = registration.tickets.map((ticket: any, index: number) => ({
-      ticketNumber: ticket.ticketNumber,
-      customerName,
-      email: registration.email,
-      phone: registration.phone,
-      qrCode: ticket.qrCode,
-      sequence: ticket.ticketSequence || (index + 1),
-      totalTickets: registration.tickets.length,
-      isEmsClient: registration.isEmsClient,
-      // Include ticket type information
-      ticketTypeName: ticket.ticketType?.name || 'General Admission',
-      ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0
-    }));
+    const ticketDataArray = registration.tickets.map((ticket: any, index: number) => {
+      // Determine if this is a VR ticket
+      const isVRTicket = ticket.venue === 'VR Room Malta' || 
+                        ticket.ticketType?.category === 'VR_EXPERIENCE' ||
+                        ticket.ticketType?.name?.includes('VR');
+
+      return {
+        ticketNumber: ticket.ticketNumber,
+        customerName,
+        email: registration.email,
+        phone: registration.phone,
+        qrCode: ticket.qrCode,
+        sequence: ticket.ticketSequence || (index + 1),
+        totalTickets: registration.tickets.length,
+        isEmsClient: registration.isEmsClient,
+        isVRTicket: isVRTicket, // ✅ VR flag
+        // Include ticket type information
+        ticketTypeName: ticket.ticketType?.name || (isVRTicket ? 'VR Experience' : 'General Admission'),
+        ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0,
+        // Venue information
+        venue: isVRTicket ? 'VR Room Malta' : (ticket.venue || 'Malta Fairs and Conventions Centre'),
+        boothLocation: isVRTicket ? 'Bugibba Square, Malta' : (ticket.boothLocation || 'EMS Booth - MFCC')
+      }
+    });
 
     return await this.generateAllTicketsPDF(ticketDataArray);
   }

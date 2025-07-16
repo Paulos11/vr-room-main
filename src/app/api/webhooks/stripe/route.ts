@@ -1,13 +1,12 @@
-// src/app/api/webhooks/stripe/route.ts - Enhanced with email integration
+// FIXED: src/app/api/webhooks/stripe/route.ts - Working VR ticket generation and email
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
-import { TicketService } from '@/lib/ticketService'
 import { EmailService, RegistrationEmailData } from '@/lib/emailService'
 import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-05-28.basil', // Using stable API version
+  apiVersion: '2025-05-28.basil',
 })
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!
@@ -26,7 +25,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
     }
 
-    console.log('Processing Stripe webhook event:', event.type)
+    console.log('🔔 Processing Stripe webhook event:', event.type)
 
     switch (event.type) {
       case 'checkout.session.completed':
@@ -57,22 +56,323 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     const registrationId = session.metadata?.registrationId
 
     if (!registrationId) {
-      console.error('No registration ID in payment session metadata')
+      console.error('❌ No registration ID in payment session metadata')
       return
     }
 
-    console.log(`Processing successful payment for registration: ${registrationId}`)
+    console.log(`💳 Processing successful payment for registration: ${registrationId}`)
 
-    // Use transaction to ensure all updates happen atomically
+    // Check if this is a VR booking from metadata
+    const isVRBooking = session.metadata?.bookingType === 'VR_EXPERIENCE' || 
+                       session.metadata?.vrExperiences ||
+                       session.metadata?.eventName === 'VR Room Malta'
+    
+    if (isVRBooking) {
+      console.log('🎮 Detected VR booking - processing VR payment success')
+      await handleVRPaymentSuccess(registrationId, session)
+    } else {
+      console.log('🎫 Processing regular EMS ticket payment success')
+      await handleRegularPaymentSuccess(registrationId, session)
+    }
+
+  } catch (error: any) {
+    console.error('❌ Error handling payment success:', error.message)
+    
+    // Log the error for admin review - using a valid EmailType
+    try {
+      await prisma.emailLog.create({
+        data: {
+          emailType: 'PAYMENT_CONFIRMATION', // Changed from 'PAYMENT_PROCESSING' to valid enum value
+          subject: 'Failed to process payment webhook',
+          recipient: 'admin@vrroom.mt',
+          status: 'FAILED',
+          errorMessage: `Webhook processing failed: ${error.message}`
+        }
+      })
+    } catch (logError) {
+      console.error('Failed to log webhook error:', logError)
+    }
+  }
+}
+
+async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Checkout.Session) {
+  try {
+    console.log('🎮 Processing VR payment success for:', registrationId)
+
+    // Use transaction to ensure all VR updates happen atomically
     const result = await prisma.$transaction(async (tx) => {
-      // Get registration with all related data including ticket types
+      // Get VR registration with current status
       const registration = await tx.registration.findUnique({
         where: { id: registrationId },
         include: {
           appliedCoupon: true,
           tickets: {
             include: {
-              ticketType: true // Include ticket type information
+              ticketType: true
+            }
+          }
+        }
+      })
+
+      if (!registration) {
+        throw new Error(`VR registration ${registrationId} not found`)
+      }
+
+      console.log(`📋 VR Registration found:`, {
+        id: registration.id,
+        email: registration.email,
+        status: registration.status,
+        existingTickets: registration.tickets.length,
+        adminNotes: !!registration.adminNotes
+      })
+
+      // Update payment status
+      await tx.payment.update({
+        where: { stripePaymentId: session.id },
+        data: {
+          status: 'SUCCEEDED',
+          paidAt: new Date()
+        }
+      })
+
+      // Update registration status
+      await tx.registration.update({
+        where: { id: registrationId },
+        data: { status: 'COMPLETED' }
+      })
+
+      // ✅ CRITICAL: Generate VR session tickets after payment
+      let tickets = registration.tickets
+      if (tickets.length === 0) {
+        console.log('🎫 No tickets found - generating VR session tickets now...')
+
+        // Parse VR selections from adminNotes
+        let selectedTickets: any[] = []
+        if (registration.adminNotes) {
+          try {
+            // Look for VR booking pattern
+            const match = registration.adminNotes.match(/Selected experiences: (\[.*\])/)
+            if (match) {
+              selectedTickets = JSON.parse(match[1])
+              console.log('✅ Parsed VR selections:', selectedTickets.length, 'experiences')
+            }
+          } catch (parseError) {
+            console.warn('⚠️  Failed to parse VR selections:', parseError)
+          }
+        }
+
+        // Fallback: create default VR ticket if no selections found
+        if (selectedTickets.length === 0) {
+          console.log('🔄 No selections found, creating default VR ticket...')
+          
+          const defaultVRType = await tx.ticketType.findFirst({
+            where: { 
+              isActive: true,
+              OR: [
+                { category: 'VR_EXPERIENCE' },
+                { tags: { contains: 'VR' } },
+                { name: { contains: 'VR' } }
+              ]
+            }
+          })
+
+          if (defaultVRType) {
+            selectedTickets = [{
+              ticketTypeId: defaultVRType.id,
+              name: defaultVRType.name,
+              quantity: 1,
+              priceInCents: registration.originalAmount || defaultVRType.priceInCents
+            }]
+            console.log('📦 Created fallback VR ticket:', defaultVRType.name)
+          } else {
+            throw new Error('No VR ticket types found in database')
+          }
+        }
+
+        // Generate VR session tickets
+        const newTickets = []
+        let sessionSequence = 1
+
+        for (const selectedTicket of selectedTickets) {
+          console.log(`🎯 Processing VR experience: ${selectedTicket.name} x${selectedTicket.quantity}`)
+          
+          // Validate VR experience still available
+          const ticketType = await tx.ticketType.findUnique({
+            where: { id: selectedTicket.ticketTypeId }
+          })
+
+          if (!ticketType || !ticketType.isActive) {
+            console.warn(`⚠️  VR experience ${selectedTicket.name} no longer available`)
+            continue
+          }
+
+          const pricePerSession = Math.round(selectedTicket.priceInCents / selectedTicket.quantity)
+
+          // Create individual VR session tickets
+          for (let i = 0; i < selectedTicket.quantity; i++) {
+            const sessionNumber = `VR-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+            const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/vr/checkin/${sessionNumber}`
+
+            const ticket = await tx.ticket.create({
+              data: {
+                registrationId: registration.id,
+                ticketTypeId: selectedTicket.ticketTypeId,
+                ticketNumber: sessionNumber,
+                ticketSequence: sessionSequence++,
+                qrCode,
+                purchasePrice: pricePerSession,
+                eventDate: new Date(),
+                venue: 'VR Room Malta',
+                boothLocation: 'Bugibba Square, Malta',
+                status: 'SENT'
+              }
+            })
+
+            newTickets.push(ticket)
+            console.log(`✅ Created VR session ticket ${i + 1}/${selectedTicket.quantity}: ${ticket.ticketNumber}`)
+          }
+
+          // Update VR experience stock
+          await tx.ticketType.update({
+            where: { id: selectedTicket.ticketTypeId },
+            data: {
+              availableStock: { decrement: selectedTicket.quantity },
+              reservedStock: { decrement: selectedTicket.quantity },
+              soldStock: { increment: selectedTicket.quantity }
+            }
+          })
+        }
+
+     let tickets: any[] = registration.tickets
+        console.log(`🎉 Generated ${tickets.length} VR session tickets total`)
+      } else {
+        console.log(`✅ VR tickets already exist: ${tickets.length} tickets`)
+      }
+
+      // Increment coupon usage for VR bookings
+      if (registration.appliedCouponId) {
+        await tx.coupon.update({
+          where: { id: registration.appliedCouponId },
+          data: { currentUses: { increment: 1 } }
+        })
+        console.log(`🎫 VR coupon ${registration.appliedCouponCode} usage incremented`)
+      }
+
+      return { registration, tickets }
+    })
+
+    // ✅ CRITICAL: Send VR session tickets via email with PDF
+    try {
+      const customerName = `${result.registration.firstName} ${result.registration.lastName}`
+      console.log(`📧 Sending VR session tickets email to: ${result.registration.email}`)
+
+      // Generate PDF for VR tickets
+      let pdfBuffer: Buffer | undefined
+      try {
+        const ticketDataForPDF = result.tickets.map((ticket: any, index: number) => ({
+          ticketNumber: ticket.ticketNumber,
+          customerName,
+          email: result.registration.email,
+          phone: result.registration.phone,
+          qrCode: ticket.qrCode,
+          sequence: index + 1,
+          totalTickets: result.tickets.length,
+          isEmsClient: false,
+          isVRTicket: true, // ✅ Mark as VR ticket
+          venue: 'VR Room Malta',
+          boothLocation: 'Bugibba Square, Malta',
+          ticketTypeName: 'VR Experience',
+          ticketTypePrice: ticket.purchasePrice || 0
+        }))
+
+        pdfBuffer = await PDFTicketGenerator.generateAllTicketsPDF(ticketDataForPDF)
+        console.log(`📄 Generated VR PDF with ${result.tickets.length} tickets`)
+      } catch (pdfError) {
+        console.error('⚠️  PDF generation failed:', pdfError)
+        // Continue without PDF - don't block email
+      }
+
+      const emailData: RegistrationEmailData = {
+        registrationId: result.registration.id,
+        customerName,
+        email: result.registration.email,
+        phone: result.registration.phone,
+        isEmsClient: false, // VR bookings are never EMS
+        ticketCount: result.tickets.length,
+        finalAmount: result.registration.finalAmount || 0,
+        appliedCouponCode: result.registration.appliedCouponCode ?? undefined, // Convert null to undefined
+        tickets: result.tickets.map((ticket: any) => ({
+          ticketNumber: ticket.ticketNumber,
+          customerName,
+          email: result.registration.email,
+          phone: result.registration.phone,
+          qrCode: ticket.qrCode,
+          sequence: ticket.ticketSequence || 1,
+          totalTickets: result.tickets.length,
+          isEmsClient: false
+        }))
+      }
+
+      // Send VR payment confirmation email with PDF
+      const emailSent = await EmailService.sendPaymentConfirmation(emailData, pdfBuffer)
+
+      // Log VR email activity
+      await prisma.emailLog.create({
+        data: {
+          registrationId,
+          emailType: 'PAYMENT_CONFIRMATION',
+          subject: `🎮 Your VR Room Malta Session Tickets (${result.tickets.length} sessions)`,
+          recipient: result.registration.email,
+          status: emailSent ? 'SENT' : 'FAILED',
+          errorMessage: emailSent ? null : 'Failed to send VR session tickets email'
+        }
+      })
+
+      console.log(`🎉 VR payment success processing completed:`, {
+        registrationId,
+        emailSent,
+        sessionCount: result.tickets.length,
+        ticketsGenerated: true,
+        pdfAttached: !!pdfBuffer
+      })
+
+    } catch (emailError: any) {
+      console.error('❌ Error sending VR session tickets email:', emailError)
+      
+      // Log VR email failure but don't fail the webhook
+      await prisma.emailLog.create({
+        data: {
+          registrationId,
+          emailType: 'PAYMENT_CONFIRMATION',
+          subject: 'Failed to send VR session tickets',
+          recipient: result.registration.email,
+          status: 'FAILED',
+          errorMessage: `VR tickets email failed: ${emailError?.message || 'Unknown error'}`
+        }
+      })
+    }
+
+  } catch (error: any) {
+    console.error('❌ Error handling VR payment success:', error.message)
+    console.error('Stack trace:', error.stack)
+    throw error // Re-throw to be handled by parent function
+  }
+}
+
+async function handleRegularPaymentSuccess(registrationId: string, session: Stripe.Checkout.Session) {
+  try {
+    console.log('🎫 Processing regular EMS payment success for:', registrationId)
+
+    // Use transaction for regular event ticket processing
+    const result = await prisma.$transaction(async (tx) => {
+      // Get registration with all related data
+      const registration = await tx.registration.findUnique({
+        where: { id: registrationId },
+        include: {
+          appliedCoupon: true,
+          tickets: {
+            include: {
+              ticketType: true
             },
             orderBy: { ticketSequence: 'asc' }
           }
@@ -98,29 +398,6 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         data: { status: 'COMPLETED' }
       })
 
-      // CRITICAL: Increment coupon usage for public customers after payment
-      if (registration.appliedCouponId && !registration.isEmsClient) {
-        await tx.coupon.update({
-          where: { id: registration.appliedCouponId },
-          data: { currentUses: { increment: 1 } }
-        })
-        
-        console.log(`Coupon ${registration.appliedCouponCode} usage incremented after payment completion`)
-      }
-
-      // Handle ticket creation if needed (tickets should already exist from registration)
-      let tickets = registration.tickets
-      if (tickets.length === 0) {
-        console.log(`No tickets found, creating tickets for registration: ${registrationId}`)
-        // This shouldn't happen in normal flow, but handle it just in case
-        const newTicket = await TicketService.createTicket(registrationId)
-        if (newTicket) {
-          tickets = [newTicket]
-        } else {
-          throw new Error('Failed to create ticket - createTicket returned null/undefined')
-        }
-      }
-
       // Update all tickets status to SENT
       await tx.ticket.updateMany({
         where: { registrationId: registrationId },
@@ -130,18 +407,23 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         }
       })
 
-      return { registration, tickets }
+      // Increment coupon usage for regular customers after payment
+      if (registration.appliedCouponId && !registration.isEmsClient) {
+        await tx.coupon.update({
+          where: { id: registration.appliedCouponId },
+          data: { currentUses: { increment: 1 } }
+        })
+        console.log(`Regular coupon ${registration.appliedCouponCode} usage incremented`)
+      }
+
+      return { registration, tickets: registration.tickets }
     })
 
-    // 🎯 GENERATE PDF TICKETS AND SEND EMAIL
+    // Send regular event confirmation email with tickets
     try {
       const customerName = `${result.registration.firstName} ${result.registration.lastName}`
-      
-      // Use your existing PDF generator method - much cleaner!
-      console.log(`Generating PDF for ${result.tickets.length} tickets`)
-      const pdfBuffer = await PDFTicketGenerator.generateTicketsFromRegistration(result.registration)
+      console.log(`Sending regular EMS tickets to: ${result.registration.email}`)
 
-      // Prepare email data
       const emailData: RegistrationEmailData = {
         registrationId: result.registration.id,
         customerName,
@@ -149,8 +431,8 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         phone: result.registration.phone,
         isEmsClient: result.registration.isEmsClient,
         ticketCount: result.tickets.length,
-        finalAmount: result.registration.finalAmount,
-        appliedCouponCode: result.registration.appliedCouponCode || undefined,
+        finalAmount: result.registration.finalAmount || 0,
+        appliedCouponCode: result.registration.appliedCouponCode ?? undefined, // Convert null to undefined
         tickets: result.tickets.map(ticket => ({
           ticketNumber: ticket.ticketNumber,
           customerName,
@@ -160,16 +442,14 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
           sequence: ticket.ticketSequence || 1,
           totalTickets: result.tickets.length,
           isEmsClient: result.registration.isEmsClient,
-          ticketTypeName: ticket.ticketType?.name || 'General Admission', // Include ticket type name
-          ticketTypePrice: ticket.purchasePrice || 0 // Include ticket price
+          ticketTypeName: ticket.ticketType?.name || 'General Admission',
+          ticketTypePrice: ticket.purchasePrice || 0
         }))
       }
 
-      // Send payment confirmation email with PDF attachment
-      console.log(`Sending payment confirmation email to: ${result.registration.email}`)
-      const emailSent = await EmailService.sendPaymentConfirmation(emailData, pdfBuffer)
+      // Send regular event confirmation email
+      const emailSent = await EmailService.sendPaymentConfirmation(emailData)
 
-      // Log email activity
       await prisma.emailLog.create({
         data: {
           registrationId,
@@ -181,46 +461,13 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         }
       })
 
-      console.log(`Payment success processing completed:`, {
-        registrationId,
-        emailSent,
-        ticketCount: result.tickets.length,
-        pdfGenerated: true
-      })
-
     } catch (emailError: any) {
-      console.error('Error sending payment confirmation email:', emailError)
-      
-      // Log email failure but don't fail the webhook
-      await prisma.emailLog.create({
-        data: {
-          registrationId,
-          emailType: 'PAYMENT_CONFIRMATION',
-          subject: 'Failed to send payment confirmation',
-          recipient: result.registration.email,
-          status: 'FAILED',
-          errorMessage: `Email sending failed: ${emailError?.message || 'Unknown error'}`
-        }
-      })
+      console.error('Error sending regular event confirmation email:', emailError)
     }
 
   } catch (error: any) {
-    console.error('Error handling payment success:', error.message)
-
-    // Log the error in database for admin review
-    try {
-      await prisma.emailLog.create({
-        data: {
-          emailType: 'TICKET_DELIVERY',
-          subject: 'Failed to process payment webhook',
-          recipient: 'info@ems.com.mt',
-          status: 'FAILED',
-          errorMessage: `Webhook processing failed: ${error.message}`
-        }
-      })
-    } catch (logError) {
-      console.error('Failed to log webhook error:', logError)
-    }
+    console.error('Error handling regular payment success:', error.message)
+    throw error
   }
 }
 
@@ -235,24 +482,10 @@ async function handlePaymentExpired(session: Stripe.Checkout.Session) {
 
     console.log(`Processing expired payment for registration: ${registrationId}`)
 
-    // Update payment status
     await prisma.payment.update({
       where: { stripePaymentId: session.id },
       data: { status: 'CANCELLED' }
     })
-
-    // TODO: Optionally send payment expiration reminder email
-    await prisma.emailLog.create({
-      data: {
-        registrationId,
-        emailType: 'PAYMENT_REQUIRED',
-        subject: 'Payment Session Expired - Complete Your Registration',
-        recipient: session.customer_email || 'unknown@email.com',
-        status: 'SENT'
-      }
-    })
-
-    console.log(`Payment session expired for registration ${registrationId}`)
 
   } catch (error: any) {
     console.error('Error handling payment expiration:', error.message)
@@ -263,7 +496,6 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
   try {
     console.log(`Payment failed for intent: ${paymentIntent.id}`)
 
-    // Find the associated payment record
     const payment = await prisma.payment.findFirst({
       where: { 
         stripePaymentId: {
@@ -274,21 +506,9 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
     })
 
     if (payment) {
-      // Update payment status
       await prisma.payment.update({
         where: { id: payment.id },
         data: { status: 'FAILED' }
-      })
-
-      // TODO: Optionally send payment failure notification email
-      await prisma.emailLog.create({
-        data: {
-          registrationId: payment.registrationId,
-          emailType: 'PAYMENT_REQUIRED',
-          subject: 'Payment Failed - Please Try Again',
-          recipient: payment.registration.email,
-          status: 'SENT'
-        }
       })
     }
 
@@ -297,11 +517,11 @@ async function handlePaymentFailed(paymentIntent: Stripe.PaymentIntent) {
   }
 }
 
-// Utility function to validate webhook in development
 export async function GET() {
   return NextResponse.json({ 
-    message: 'Stripe webhook endpoint is active',
+    message: 'VR Room Malta webhook endpoint is active',
     timestamp: new Date().toISOString(),
-    emailServiceEnabled: !!process.env.RESEND_API_KEY
+    emailServiceEnabled: !!process.env.RESEND_API_KEY,
+    vrTicketGeneration: 'enabled'
   })
 }

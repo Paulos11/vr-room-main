@@ -1,6 +1,20 @@
 // src/lib/ticketGenerationService.ts - Payment-Gated Ticket Generation
 import { prisma } from '@/lib/prisma'
-import { TicketService } from '@/lib/ticketService'
+import { Ticket, TicketType } from '@prisma/client'
+
+// Define the ticket creation data interface
+interface CreateTicketData {
+  registrationId: string;
+  ticketTypeId: string;
+  purchasePrice: number;
+  eventDate: Date;
+  adminUser?: string;
+}
+
+// Define the ticket with relation type
+type TicketWithType = Ticket & {
+  ticketType: TicketType;
+}
 
 export class PaymentGatedTicketService {
   
@@ -64,10 +78,43 @@ export class PaymentGatedTicketService {
   }
 
   /**
+   * Create a single ticket with proper data
+   */
+  static async createTicket(data: CreateTicketData): Promise<TicketWithType> {
+    const ticketNumber = `EMS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+    const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/checkin/${ticketNumber}`
+
+    const ticket = await prisma.ticket.create({
+      data: {
+        registrationId: data.registrationId,
+        ticketTypeId: data.ticketTypeId,
+        ticketNumber,
+        qrCode,
+        purchasePrice: data.purchasePrice,
+        eventDate: data.eventDate,
+        venue: 'Malta Fairs and Conventions Centre',
+        boothLocation: 'EMS Booth - MFCC',
+        status: 'GENERATED'
+      },
+      include: {
+        ticketType: true
+      }
+    })
+
+    console.log(`✅ Created ticket ${ticket.ticketNumber} for registration ${data.registrationId}`)
+    return ticket
+  }
+
+  /**
    * Auto-generate tickets when payment is completed
    * This should be called from payment webhook or admin approval
    */
-  static async autoGenerateTicketsOnPayment(registrationId: string, triggeredBy: string = 'SYSTEM'): Promise<any> {
+  static async autoGenerateTicketsOnPayment(registrationId: string, triggeredBy: string = 'SYSTEM'): Promise<{
+    success: boolean;
+    message: string;
+    tickets: TicketWithType[];
+    registration: any;
+  }> {
     console.log(`🎫 Auto-generating tickets for registration ${registrationId}`)
     
     const canGenerate = await this.shouldGenerateTickets(registrationId)
@@ -89,7 +136,7 @@ export class PaymentGatedTicketService {
     // Prevent duplicate generation
     if (registration.tickets.length > 0) {
       console.log(`⚠️ Tickets already exist, skipping generation`)
-      return { success: true, message: 'Tickets already exist', tickets: registration.tickets }
+      return { success: true, message: 'Tickets already exist', tickets: registration.tickets as TicketWithType[], registration }
     }
 
     // For now, create 1 general admission ticket
@@ -112,27 +159,43 @@ export class PaymentGatedTicketService {
       ticketQuantity = Math.max(1, Math.floor(registration.finalAmount / defaultTicketType.priceInCents))
     }
 
-    const generatedTickets = []
+    const generatedTickets: TicketWithType[] = []
     
-    for (let i = 0; i < ticketQuantity; i++) {
-      const ticket = await TicketService.createTicket({
-        registrationId: registration.id,
-        ticketTypeId: defaultTicketType.id,
-        purchasePrice: registration.isEmsClient ? 0 : defaultTicketType.priceInCents,
-        eventDate: new Date('2025-06-26'), // Your event date
-        adminUser: triggeredBy
-      })
-      
-      generatedTickets.push(ticket)
-    }
+    // Use transaction to ensure atomicity
+    await prisma.$transaction(async (tx) => {
+      for (let i = 0; i < ticketQuantity; i++) {
+        const ticketNumber = `EMS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+        const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/checkin/${ticketNumber}`
 
-    // Update stock
-    await prisma.ticketType.update({
-      where: { id: defaultTicketType.id },
-      data: {
-        availableStock: { decrement: ticketQuantity },
-        soldStock: { increment: ticketQuantity }
+        const ticket = await tx.ticket.create({
+          data: {
+            registrationId: registration.id,
+            ticketTypeId: defaultTicketType.id,
+            ticketNumber,
+            ticketSequence: i + 1,
+            qrCode,
+            purchasePrice: registration.isEmsClient ? 0 : defaultTicketType.priceInCents,
+            eventDate: new Date('2025-06-26'), // Your event date
+            venue: 'Malta Fairs and Conventions Centre',
+            boothLocation: 'EMS Booth - MFCC',
+            status: 'GENERATED'
+          },
+          include: {
+            ticketType: true
+          }
+        }) as TicketWithType
+        
+        generatedTickets.push(ticket)
       }
+
+      // Update stock
+      await tx.ticketType.update({
+        where: { id: defaultTicketType.id },
+        data: {
+          availableStock: { decrement: ticketQuantity },
+          soldStock: { increment: ticketQuantity }
+        }
+      })
     })
 
     // Log the generation
@@ -164,7 +227,12 @@ export class PaymentGatedTicketService {
     registrationId: string, 
     ticketRequests: Array<{ticketTypeId: string, quantity: number}>,
     adminUser: string
-  ): Promise<any> {
+  ): Promise<{
+    success: boolean;
+    message: string;
+    tickets: TicketWithType[];
+    registration: any;
+  }> {
     console.log(`🎫 Admin generating tickets for registration ${registrationId}`)
     
     const registration = await prisma.registration.findUnique({
@@ -175,42 +243,60 @@ export class PaymentGatedTicketService {
       throw new Error('Registration not found')
     }
 
-    const generatedTickets = []
+    const generatedTickets: TicketWithType[] = []
     
-    for (const request of ticketRequests) {
-      const ticketType = await prisma.ticketType.findUnique({
-        where: { id: request.ticketTypeId }
-      })
+    // Use transaction for admin ticket generation
+    await prisma.$transaction(async (tx) => {
+      let ticketSequence = 1
 
-      if (!ticketType) {
-        throw new Error(`Ticket type ${request.ticketTypeId} not found`)
-      }
-
-      if (ticketType.availableStock < request.quantity) {
-        throw new Error(`Insufficient stock for ${ticketType.name}. Available: ${ticketType.availableStock}`)
-      }
-
-      for (let i = 0; i < request.quantity; i++) {
-        const ticket = await TicketService.createTicket({
-          registrationId: registration.id,
-          ticketTypeId: request.ticketTypeId,
-          purchasePrice: registration.isEmsClient ? 0 : ticketType.priceInCents,
-          eventDate: new Date('2025-06-26'),
-          adminUser: adminUser
+      for (const request of ticketRequests) {
+        const ticketType = await tx.ticketType.findUnique({
+          where: { id: request.ticketTypeId }
         })
-        
-        generatedTickets.push(ticket)
-      }
 
-      // Update stock
-      await prisma.ticketType.update({
-        where: { id: request.ticketTypeId },
-        data: {
-          availableStock: { decrement: request.quantity },
-          soldStock: { increment: request.quantity }
+        if (!ticketType) {
+          throw new Error(`Ticket type ${request.ticketTypeId} not found`)
         }
-      })
-    }
+
+        if (ticketType.availableStock < request.quantity) {
+          throw new Error(`Insufficient stock for ${ticketType.name}. Available: ${ticketType.availableStock}`)
+        }
+
+        for (let i = 0; i < request.quantity; i++) {
+          const ticketNumber = `EMS-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+          const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/checkin/${ticketNumber}`
+
+          const ticket = await tx.ticket.create({
+            data: {
+              registrationId: registration.id,
+              ticketTypeId: request.ticketTypeId,
+              ticketNumber,
+              ticketSequence: ticketSequence++,
+              qrCode,
+              purchasePrice: registration.isEmsClient ? 0 : ticketType.priceInCents,
+              eventDate: new Date('2025-06-26'),
+              venue: 'Malta Fairs and Conventions Centre',
+              boothLocation: 'EMS Booth - MFCC',
+              status: 'GENERATED'
+            },
+            include: {
+              ticketType: true
+            }
+          }) as TicketWithType
+          
+          generatedTickets.push(ticket)
+        }
+
+        // Update stock
+        await tx.ticketType.update({
+          where: { id: request.ticketTypeId },
+          data: {
+            availableStock: { decrement: request.quantity },
+            soldStock: { increment: request.quantity }
+          }
+        })
+      }
+    })
 
     // Log admin generation
     await prisma.emailLog.create({

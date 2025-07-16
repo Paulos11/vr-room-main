@@ -23,12 +23,10 @@ export async function GET(request: NextRequest) {
       pendingBookings,
       cancelledBookings,
       todayBookings,
-      upcomingBookings
     ] = await Promise.all([
       prisma.registration.count(),
       prisma.registration.count({ where: { status: 'COMPLETED' } }),
       prisma.registration.count({ where: { status: 'PAYMENT_PENDING' } }),
-      prisma.registration.count({ where: { status: 'CANCELLED' } }),
       prisma.registration.count({
         where: {
           createdAt: { gte: todayStart },
@@ -49,7 +47,6 @@ export async function GET(request: NextRequest) {
       pendingBookings,
       cancelledBookings,
       todayBookings,
-      upcomingBookings
     })
 
     // Get VR session statistics
@@ -181,7 +178,6 @@ export async function GET(request: NextRequest) {
         pending: pendingBookings,
         cancelled: cancelledBookings,
         todayBookings: todayBookings,
-        upcomingBookings: upcomingBookings
       },
       sessions: {
         total: totalSessions,

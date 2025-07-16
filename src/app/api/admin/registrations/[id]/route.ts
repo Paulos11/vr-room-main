@@ -100,7 +100,6 @@ export async function GET(
           quantity: 1,
           price: ticket.purchasePrice,
           totalPrice: ticket.purchasePrice,
-          description: ticket.ticketType.description
         })
       }
       return acc

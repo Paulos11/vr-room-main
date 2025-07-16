@@ -1,7 +1,15 @@
 // src/app/api/vr-register/[id]/generate-tickets/route.ts - Generate VR tickets after payment
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { EmailService } from '@/lib/emailService'
+import { EmailService, RegistrationEmailData } from '@/lib/emailService'
+
+// Type definition for selected tickets
+interface SelectedTicket {
+  ticketTypeId: string;
+  name: string;
+  quantity: number;
+  priceInCents: number;
+}
 
 export async function POST(
   request: NextRequest,
@@ -77,11 +85,11 @@ export async function POST(
     console.log(`✅ Ticket generation approved: ${reason}`)
 
     // Parse the selected tickets from admin notes (in real app, use a proper table)
-    let selectedTickets = []
+    let selectedTickets: SelectedTicket[] = []
     try {
       const notesMatch = registration.adminNotes?.match(/Selected experiences: (\[.*\])/)
       if (notesMatch) {
-        selectedTickets = JSON.parse(notesMatch[1])
+        selectedTickets = JSON.parse(notesMatch[1]) as SelectedTicket[]
       }
     } catch (error) {
       console.error('❌ Failed to parse selected tickets from admin notes:', error)
@@ -185,7 +193,8 @@ export async function POST(
     // ✅ SEND VR TICKETS via email
     let emailSent = false
     try {
-      const ticketEmailData = {
+      // Fix: Convert null to undefined for appliedCouponCode
+      const ticketEmailData: RegistrationEmailData = {
         registrationId: registration.id,
         customerName: `${registration.firstName} ${registration.lastName}`,
         email: registration.email,
@@ -193,7 +202,7 @@ export async function POST(
         isEmsClient: false,
         ticketCount: result.tickets.length,
         finalAmount: registration.finalAmount,
-        appliedCouponCode: registration.appliedCouponCode,
+        appliedCouponCode: registration.appliedCouponCode ?? undefined, // Convert null to undefined
         tickets: result.tickets.map(ticket => ({
           ticketNumber: ticket.ticketNumber,
           customerName: `${registration.firstName} ${registration.lastName}`,

@@ -54,15 +54,19 @@ export async function GET(request: NextRequest) {
 
     console.log(`Found ${vrExperiences.length} VR experiences`)
 
+    // Fix for Set iteration - convert to Array first
+    const uniqueCategories = Array.from(new Set(vrExperiences.map(exp => exp.category)))
+    const priceValues = vrExperiences.map(exp => exp.priceInCents)
+
     return NextResponse.json({
       success: true,
       data: {
         experiences: vrExperiences,
         total: vrExperiences.length,
-        categories: [...new Set(vrExperiences.map(exp => exp.category))],
+        categories: uniqueCategories,
         priceRange: {
-          min: Math.min(...vrExperiences.map(exp => exp.priceInCents)),
-          max: Math.max(...vrExperiences.map(exp => exp.priceInCents))
+          min: priceValues.length > 0 ? Math.min(...priceValues) : 0,
+          max: priceValues.length > 0 ? Math.max(...priceValues) : 0
         }
       }
     })

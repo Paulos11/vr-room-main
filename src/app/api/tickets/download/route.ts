@@ -1,4 +1,4 @@
-// FINAL FIX: src/app/api/tickets/download/route.ts - Include ticket type names in PDF
+// FIXED: src/app/api/tickets/download/route.ts - Handle VR bookings and generate tickets
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
           tickets: { 
             orderBy: { createdAt: 'asc' },
             include: { 
-              ticketType: { // ✅ CRITICAL: Include full ticket type data
+              ticketType: {
                 select: {
                   id: true,
                   name: true,
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
               tickets: { 
                 orderBy: { createdAt: 'asc' },
                 include: { 
-                  ticketType: { // ✅ CRITICAL: Include full ticket type data
+                  ticketType: {
                     select: {
                       id: true,
                       name: true,
@@ -100,7 +100,7 @@ export async function GET(request: NextRequest) {
                 tickets: { 
                   orderBy: { createdAt: 'asc' },
                   include: { 
-                    ticketType: { // ✅ CRITICAL: Include full ticket type data
+                    ticketType: {
                       select: {
                         id: true,
                         name: true,
@@ -119,7 +119,42 @@ export async function GET(request: NextRequest) {
         
         registration = payment?.registration
         
-        // If payment is successful but registration not completed, update it
+        // ✅ CRITICAL FIX: Generate tickets if they don't exist after payment
+        if (registration && registration.tickets.length === 0) {
+          console.log('🎫 No tickets found after payment - generating VR tickets now...')
+          
+          // Check if this is a VR booking from metadata
+          const isVRBooking = session.metadata?.bookingType === 'VR_EXPERIENCE'
+          
+          if (isVRBooking) {
+            console.log('🎮 Detected VR booking - generating VR session tickets')
+            await generateVRTicketsAfterPayment(registration.id, session)
+            
+            // Refetch registration with newly generated tickets
+            registration = await prisma.registration.findUnique({
+              where: { id: registration.id },
+              include: { 
+                tickets: { 
+                  orderBy: { createdAt: 'asc' },
+                  include: { 
+                    ticketType: {
+                      select: {
+                        id: true,
+                        name: true,
+                        description: true,
+                        priceInCents: true,
+                        category: true
+                      }
+                    }
+                  }
+                },
+                payment: true
+              }
+            })
+          }
+        }
+        
+        // Update registration status if needed
         if (registration && registration.status === 'PAYMENT_PENDING') {
           console.log('💳 Payment successful, updating registration status to COMPLETED')
           
@@ -130,7 +165,7 @@ export async function GET(request: NextRequest) {
               tickets: { 
                 orderBy: { createdAt: 'asc' },
                 include: { 
-                  ticketType: { // ✅ CRITICAL: Include full ticket type data after update
+                  ticketType: {
                     select: {
                       id: true,
                       name: true,
@@ -170,19 +205,36 @@ export async function GET(request: NextRequest) {
 
     if (!registration) {
       return NextResponse.json(
-        { success: false, message: 'Registration or tickets not found' },
+        { success: false, message: 'Registration not found' },
         { status: 404 }
       )
     }
 
+    // ✅ FINAL CHECK: If still no tickets, return proper error
     if (!registration.tickets || registration.tickets.length === 0) {
+      console.log('❌ No tickets found for registration:', registration.id)
+      console.log('Registration details:', {
+        status: registration.status,
+        isEmsClient: registration.isEmsClient,
+        adminNotes: registration.adminNotes
+      })
+      
       return NextResponse.json(
-        { success: false, message: 'No tickets found for this registration' },
+        { 
+          success: false, 
+          message: 'No tickets have been generated for this booking yet. Please contact support if payment was successful.',
+          debug: {
+            registrationId: registration.id,
+            status: registration.status,
+            hasPayment: !!registration.payment,
+            paymentStatus: registration.payment?.status
+          }
+        },
         { status: 404 }
       )
     }
 
-    // 🔍 DEBUG: Log ticket data to verify ticket type info
+    // Log ticket data for debugging
     console.log('📋 Found tickets with type data:')
     registration.tickets.forEach((ticket: any, index: number) => {
       console.log(`  🎫 Ticket ${index + 1}:`)
@@ -190,10 +242,10 @@ export async function GET(request: NextRequest) {
       console.log(`    - Type ID: ${ticket.ticketType?.id}`)
       console.log(`    - Type Name: "${ticket.ticketType?.name}"`)
       console.log(`    - Purchase Price: ${ticket.purchasePrice}`)
-      console.log(`    - Original Price: ${ticket.ticketType?.priceInCents}`)
+      console.log(`    - Venue: ${ticket.venue}`)
     })
 
-    // For paid registrations, allow download even if status is PAYMENT_PENDING
+    // Check payment status
     const isPaymentSuccessful = registration.payment?.status === 'SUCCEEDED' || 
                                (sessionId && await isStripePaymentSuccessful(sessionId))
     
@@ -204,8 +256,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // ✅ FIXED: Prepare ticket data with proper ticket type information
+    // ✅ FIXED: Prepare ticket data with VR Room Malta branding
     const ticketDataArray = registration.tickets.map((ticket: any, index: number) => {
+      // Determine if this is a VR booking based on venue or ticket type
+      const isVRTicket = ticket.venue === 'VR Room Malta' || 
+                        ticket.ticketType?.category === 'VR_EXPERIENCE' ||
+                        ticket.ticketType?.name?.includes('VR')
+
       const ticketData = {
         ticketNumber: ticket.ticketNumber,
         customerName: `${registration.firstName} ${registration.lastName}`,
@@ -214,32 +271,39 @@ export async function GET(request: NextRequest) {
         qrCode: ticket.qrCode,
         sequence: index + 1,
         totalTickets: registration.tickets.length,
-        isEmsClient: registration.isEmsClient,
-        // ✅ CRITICAL: Include ticket type information
-        ticketTypeName: ticket.ticketType?.name || 'General Admission',
-        ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0
+        isEmsClient: false, // ✅ VR bookings are never EMS client
+        isVRTicket: isVRTicket, // ✅ NEW: Flag for VR tickets
+        // Ticket type information
+        ticketTypeName: ticket.ticketType?.name || (isVRTicket ? 'VR Experience' : 'General Admission'),
+        ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0,
+        // VR-specific venue info
+        venue: isVRTicket ? 'VR Room Malta' : (ticket.venue || 'Malta Fairs and Conventions Centre'),
+        boothLocation: isVRTicket ? 'Bugibba Square, Malta' : (ticket.boothLocation || 'EMS Booth - MFCC')
       }
 
       console.log(`📝 Prepared ticket data ${index + 1}:`, {
         ticketNumber: ticketData.ticketNumber,
         ticketTypeName: ticketData.ticketTypeName,
-        ticketTypePrice: ticketData.ticketTypePrice,
-        isEmsClient: ticketData.isEmsClient
+        isVRTicket: ticketData.isVRTicket,
+        venue: ticketData.venue,
+        boothLocation: ticketData.boothLocation
       })
 
       return ticketData
     })
 
-    console.log(`🎨 Generating PDF for ${ticketDataArray.length} ticket(s) with type information`)
+    console.log(`🎨 Generating PDF for ${ticketDataArray.length} ticket(s)`)
 
-    // Generate PDF using PDFTicketGenerator with ticket type data
+    // Generate PDF with VR support
     const pdfBuffer = await PDFTicketGenerator.generateAllTicketsPDF(ticketDataArray)
 
-    // Determine filename
+    // Determine filename based on ticket type
+    const isVRBooking = ticketDataArray.some(t => t.isVRTicket)
     const customerName = `${registration.firstName}_${registration.lastName}`.replace(/[^a-zA-Z0-9]/g, '_')
+    
     const filename = registration.tickets.length === 1 
-      ? `EMS_Ticket_${registration.tickets[0].ticketNumber}.pdf`
-      : `EMS_Tickets_${customerName}_${registration.tickets.length}tickets.pdf`
+      ? `${isVRBooking ? 'VR' : 'EMS'}_Ticket_${registration.tickets[0].ticketNumber}.pdf`
+      : `${isVRBooking ? 'VR' : 'EMS'}_Tickets_${customerName}_${registration.tickets.length}tickets.pdf`
 
     console.log(`📁 Generated PDF: ${filename}`)
 
@@ -270,6 +334,114 @@ export async function GET(request: NextRequest) {
       { success: false, message: 'Failed to generate ticket PDF', error: error.message },
       { status: 500 }
     )
+  }
+}
+
+// ✅ NEW: Function to generate VR tickets after payment
+async function generateVRTicketsAfterPayment(registrationId: string, stripeSession: any) {
+  try {
+    console.log('🎮 Generating VR tickets after payment for registration:', registrationId)
+    
+    const registration = await prisma.registration.findUnique({
+      where: { id: registrationId }
+    })
+
+    if (!registration) {
+      throw new Error('Registration not found')
+    }
+
+    // Parse VR selections from adminNotes
+    let selectedTickets = []
+    if (registration.adminNotes) {
+      try {
+        const match = registration.adminNotes.match(/Selected experiences: (\[.*\])/)
+        if (match) {
+          selectedTickets = JSON.parse(match[1])
+          console.log('✅ Parsed VR selections:', selectedTickets)
+        }
+      } catch (parseError) {
+        console.warn('Failed to parse VR selections:', parseError)
+      }
+    }
+
+    // Fallback: create default VR ticket if no selections found
+    if (selectedTickets.length === 0) {
+      const defaultVRType = await prisma.ticketType.findFirst({
+        where: { 
+          isActive: true,
+          OR: [
+            { category: 'VR_EXPERIENCE' },
+            { tags: { contains: 'VR' } },
+            { name: { contains: 'VR' } }
+          ]
+        }
+      })
+
+      if (defaultVRType) {
+        selectedTickets = [{
+          ticketTypeId: defaultVRType.id,
+          name: defaultVRType.name,
+          quantity: 1,
+          priceInCents: registration.originalAmount || defaultVRType.priceInCents
+        }]
+      }
+    }
+
+    // Generate VR session tickets
+    await prisma.$transaction(async (tx) => {
+      let sessionSequence = 1
+
+      for (const selectedTicket of selectedTickets) {
+        const ticketType = await tx.ticketType.findUnique({
+          where: { id: selectedTicket.ticketTypeId }
+        })
+
+        if (!ticketType) {
+          console.warn(`VR experience ${selectedTicket.name} not found`)
+          continue
+        }
+
+        const pricePerSession = Math.round(selectedTicket.priceInCents / selectedTicket.quantity)
+
+        // Create individual VR session tickets
+        for (let i = 0; i < selectedTicket.quantity; i++) {
+          const sessionNumber = `VR-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`
+          const qrCode = `${process.env.NEXT_PUBLIC_SITE_URL}/vr/checkin/${sessionNumber}`
+
+          await tx.ticket.create({
+            data: {
+              registrationId: registration.id,
+              ticketTypeId: selectedTicket.ticketTypeId,
+              ticketNumber: sessionNumber,
+              ticketSequence: sessionSequence++,
+              qrCode,
+              purchasePrice: pricePerSession,
+              eventDate: new Date(),
+              venue: 'VR Room Malta',
+              boothLocation: 'Bugibba Square, Malta',
+              status: 'SENT'
+            }
+          })
+
+          console.log(`✅ Generated VR ticket: ${sessionNumber}`)
+        }
+
+        // Update stock
+        await tx.ticketType.update({
+          where: { id: selectedTicket.ticketTypeId },
+          data: {
+            availableStock: { decrement: selectedTicket.quantity },
+            reservedStock: { decrement: selectedTicket.quantity },
+            soldStock: { increment: selectedTicket.quantity }
+          }
+        })
+      }
+    })
+
+    console.log('✅ VR tickets generated successfully after payment')
+  } catch (error) {
+    console.error('❌ Error generating VR tickets after payment:', error)
+    throw error
   }
 }
 

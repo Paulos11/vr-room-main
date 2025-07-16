@@ -1,3 +1,4 @@
+// src/components/forms/steps/VRTicketSelectionStep.tsx
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -17,7 +18,9 @@ import {
   Clock,
   Users,
   Star,
-  Zap
+  Zap,
+  TrendingDown,
+  Info
 } from 'lucide-react'
 import { VRStepProps, VRTicketType, VRSelectedTicket, VRRegistrationFormData, CouponValidationResult } from '@/types/vr-registration'
 import { toast } from '@/components/ui/use-toast'
@@ -33,7 +36,6 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
   const fetchAvailableExperiences = async () => {
     try {
       setLoading(true)
-      // ✅ UPDATED: Call the unified public API with the 'vr' flow parameter
       const response = await fetch('/api/ticket-types/public?flow=vr')
       
       if (!response.ok) {
@@ -43,8 +45,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
       const result = await response.json()
       
       if (result.success) {
-        // ✅ UPDATED: The data is now in 'result.data.ticketTypes'
-        console.log('Fetched VR experiences:', result.data.ticketTypes)
+        console.log('Fetched VR experiences with tiered pricing:', result.data.ticketTypes)
         setAvailableExperiences(result.data.ticketTypes || [])
       } else {
         throw new Error(result.message || 'Failed to load VR experiences')
@@ -162,6 +163,72 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
     onUpdate('appliedDiscount', 0)
   }
 
+  // ✅ FIXED: Calculate tiered pricing correctly
+  const calculateBestPricing = (experience: VRTicketType, quantity: number) => {
+    if (!experience.hasTieredPricing || !experience.pricingTiers || experience.pricingTiers.length === 0) {
+      // No tiered pricing - use base price
+      return {
+        totalPrice: experience.priceInCents * quantity,
+        pricePerTicket: experience.priceInCents,
+        savings: 0,
+        savingsPercent: 0,
+        tierName: null,
+        isOptimalTier: false
+      }
+    }
+
+    // Find the best tier for this quantity
+    const applicableTiers = experience.pricingTiers.filter(tier => tier.ticketCount <= quantity)
+    
+    if (applicableTiers.length === 0) {
+      // Quantity is less than smallest tier - use base price
+      return {
+        totalPrice: experience.priceInCents * quantity,
+        pricePerTicket: experience.priceInCents,
+        savings: 0,
+        savingsPercent: 0,
+        tierName: null,
+        isOptimalTier: false
+      }
+    }
+
+    // Get the largest applicable tier (best discount)
+    const bestTier = applicableTiers.reduce((best, current) => 
+      current.ticketCount > best.ticketCount ? current : best
+    )
+
+    // Calculate how many complete tier packages we can make
+    const completeTierPackages = Math.floor(quantity / bestTier.ticketCount)
+    const remainingTickets = quantity % bestTier.ticketCount
+
+    // Price for complete tier packages
+    const tierPackagePrice = completeTierPackages * bestTier.priceInCents
+
+    // Price for remaining tickets at base price
+    const remainingPrice = remainingTickets * experience.priceInCents
+
+    const totalPrice = tierPackagePrice + remainingPrice
+
+    // Calculate savings compared to base price
+    const basePriceTotal = experience.priceInCents * quantity
+    const savings = basePriceTotal - totalPrice
+    const savingsPercent = basePriceTotal > 0 ? (savings / basePriceTotal) * 100 : 0
+
+    return {
+      totalPrice,
+      pricePerTicket: Math.round(totalPrice / quantity),
+      savings,
+      savingsPercent,
+      tierName: bestTier.name,
+      isOptimalTier: quantity === bestTier.ticketCount,
+      tierInfo: completeTierPackages > 0 ? {
+        tierPackages: completeTierPackages,
+        tierName: bestTier.name,
+        remainingTickets
+      } : null
+    }
+  }
+
   const getSelectedQuantity = (experienceId: string): number => {
     const selected = formData.selectedTickets.find(t => t.ticketTypeId === experienceId)
     return selected ? selected.quantity : 0
@@ -176,10 +243,13 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
         currentSelected.splice(existingIndex, 1)
       }
     } else {
+      // ✅ FIXED: Calculate correct pricing using tiered system
+      const pricing = calculateBestPricing(experience, newQuantity)
+      
       const selectedExperience: VRSelectedTicket = {
         ticketTypeId: experience.id,
         name: experience.name,
-        priceInCents: experience.priceInCents * newQuantity,
+        priceInCents: pricing.totalPrice, // ✅ Use calculated total price
         quantity: newQuantity,
         maxPerOrder: experience.maxPerOrder,
         minPerOrder: experience.minPerOrder
@@ -245,6 +315,35 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
     return `€${(cents / 100).toFixed(2)}`
   }
 
+  // ✅ FIXED: Get pricing display info for an experience
+  const getPricingDisplay = (experience: VRTicketType, quantity: number) => {
+    if (quantity === 0) {
+      return {
+        displayPrice: formatPrice(experience.priceInCents),
+        suffix: 'per session',
+        showTierHint: experience.hasTieredPricing && experience.tieredPricingNote
+      }
+    }
+
+    const pricing = calculateBestPricing(experience, quantity)
+    
+    if (pricing.savings > 0) {
+      return {
+        displayPrice: formatPrice(pricing.totalPrice),
+        suffix: `(${formatPrice(pricing.pricePerTicket)} each)`,
+        savings: formatPrice(pricing.savings),
+        savingsPercent: pricing.savingsPercent.toFixed(1),
+        showTierHint: false
+      }
+    }
+
+    return {
+      displayPrice: formatPrice(pricing.totalPrice),
+      suffix: quantity > 1 ? `(${formatPrice(pricing.pricePerTicket)} each)` : '',
+      showTierHint: false
+    }
+  }
+
   if (loading) {
     return (
       <div className="text-center py-8">
@@ -282,6 +381,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
             const maxQty = Math.min(experience.maxPerOrder, experience.availableStock)
             const isSelected = selectedQty > 0
             const canAddMore = selectedQty < maxQty
+            const pricingDisplay = getPricingDisplay(experience, selectedQty)
             
             return (
               <div 
@@ -310,10 +410,24 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
                       </div>
                       
                       <div className="flex items-center gap-4 mb-2">
-                        <span className="text-lg font-bold text-[#01AEED]">
-                          {formatPrice(experience.priceInCents)}
-                          <span className="text-sm font-normal text-gray-500 ml-1">per session</span>
-                        </span>
+                        <div className="flex flex-col">
+                          <span className="text-lg font-bold text-[#01AEED]">
+                            {pricingDisplay.displayPrice}
+                            {pricingDisplay.suffix && (
+                              <span className="text-sm font-normal text-gray-500 ml-1">{pricingDisplay.suffix}</span>
+                            )}
+                          </span>
+                          
+                          {/* ✅ FIXED: Show savings when applicable */}
+                          {pricingDisplay.savings && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <TrendingDown className="h-3 w-3 text-green-600" />
+                              <span className="text-sm text-green-600 font-medium">
+                                Save {pricingDisplay.savings} ({pricingDisplay.savingsPercent}% off)
+                              </span>
+                            </div>
+                          )}
+                        </div>
                         
                         <div className="flex items-center gap-3 text-xs text-gray-500">
                           <div className="flex items-center gap-1">
@@ -335,6 +449,19 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
                         <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed mb-3">
                           {experience.description}
                         </p>
+                      )}
+
+                      {/* ✅ FIXED: Show tiered pricing hint when not selected */}
+                      {!isSelected && experience.hasTieredPricing && experience.tieredPricingNote && (
+                        <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <TrendingDown className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                            <div className="text-xs">
+                              <p className="text-yellow-800 font-medium">{experience.tieredPricingNote.message}</p>
+                              <p className="text-yellow-700 mt-1">{experience.tieredPricingNote.bestOffer}</p>
+                            </div>
+                          </div>
+                        </div>
                       )}
 
                       {experience.category && (
@@ -400,9 +527,14 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
                         <div className="text-sm">
                           <span className="text-gray-600">Total: </span>
                           <span className="font-semibold text-[#01AEED] text-lg">
-                            {formatPrice(experience.priceInCents * selectedQty)}
+                            {pricingDisplay.displayPrice}
                           </span>
                         </div>
+                        {pricingDisplay.savings && (
+                          <div className="text-xs text-green-600">
+                            Saved {pricingDisplay.savings}!
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -500,12 +632,25 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
           </div>
           
           <div className="space-y-2">
-            {formData.selectedTickets.map(ticket => (
-              <div key={ticket.ticketTypeId} className="flex justify-between text-sm">
-                <span className="text-gray-700">{ticket.name} × {ticket.quantity}</span>
-                <span className="font-medium text-[#262624]">{formatPrice(ticket.priceInCents)}</span>
-              </div>
-            ))}
+            {formData.selectedTickets.map(ticket => {
+              const experience = availableExperiences.find(exp => exp.id === ticket.ticketTypeId)
+              const pricing = experience ? calculateBestPricing(experience, ticket.quantity) : null
+              
+              return (
+                <div key={ticket.ticketTypeId} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-700">{ticket.name} × {ticket.quantity}</span>
+                    <span className="font-medium text-[#262624]">{formatPrice(ticket.priceInCents)}</span>
+                  </div>
+                  {pricing && pricing.savings > 0 && (
+                    <div className="flex justify-between text-xs text-green-600 ml-4">
+                      <span>Volume discount applied</span>
+                      <span>-{formatPrice(pricing.savings)}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             
             <div className="border-t pt-2 mt-3 space-y-1">
               <div className="flex justify-between text-sm">
