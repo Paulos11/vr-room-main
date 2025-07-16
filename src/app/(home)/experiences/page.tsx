@@ -11,9 +11,8 @@ const featuredExperiences = [
     category: 'Sports Simulation',
     image: '/experiences/vr-bike.jpg',
     description: 'Pedal through stunning virtual landscapes and challenging terrains.',
-    players: '1 Player',
-    duration: '20 min',
-    rating: 4.9,
+  
+    rating: 5,
     color: 'from-green-600 to-emerald-800'
   },
   {
@@ -22,9 +21,8 @@ const featuredExperiences = [
     category: 'Naval Combat',
     image: '/experiences/vr-warship.jpg',
     description: 'Command a naval fleet in epic sea battles and strategic combat.',
-    players: '1-4 Players',
-    duration: '35 min',
-    rating: 4.8,
+ 
+    rating: 5,
     color: 'from-blue-600 to-navy-800'
   }
 ]
@@ -103,10 +101,7 @@ export default function ExperiencesPage() {
                   <div className="flex items-center justify-between">
                     {/* Game Info */}
                     <div className="flex items-center gap-3 text-white text-xs">
-                      <div className="flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        <span>{experience.players}</span>
-                      </div>
+                      
                     </div>
 
                     {/* Book Button */}

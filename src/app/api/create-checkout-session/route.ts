@@ -339,7 +339,7 @@ export async function POST(request: NextRequest) {
         ? `${selectedTicket.name} (${selectedTicket.quantity} sessions)`
         : selectedTicket.name
 
-      const description = `VR Room Malta - ${selectedTicket.name} | Duration: 30 minutes per session`
+      const description = `VR Room Malta - ${selectedTicket.name} | Duration: 5 Minutes per session`
       const unitAmount = Math.max(1, Math.round(selectedTicket.priceInCents / selectedTicket.quantity))
 
       lineItems.push({

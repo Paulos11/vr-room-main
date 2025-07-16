@@ -227,7 +227,7 @@ export class PDFTicketGenerator {
       
       currentY -= 8;
       
-      page.drawText('Duration: 30 minutes', {
+      page.drawText('Duration: 5 Minutes', {
         x: x + 12,
         y: currentY,
         size: 6,

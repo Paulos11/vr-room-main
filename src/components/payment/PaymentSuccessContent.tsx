@@ -584,7 +584,7 @@ export function PaymentSuccessContent() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Clock className="h-3 w-3" />
-                          <span><strong>Sessions:</strong> 30 minutes each</span>
+                          <span><strong>Sessions:</strong> 5 Minutes each</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Users className="h-3 w-3" />
@@ -626,7 +626,7 @@ export function PaymentSuccessContent() {
                     <ul className="text-sm text-yellow-800 space-y-1">
                       <li>• Present your ticket (digital or printed) at the event</li>
                       <li>• Bring valid ID matching your registration name</li>
-                      <li>• Arrive 30 minutes early for smooth check-in</li>
+                      <li>• Arrive 5 Minutes early for smooth check-in</li>
                     </ul>
                     <ul className="text-sm text-yellow-800 space-y-1">
                       <li>• Visit EMS booth in MFCC Main Hall for VIP access</li>

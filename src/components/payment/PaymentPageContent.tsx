@@ -452,18 +452,13 @@ export function PaymentPageContent() {
                 {isVRBooking ? (
                   <>
                     <li>• Premium VR experiences with latest technology</li>
-                    <li>• 30-minute sessions per experience</li>
                     <li>• Professional guidance and setup</li>
                     <li>• Sanitized equipment for safety</li>
                     <li>• Located at Bugibba Square, Malta</li>
                   </>
                 ) : (
                   <>
-                    <li>• Access to EMS Trade Fair 2025</li>
-                    <li>• Malta Fairs and Conventions Centre</li>
-                    <li>• Event dates: June 26 - July 6, 2025</li>
-                    <li>• Direct consultation with EMS experts</li>
-                    <li>• Product demonstrations and displays</li>
+                    
                   </>
                 )}
               </ul>

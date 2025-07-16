@@ -405,7 +405,7 @@ export function RegistrationPendingContent() {
                 <ul className="text-xs text-yellow-800 space-y-1">
                   <li>• Download and save your PDF tickets</li>
                   <li>• Bring valid ID matching your registration</li>
-                  <li>• Arrive 30 minutes early for check-in</li>
+                  <li>• Arrive 5 Minutes early for check-in</li>
                   <li>• Visit EMS booth in MFCC Main Hall</li>
                 </ul>
               ) : (

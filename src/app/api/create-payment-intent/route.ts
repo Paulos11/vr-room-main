@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       customer_email: registration.email,
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment?id=${registrationId}`,
-      expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
+      expires_at: Math.floor(Date.now() / 1000) + (30 * 60), // 5 Minutes
     })
 
     // Create payment record

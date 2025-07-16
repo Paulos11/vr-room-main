@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { User, AlertCircle, Gamepad2, Clock, Users, Info } from 'lucide-react'
+import { User, AlertCircle, Gamepad2, Info } from 'lucide-react'
 import { VRStepProps } from '@/types/vr-registration'
 import { validateVRField } from '@/utils/vrFormValidation'
 
@@ -162,8 +162,6 @@ export function VRPersonalInfoStep({ formData, onUpdate }: VRStepProps) {
             <div className="space-y-2">
               {formData.selectedTickets.map(ticket => {
                 // Mock session details - you might want to fetch these from the experience data
-                const sessionDuration = 30 // minutes
-                const maxPlayers = 1 // default
                 
                 return (
                   <div key={ticket.ticketTypeId} className="space-y-2">
@@ -172,16 +170,7 @@ export function VRPersonalInfoStep({ formData, onUpdate }: VRStepProps) {
                         <span className="text-sm font-medium text-[#262624]">
                           {ticket.name} × {ticket.quantity}
                         </span>
-                        <div className="flex items-center gap-4 mt-1 text-xs text-gray-600">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>{sessionDuration}min each</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            <span>Up to {maxPlayers} player{maxPlayers > 1 ? 's' : ''}</span>
-                          </div>
-                        </div>
+                        
                       </div>
                       <span className="text-sm font-semibold text-[#01AEED]">
                         {formatPrice(ticket.priceInCents)}

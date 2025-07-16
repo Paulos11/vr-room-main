@@ -429,20 +429,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
                           )}
                         </div>
                         
-                        <div className="flex items-center gap-3 text-xs text-gray-500">
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            <span>{experience.duration || '30'}min</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Users className="h-3 w-3" />
-                            <span>{experience.maxPlayers || 1} player{(experience.maxPlayers || 1) > 1 ? 's' : ''}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Zap className="h-3 w-3" />
-                            <span>{experience.availableStock} available</span>
-                          </div>
-                        </div>
+                     
                       </div>
                       
                       {experience.description && (
@@ -693,8 +680,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
               VR Experience Guidelines:
             </div>
             <ul className="text-gray-700 space-y-1 ml-6">
-              <li>• Minimum age: 8 years (children under 13 need adult supervision)</li>
-              <li>• Maximum session duration: 30 minutes per experience</li>
+              <li>• Session duration varies by experience</li>
               <li>• Comfortable clothing and closed shoes recommended</li>
               <li>• All equipment sanitized between sessions</li>
               <li>• Arrive 10 minutes before your session time</li>
