@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 
@@ -37,68 +37,100 @@ const heroSlides = [
 export default function Hero() {
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isLoaded, setIsLoaded] = useState(false)
-  const [loadedImages, setLoadedImages] = useState<number[]>([])
+  const [loadedImages, setLoadedImages] = useState(new Set<number>())
+  const [preloadedImages, setPreloadedImages] = useState<HTMLImageElement[]>([])
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
-  // Preload images
-  useEffect(() => {
-    const preloadImages = async () => {
-      const promises = heroSlides.map((slide, index) => {
-        return new Promise<void>((resolve) => {
-          const img = new window.Image()
-          img.onload = () => {
-            setLoadedImages(prev => [...prev, index])
-            resolve()
-          }
-          img.onerror = () => resolve() // Continue even if image fails
-          img.src = slide.image
-        })
-      })
-      
-      await Promise.all(promises)
-      setIsLoaded(true)
+  // Optimized image preloading with priority
+  const preloadImages = useCallback(async () => {
+    const images: HTMLImageElement[] = []
+    
+    // Load first image immediately (priority)
+    const firstImage = new window.Image()
+    firstImage.onload = () => {
+      setLoadedImages(prev => new Set(prev).add(0))
+      setIsLoaded(true) // Show hero as soon as first image loads
     }
+    firstImage.src = heroSlides[0].image
+    images.push(firstImage)
 
-    preloadImages()
+    // Load remaining images in background
+    heroSlides.slice(1).forEach((slide, index) => {
+      const img = new window.Image()
+      img.onload = () => {
+        setLoadedImages(prev => new Set(prev).add(index + 1))
+      }
+      img.src = slide.image
+      images.push(img)
+    })
+    
+    setPreloadedImages(images)
   }, [])
 
-  // Auto-slide functionality
+  useEffect(() => {
+    preloadImages()
+    
+    // Cleanup
+    return () => {
+      preloadedImages.forEach(img => {
+        img.onload = null
+        img.onerror = null
+      })
+    }
+  }, [preloadImages])
+
+  // Optimized auto-slide with intersection observer
   useEffect(() => {
     if (!isLoaded) return
 
-    const startTimer = () => {
-      timerRef.current = setInterval(() => {
-        setCurrentSlide((prev) => (prev + 1) % heroSlides.length)
-      }, 6000)
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          timerRef.current = setInterval(() => {
+            setCurrentSlide((prev) => (prev + 1) % heroSlides.length)
+          }, 6000)
+        } else {
+          if (timerRef.current) {
+            clearInterval(timerRef.current)
+          }
+        }
+      },
+      { threshold: 0.1 }
+    )
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current)
     }
 
-    startTimer()
-
     return () => {
+      observer.disconnect()
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
     }
   }, [isLoaded])
 
-  // Handle manual slide change
-  const handleSlideChange = (index: number) => {
+  const handleSlideChange = useCallback((index: number) => {
     if (timerRef.current) {
       clearInterval(timerRef.current)
     }
     setCurrentSlide(index)
     
     // Restart timer after manual change
-    setTimeout(() => {
+    const restartTimer = () => {
       if (timerRef.current) {
         clearInterval(timerRef.current)
       }
       timerRef.current = setInterval(() => {
         setCurrentSlide((prev) => (prev + 1) % heroSlides.length)
       }, 6000)
-    }, 1000)
-  }
+    }
+    
+    setTimeout(restartTimer, 1000)
+  }, [])
 
+  // Optimized loading state
   if (!isLoaded) {
     return (
       <section className="relative h-screen overflow-hidden bg-gray-900 flex items-center justify-center">
@@ -111,8 +143,8 @@ export default function Hero() {
   }
 
   return (
-    <section className="relative h-screen overflow-hidden">
-      {/* Background Slides */}
+    <section ref={containerRef} className="relative h-screen overflow-hidden">
+      {/* Background Slides - Optimized */}
       <div className="absolute inset-0">
         {heroSlides.map((slide, index) => (
           <div
@@ -121,53 +153,49 @@ export default function Hero() {
               index === currentSlide ? 'opacity-100' : 'opacity-0'
             }`}
           >
-            {loadedImages.includes(index) && (
+            {loadedImages.has(index) && (
               <Image
                 src={slide.image}
                 alt={slide.title}
                 fill
                 className="object-cover"
                 priority={index === 0}
+                quality={index === 0 ? 85 : 75}
                 sizes="100vw"
-                quality={85}
+                placeholder="blur"
+                blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R//2Q=="
               />
             )}
-            {/* Dark overlay with gradient */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/60" />
           </div>
         ))}
       </div>
 
-      {/* Content */}
+      {/* Content - Optimized animations */}
       <div className="relative z-10 h-full flex items-center justify-center px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
-          {/* Subtitle */}
-          <div className="mb-4 opacity-0 animate-fade-in" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
+          <div className="mb-4 opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s', animationFillMode: 'forwards' }}>
             <span className="text-white/80 text-xs sm:text-sm font-medium tracking-widest uppercase">
               {heroSlides[currentSlide].subtitle}
             </span>
           </div>
           
-          {/* Main Title */}
-          <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 sm:mb-8 leading-tight opacity-0 animate-fade-in" style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}>
+          <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6 sm:mb-8 leading-tight opacity-0 animate-fade-in-up" style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}>
             {heroSlides[currentSlide].title}
           </h1>
           
-          {/* Description */}
-          <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl text-white/90 font-light mb-3 sm:mb-4 opacity-0 animate-fade-in" style={{ animationDelay: '0.6s', animationFillMode: 'forwards' }}>
+          <h2 className="text-lg sm:text-xl md:text-2xl lg:text-3xl text-white/90 font-light mb-3 sm:mb-4 opacity-0 animate-fade-in-up" style={{ animationDelay: '0.6s', animationFillMode: 'forwards' }}>
             {heroSlides[currentSlide].description}
           </h2>
           
-          {/* Sub Description */}
-          <p className="text-base sm:text-lg md:text-xl text-white/80 mb-8 sm:mb-12 max-w-2xl mx-auto opacity-0 animate-fade-in" style={{ animationDelay: '0.8s', animationFillMode: 'forwards' }}>
+          <p className="text-base sm:text-lg md:text-xl text-white/80 mb-8 sm:mb-12 max-w-2xl mx-auto opacity-0 animate-fade-in-up" style={{ animationDelay: '0.8s', animationFillMode: 'forwards' }}>
             {heroSlides[currentSlide].subDescription}
           </p>
 
-          {/* CTA Button */}
-          <div className="opacity-0 animate-fade-in" style={{ animationDelay: '1s', animationFillMode: 'forwards' }}>
+          <div className="opacity-0 animate-fade-in-up" style={{ animationDelay: '1s', animationFillMode: 'forwards' }}>
             <Link
               href="/book"
-              className="inline-block bg-[#01AEED] hover:bg-[#01AEED]/90 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-xl active:scale-95"
+              className="inline-block bg-[#01AEED] hover:bg-[#01AEED]/90 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg font-semibold text-base sm:text-lg transition-all duration-200 hover:scale-105 shadow-lg hover:shadow-xl active:scale-95 will-change-transform"
             >
               {heroSlides[currentSlide].buttonText}
             </Link>
@@ -175,13 +203,13 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* Slide Indicators (Hidden on mobile) */}
+      {/* Optimized Slide Indicators */}
       <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 flex space-x-3 z-20 sm:block hidden">
         {heroSlides.map((_, index) => (
           <button
             key={index}
             onClick={() => handleSlideChange(index)}
-            className={`transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/50 ${
+            className={`transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-white/50 will-change-transform ${
               index === currentSlide
                 ? 'w-8 h-2 bg-white rounded-full'
                 : 'w-2 h-2 bg-white/50 rounded-full hover:bg-white/70'
@@ -193,21 +221,3 @@ export default function Hero() {
     </section>
   )
 }
-
-// Add these animations to your globals.css
-/*
-@keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out;
-}
-*/
