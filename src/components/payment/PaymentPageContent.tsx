@@ -265,7 +265,7 @@ export function PaymentPageContent() {
   }
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br ${theme.bgGradient} p-4`}>
+    <div className={`min-h-screen  p-4 bg-[#080D16] pt-18`}>
       <div className="max-w-md mx-auto pt-4">
        
 
@@ -417,28 +417,6 @@ export function PaymentPageContent() {
                   </div>
                 )}
               </div>
-            </div>
-
-            {/* What's Included */}
-            <div className="p-3 border rounded-lg bg-green-50">
-              <h3 className="font-medium mb-2 text-sm flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                What's Included
-              </h3>
-              <ul className="space-y-1 text-xs text-green-800">
-                {isVRBooking ? (
-                  <>
-                    <li>• Premium VR experiences with latest technology</li>
-                    <li>• Professional guidance and setup</li>
-                    <li>• Sanitized equipment for safety</li>
-                    <li>• Located at Bugibba Square, Malta</li>
-                  </>
-                ) : (
-                  <>
-                    
-                  </>
-                )}
-              </ul>
             </div>
 
             

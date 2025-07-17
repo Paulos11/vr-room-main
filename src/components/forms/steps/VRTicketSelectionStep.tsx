@@ -37,16 +37,38 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
   }, [formData.selectedTickets])
 
   const totalCost = useMemo(() => {
-    return formData.selectedTickets.reduce((sum, ticket) => sum + (ticket.priceInCents || 0), 0)
-  }, [formData.selectedTickets])
+    // Calculate based on ORIGINAL prices before any tier discounts
+    return formData.selectedTickets.reduce((sum, ticket) => {
+      const experience = availableExperiences.find(exp => exp.id === ticket.ticketTypeId)
+      if (experience) {
+        // Use original price per unit × quantity
+        return sum + (experience.priceInCents * ticket.quantity)
+      }
+      return sum + (ticket.priceInCents || 0)
+    }, 0)
+  }, [formData.selectedTickets, availableExperiences])
+
+  const tierDiscounts = useMemo(() => {
+    // Calculate total tier discounts applied
+    return formData.selectedTickets.reduce((sum, ticket) => {
+      const experience = availableExperiences.find(exp => exp.id === ticket.ticketTypeId)
+      if (experience) {
+        const originalPrice = experience.priceInCents * ticket.quantity
+        const discountedPrice = ticket.priceInCents
+        return sum + (originalPrice - discountedPrice)
+      }
+      return sum
+    }, 0)
+  }, [formData.selectedTickets, availableExperiences])
 
   const appliedDiscount = useMemo(() => {
     return formData.appliedDiscount || 0
   }, [formData.appliedDiscount])
 
   const finalCost = useMemo(() => {
-    return Math.max(0, totalCost - appliedDiscount)
-  }, [totalCost, appliedDiscount])
+    // Total = Original Price - Tier Discounts - Coupon Discount
+    return Math.max(0, totalCost - tierDiscounts - appliedDiscount)
+  }, [totalCost, tierDiscounts, appliedDiscount])
 
   const formatPrice = useCallback((cents: number): string => {
     if (isNaN(cents) || cents === null || cents === undefined) {
@@ -112,7 +134,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
     try {
       const validationData = {
         code: code.toUpperCase(),
-        orderAmount: totalCost,
+        orderAmount: totalCost, // Use original total before tier discounts
         ...(formData.email && { customerEmail: formData.email })
       }
 
@@ -774,16 +796,21 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
               const experience = availableExperiences.find(exp => exp.id === ticket.ticketTypeId)
               const pricing = experience ? calculateBestPricing(experience, ticket.quantity) : null
               
+              // Calculate original price (without any discounts)
+              const originalPrice = experience ? (experience.priceInCents * ticket.quantity) : ticket.priceInCents
+              const actualPrice = ticket.priceInCents
+              const itemSavings = originalPrice - actualPrice
+              
               return (
                 <div key={ticket.ticketTypeId} className="space-y-1">
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-700">{ticket.name} × {ticket.quantity}</span>
-                    <span className="font-medium text-[#262624]">{formatPrice(ticket.priceInCents)}</span>
+                    <span className="font-medium text-[#262624]">{formatPrice(originalPrice)}</span>
                   </div>
-                  {pricing && pricing.savings > 0 && (
+                  {itemSavings > 0 && (
                     <div className="flex justify-between text-xs text-green-600 ml-4">
                       <span>Volume discount applied</span>
-                      <span>-{formatPrice(pricing.savings)}</span>
+                      <span>-{formatPrice(itemSavings)}</span>
                     </div>
                   )}
                 </div>
@@ -796,9 +823,16 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
                 <span className="text-[#262624]">{formatPrice(totalCost)}</span>
               </div>
               
+              {tierDiscounts > 0 && (
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Volume discounts:</span>
+                  <span>-{formatPrice(tierDiscounts)}</span>
+                </div>
+              )}
+              
               {appliedDiscount > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
-                  <span>Discount ({formData.couponCode}):</span>
+                  <span>Coupon ({formData.couponCode}):</span>
                   <span>-{formatPrice(appliedDiscount)}</span>
                 </div>
               )}
