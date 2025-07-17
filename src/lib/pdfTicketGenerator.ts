@@ -217,7 +217,7 @@ export class PDFTicketGenerator {
       
       currentY -= 8;
       
-      page.drawText('Bugibba Square, Malta', {
+      page.drawText('50m From Bugibba Square, Malta', {
         x: x + 12,
         y: currentY,
         size: 6,
@@ -551,7 +551,7 @@ export class PDFTicketGenerator {
         ticketTypePrice: ticket.purchasePrice || ticket.ticketType?.priceInCents || 0,
         // Venue information
         venue: isVRTicket ? 'VR Room Malta' : (ticket.venue || 'Malta Fairs and Conventions Centre'),
-        boothLocation: isVRTicket ? 'Bugibba Square, Malta' : (ticket.boothLocation || 'EMS Booth - MFCC')
+        boothLocation: isVRTicket ? '50m From Bugibba Square, Malta' : (ticket.boothLocation || 'EMS Booth - MFCC')
       }
     });
 

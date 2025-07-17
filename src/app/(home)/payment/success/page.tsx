@@ -1,23 +1,33 @@
-// src/app/payment/success/page.tsx - Optimized to prevent client-side rendering
+// src/app/payment/success/page.tsx - Optimized with fast loading
 import { Suspense } from 'react'
 import { PaymentSuccessContent } from '@/components/payment/PaymentSuccessContent'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-function PaymentSuccessSkeleton() {
+// Lightweight loading skeleton
+function PaymentSuccessLoading() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 p-4">
-      <div className="max-w-md mx-auto pt-8">
-        <div className="bg-white rounded-lg shadow-sm p-6">
-          <div className="animate-pulse space-y-4">
-            <div className="h-16 w-16 bg-gray-200 rounded-full mx-auto"></div>
-            <div className="h-6 bg-gray-200 rounded w-3/4 mx-auto"></div>
-            <div className="h-4 bg-gray-200 rounded w-full"></div>
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="h-20 bg-gray-200 rounded"></div>
-            ))}
-            <div className="h-12 bg-gray-200 rounded"></div>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 relative">
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30"
+        style={{ backgroundImage: "url('/vr-background.jpg')" }}
+      />
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl p-8 max-w-md w-full">
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 bg-gray-200 rounded-full mx-auto animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded w-3/4 mx-auto animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-16 bg-gray-200 rounded animate-pulse"></div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+              <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -27,7 +37,7 @@ function PaymentSuccessSkeleton() {
 
 export default function PaymentSuccessPage() {
   return (
-    <Suspense fallback={<PaymentSuccessSkeleton />}>
+    <Suspense fallback={<PaymentSuccessLoading />}>
       <PaymentSuccessContent />
     </Suspense>
   )

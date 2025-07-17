@@ -1,12 +1,13 @@
-// src/components/forms/VRRegistrationForm.tsx - VR registration with integrated payment step
+// src/components/forms/VRRegistrationForm.tsx - Optimized responsive VR registration
 'use client'
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/components/ui/use-toast'
 import { Loader2, ArrowLeft, ArrowRight, AlertTriangle, Gamepad2, Users, Calendar, MapPin, CreditCard, Shield, CheckCircle, Gift } from 'lucide-react'
 
+// Lazy load step components for better performance
 import { VRTicketSelectionStep } from './steps/VRTicketSelectionStep'
 import { VRPersonalInfoStep } from './steps/VRPersonalInfoStep'
 import { VRTermsStep } from './steps/VRTermsStep'
@@ -31,8 +32,9 @@ export function VRRegistrationForm() {
     appliedDiscount: 0,
   })
 
-  const totalSteps = 4 // Added payment step
+  const totalSteps = 4
 
+  // Memoized calculations for performance
   const totalTickets = useMemo(() => {
     return formData.selectedTickets.reduce((sum, ticket) => sum + ticket.quantity, 0)
   }, [formData.selectedTickets])
@@ -68,7 +70,6 @@ export function VRRegistrationForm() {
     
     if (isStepValid) {
       if (currentStep === 3) {
-        // After terms step, create registration
         handleCreateRegistration()
       } else {
         setCurrentStep(prev => Math.min(prev + 1, totalSteps))
@@ -128,12 +129,6 @@ export function VRRegistrationForm() {
         }))
       }
 
-      console.log('Creating VR registration:', {
-        email: cleanedData.email,
-        sessionCount: cleanedData.selectedTickets.length,
-        totalTickets: cleanedData.selectedTickets.reduce((sum, t) => sum + t.quantity, 0),
-      })
-
       const response = await fetch('/api/vr-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -144,7 +139,7 @@ export function VRRegistrationForm() {
 
       if (response.ok && result.success) {
         setRegistrationData(result.data)
-        setCurrentStep(4) // Move to payment step
+        setCurrentStep(4)
         toast({
           title: "Registration created!",
           description: "Proceed to payment to complete your booking.",
@@ -169,7 +164,6 @@ export function VRRegistrationForm() {
   }, [formData])
 
   const handlePaymentComplete = useCallback(() => {
-    // Redirect to success page
     const successUrl = `/payment/success?registration_id=${registrationData.id}&vr_booking=true`
     router.push(successUrl)
   }, [registrationData, router])
@@ -198,67 +192,103 @@ export function VRRegistrationForm() {
       default:
         return <div>Error: Invalid step {currentStep}</div>
     }
-  }, [currentStep, formData, handleInputChange, registrationData, handlePaymentComplete, isFreeOrder])
+  }, [currentStep, formData, handleInputChange, registrationData, handlePaymentComplete])
 
   const isCurrentStepValid = useMemo(() => {
-    if (currentStep === 4) return true // Payment step validation handled internally
+    if (currentStep === 4) return true
     return validateVRStep(currentStep, formData)
   }, [currentStep, formData])
 
   const stepTitles = [
-    'Choose VR Experiences',
+    'Choose Experiences',
     'Your Information', 
     'Terms & Booking',
-    'Payment & Confirmation'
+    'Payment'
   ]
 
   const getStepIcon = (stepIndex: number) => {
     switch (stepIndex) {
-      case 1: return <Gamepad2 className="h-4 w-4" />
-      case 2: return <Users className="h-4 w-4" />
-      case 3: return <CheckCircle className="h-4 w-4" />
-      case 4: return isFreeOrder ? <Gift className="h-4 w-4" /> : <CreditCard className="h-4 w-4" />
-      default: return <div className="h-4 w-4" />
+      case 1: return <Gamepad2 className="h-3 w-3 sm:h-4 sm:w-4" />
+      case 2: return <Users className="h-3 w-3 sm:h-4 sm:w-4" />
+      case 3: return <CheckCircle className="h-3 w-3 sm:h-4 sm:w-4" />
+      case 4: return isFreeOrder ? <Gift className="h-3 w-3 sm:h-4 sm:w-4" /> : <CreditCard className="h-3 w-3 sm:h-4 sm:w-4" />
+      default: return <div className="h-3 w-3 sm:h-4 sm:w-4" />
     }
   }
 
   return (
-    <div className="min-h-screen bg-cover bg-center bg-fixed relative pt-20" 
-         style={{ 
-           backgroundImage: `linear-gradient(rgba(0,0,0,0.7), rgba(1,174,237,0.8)), url('/vr-background.jpg')`,
-         }}>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 relative">
       
-      {/* Full-width container */}
-      <div className="w-full min-h-screen">
+      {/* Background Image Overlay */}
+      <div 
+        className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30"
+        style={{ backgroundImage: "url('/vr-background.jpg')" }}
+      />
+      
+      {/* Content */}
+      <div className="relative z-10 min-h-screen pt-16 sm:pt-20">
         
         {/* Header Section */}
         <div className="w-full bg-black/40 backdrop-blur-sm border-b border-white/10">
-          <div className="max-w-7xl mx-auto px-4 py-6">
-            <div className="flex items-center justify-between">
-              {/* Form Title */}
-              <div>
-                <h1 className="text-2xl font-bold text-white">Book Your VR Experience</h1>
-                <p className="text-sm text-gray-300">
-                  {currentStep === 4 ? (
-                    isFreeOrder ? 'Complete your free VR booking' : 'Secure payment with Stripe'
-                  ) : (
-                    'Choose your virtual reality adventure'
-                  )}
+          <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6">
+            
+            {/* Mobile Header */}
+            <div className="block sm:hidden">
+              <div className="text-center mb-4">
+                <h1 className="text-xl font-bold text-white">Book VR Experience</h1>
+                <p className="text-xs text-gray-300">
+                  {currentStep === 4 ? 
+                    (isFreeOrder ? 'Complete free booking' : 'Secure payment') : 
+                    'Choose your VR adventure'
+                  }
                 </p>
               </div>
               
-              {/* Step Progress */}
-              <div className="hidden md:flex items-center gap-6">
+              {/* Mobile Progress */}
+              <div className="flex items-center justify-between text-xs text-gray-300 mb-2">
+                <span>Step {currentStep} of {totalSteps}</span>
+                <span>{stepTitles[currentStep - 1]}</span>
+              </div>
+              <div className="w-full bg-white/20 rounded-full h-1.5">
+                <div 
+                  className="bg-[#01AEED] h-1.5 rounded-full transition-all duration-500" 
+                  style={{ width: `${(currentStep / totalSteps) * 100}%` }}
+                />
+              </div>
+              
+              {/* Mobile Summary */}
+              {totalTickets > 0 && currentStep < 4 && (
+                <div className="text-center mt-3 p-2 bg-white/10 rounded-lg">
+                  <div className="text-[#01AEED] font-bold">{totalCost}</div>
+                  <div className="text-xs text-gray-300">{totalTickets} session{totalTickets > 1 ? 's' : ''}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Desktop Header */}
+            <div className="hidden sm:flex items-center justify-between">
+              <div>
+                <h1 className="text-xl lg:text-2xl font-bold text-white">Book Your VR Experience</h1>
+                <p className="text-sm text-gray-300">
+                  {currentStep === 4 ? 
+                    (isFreeOrder ? 'Complete your free VR booking' : 'Secure payment with Stripe') : 
+                    'Choose your virtual reality adventure'
+                  }
+                </p>
+              </div>
+              
+              {/* Desktop Progress */}
+              <div className="hidden lg:flex items-center gap-4">
                 {stepTitles.map((title, index) => (
                   <div key={index} className="flex items-center gap-2">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
+                    <div className={`w-7 h-7 lg:w-8 lg:h-8 rounded-full flex items-center justify-center text-xs font-bold ${
                       index + 1 < currentStep ? 'bg-green-500 text-white' :
                       index + 1 === currentStep ? 'bg-[#01AEED] text-white' :
                       'bg-white/20 text-gray-300'
                     }`}>
                       {index + 1 < currentStep ? <CheckCircle className="h-4 w-4" /> : getStepIcon(index + 1)}
                     </div>
-                    <span className={`text-sm ${
+                    <span className={`text-xs lg:text-sm ${
                       index + 1 === currentStep ? 'text-white font-medium' : 'text-gray-300'
                     }`}>
                       {title}
@@ -267,18 +297,17 @@ export function VRRegistrationForm() {
                 ))}
               </div>
               
-              {/* Booking Summary */}
+              {/* Desktop Summary */}
               {totalTickets > 0 && currentStep < 4 && (
                 <div className="text-right">
-                  <div className="text-white font-bold text-lg">{totalCost}</div>
+                  <div className="text-white font-bold text-lg lg:text-xl">{totalCost}</div>
                   <div className="text-sm text-gray-300">{totalTickets} session{totalTickets > 1 ? 's' : ''}</div>
                 </div>
               )}
 
-              {/* Payment Summary */}
               {currentStep === 4 && registrationData && (
                 <div className="text-right">
-                  <div className={`font-bold text-lg ${isFreeOrder ? 'text-green-400' : 'text-white'}`}>
+                  <div className={`font-bold text-lg lg:text-xl ${isFreeOrder ? 'text-green-400' : 'text-white'}`}>
                     {isFreeOrder ? 'FREE' : `€${(registrationData.finalAmount / 100).toFixed(2)}`}
                   </div>
                   <div className="text-sm text-gray-300">
@@ -287,39 +316,32 @@ export function VRRegistrationForm() {
                 </div>
               )}
             </div>
-            
-            {/* Mobile Progress Bar */}
-            <div className="mt-4 md:hidden">
-              <div className="flex items-center justify-between text-sm text-gray-300 mb-2">
-                <span>Step {currentStep} of {totalSteps}</span>
-                <span>{stepTitles[currentStep - 1]}</span>
-              </div>
-              <div className="w-full bg-white/20 rounded-full h-2">
-                <div 
-                  className="bg-[#01AEED] h-2 rounded-full transition-all duration-500" 
-                  style={{ width: `${(currentStep / totalSteps) * 100}%` }}
-                />
-              </div>
-            </div>
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="max-w-7xl mx-auto px-4 py-8">
+        {/* Main Content */}
+        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
           
-          {/* Step Content */}
+          {/* Step Content Card */}
           <div className="bg-white/95 backdrop-blur-sm rounded-xl shadow-2xl border border-white/20 overflow-hidden">
             
             {/* Content Body */}
-            <div className="p-8">
-              {renderStepContent()}
+            <div className="p-4 sm:p-6 lg:p-8">
+              <Suspense fallback={
+                <div className="text-center py-8">
+                  <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-[#01AEED]" />
+                  <p className="text-gray-600">Loading...</p>
+                </div>
+              }>
+                {renderStepContent()}
+              </Suspense>
             </div>
             
             {/* Step Validation Warning */}
             {!isCurrentStepValid && currentStep > 1 && currentStep < 4 && (
-              <div className="mx-8 mb-6 flex items-center gap-2 p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                <AlertTriangle className="h-5 w-5 text-orange-600 flex-shrink-0" />
-                <p className="text-sm text-orange-800">
+              <div className="mx-4 sm:mx-6 lg:mx-8 mb-6 flex items-center gap-2 p-3 sm:p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600 flex-shrink-0" />
+                <p className="text-xs sm:text-sm text-orange-800">
                   Please complete all required fields above to continue
                 </p>
               </div>
@@ -327,58 +349,74 @@ export function VRRegistrationForm() {
             
             {/* Navigation Footer */}
             {currentStep < 4 && (
-              <div className="bg-gray-50 px-8 py-6 border-t border-gray-200">
-                <div className="flex justify-between items-center">
+              <div className="bg-gray-50 px-4 sm:px-6 lg:px-8 py-4 sm:py-6 border-t border-gray-200">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                   <Button 
                     variant="outline" 
                     onClick={handlePrevious}
                     disabled={currentStep === 1}
-                    className="px-6 py-3 border-[#01AEED] text-[#01AEED] hover:bg-[#01AEED] hover:text-white"
+                    className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm border-[#01AEED] text-[#01AEED] hover:bg-[#01AEED] hover:text-white"
                   >
-                    <ArrowLeft className="mr-2 h-4 w-4" />
+                    <ArrowLeft className="mr-2 h-3 w-3 sm:h-4 sm:w-4" />
                     Previous
                   </Button>
                   
-                  <div className="flex items-center gap-4 text-sm text-gray-600">
+                  {/* Location Info - Hidden on mobile */}
+                  <div className="hidden lg:flex items-center gap-6 text-xs text-gray-600">
                     <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 text-[#01AEED]" />
-                      <span>Bugibba Square</span>
+                      <MapPin className="h-3 w-3 text-[#01AEED]" />
+                      <span> 50m from Bugibba Square</span>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-[#01AEED]" />
-                      <span>Opening Wednesday</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-[#01AEED]" />
+                      <Users className="h-3 w-3 text-[#01AEED]" />
                       <span>All Ages</span>
                     </div>
                   </div>
                   
                   <Button 
                     onClick={handleNext}
-                    className="px-6 py-3 bg-gradient-to-r from-[#01AEED] to-[#262624] hover:from-[#01AEED]/90 hover:to-[#262624]/90"
+                    className="w-full sm:w-auto px-4 sm:px-6 py-2 sm:py-3 text-sm bg-gradient-to-r from-[#01AEED] to-[#262624] hover:from-[#01AEED]/90 hover:to-[#262624]/90"
                     disabled={!isCurrentStepValid || isSubmitting}
                   >
                     {isSubmitting ? (
                       <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="mr-2 h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
                         Creating...
                       </>
                     ) : currentStep === 3 ? (
                       <>
                         Create Booking
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRight className="ml-2 h-3 w-3 sm:h-4 sm:w-4" />
                       </>
                     ) : (
                       <>
                         Continue
-                        <ArrowRight className="ml-2 h-4 w-4" />
+                        <ArrowRight className="ml-2 h-3 w-3 sm:h-4 sm:w-4" />
                       </>
                     )}
                   </Button>
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Mobile Location Info */}
+          <div className="block sm:hidden mt-4 p-3 bg-white/10 backdrop-blur-sm rounded-lg">
+            <div className="flex justify-center gap-4 text-xs text-white">
+              <div className="flex items-center gap-1">
+                <MapPin className="h-3 w-3 text-[#01AEED]" />
+                <span>Bugibba</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Calendar className="h-3 w-3 text-[#01AEED]" />
+                <span>Opening Soon</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Users className="h-3 w-3 text-[#01AEED]" />
+                <span>All Ages</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>

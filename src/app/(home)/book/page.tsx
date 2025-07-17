@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   keywords: 'VR booking, virtual reality Malta, VR experiences, VR Room Malta, book VR session',
   openGraph: {
     title: 'Book Your VR Adventure | VR Room Malta',
-    description: 'Experience the future of entertainment with premium VR experiences at Bugibba Square, Malta.',
+    description: 'Experience the future of entertainment with premium VR experiences at 50m From Bugibba Square, Malta.',
     type: 'website',
     locale: 'en_US',
   }
