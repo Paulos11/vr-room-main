@@ -1,4 +1,3 @@
-// src/components/sections/VRGamesSection.tsx
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -312,9 +311,9 @@ export default function VRGamesSection() {
           </div>
         )}
 
-        {/* Page Indicators */}
+        {/* Page Indicators (Hidden on mobile) */}
         {totalPages > 1 && (
-          <div className="flex justify-center mt-6 sm:mt-8 gap-2">
+          <div className="flex justify-center mt-6 sm:mt-8 gap-2 sm:block hidden">
             {Array.from({ length: totalPages }).map((_, index) => (
               <button
                 key={index}
@@ -324,7 +323,7 @@ export default function VRGamesSection() {
                 }}
                 className={`transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-[#01AEED] focus:ring-offset-2 focus:ring-offset-gray-900 ${
                   currentPage === index
-                    ? 'w-6 sm:w-8 h-2 bg-[#01AEED] rounded-full' 
+                    ? 'w-6 sm:w-8 h-2 bg-[#01AEED] rounded-full'
                     : 'w-2 h-2 bg-white/30 rounded-full hover:bg-white/50'
                 }`}
                 aria-label={`Go to page ${index + 1}`}

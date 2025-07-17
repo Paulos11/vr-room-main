@@ -1,4 +1,3 @@
-// src/components/sections/Hero.tsx
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
@@ -176,8 +175,8 @@ export default function Hero() {
         </div>
       </div>
 
-      {/* Slide Indicators */}
-      <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 flex space-x-3 z-20">
+      {/* Slide Indicators (Hidden on mobile) */}
+      <div className="absolute bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 flex space-x-3 z-20 sm:block hidden">
         {heroSlides.map((_, index) => (
           <button
             key={index}
