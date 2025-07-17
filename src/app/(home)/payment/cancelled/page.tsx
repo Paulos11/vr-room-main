@@ -1,4 +1,3 @@
-// src/app/payment/cancelled/page.tsx - VR Room Malta styled
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -92,17 +91,12 @@ export default function VRPaymentCancelledPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 relative">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30"
-          style={{ backgroundImage: "url('/vr-background.jpg')" }}
-        />
-        
+        <div className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30" style={{ backgroundImage: "url('/vr-background.jpg')" }} />
         <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
           <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm shadow-2xl border border-white/20">
             <CardContent className="flex flex-col items-center justify-center py-12">
               <Loader2 className="h-12 w-12 animate-spin text-[#01AEED] mb-4" />
-              <span className="text-gray-600 text-lg">Loading booking details...</span>
+              <span className="text-gray-600 text-lg">Loading...</span>
             </CardContent>
           </Card>
         </div>
@@ -113,12 +107,7 @@ export default function VRPaymentCancelledPage() {
   if (error || !registration) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 relative">
-        {/* Background Image */}
-        <div 
-          className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30"
-          style={{ backgroundImage: "url('/vr-background.jpg')" }}
-        />
-        
+        <div className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30" style={{ backgroundImage: "url('/vr-background.jpg')" }} />
         <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
           <Card className="w-full max-w-md bg-white/95 backdrop-blur-sm shadow-2xl border border-white/20">
             <CardHeader className="text-center">
@@ -130,7 +119,7 @@ export default function VRPaymentCancelledPage() {
               <Link href="/book">
                 <Button className="w-full bg-[#01AEED] hover:bg-[#01AEED]/90">
                   <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to VR Booking
+                  Back to Booking
                 </Button>
               </Link>
             </CardContent>
@@ -143,31 +132,22 @@ export default function VRPaymentCancelledPage() {
   const isFreeBooking = registration.finalAmount === 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 relative">
-      {/* Background Image */}
-      <div 
-        className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30"
-        style={{ backgroundImage: "url('/vr-background.jpg')" }}
-      />
-      
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 relative pt-18">
+      <div className="absolute inset-0 bg-cover bg-center bg-fixed opacity-30" style={{ backgroundImage: "url('/vr-background.jpg')" }} />
       <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
         <Card className="w-full max-w-lg bg-white/95 backdrop-blur-sm shadow-2xl border border-white/20">
           <CardHeader className="text-center pb-4">
-            <div className="mx-auto w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
               <XCircle className="h-10 w-10 text-red-600" />
             </div>
-            <CardTitle className="text-2xl text-red-700 mb-2">
-              Payment Cancelled
-            </CardTitle>
-            <p className="text-gray-600">
-              Your VR booking payment was cancelled
-            </p>
+            <CardTitle className="text-2xl text-red-700 mb-2">Payment Cancelled</CardTitle>
+            <p className="text-gray-600">Your VR booking payment was cancelled</p>
           </CardHeader>
           
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-3">
             {/* VR Booking Info */}
-            <div className="p-4 border border-[#01AEED]/20 rounded-xl bg-gradient-to-r from-[#01AEED]/5 to-blue-50">
-              <h3 className="font-semibold mb-3 text-[#262624] flex items-center gap-2">
+            <div className="p-3 border border-[#01AEED]/20 rounded-xl bg-gradient-to-r from-[#01AEED]/5 to-blue-50">
+              <h3 className="font-semibold mb-2 text-[#262624] flex items-center gap-2">
                 <Gamepad2 className="h-5 w-5 text-[#01AEED]" />
                 VR Booking Details
               </h3>
@@ -193,8 +173,8 @@ export default function VRPaymentCancelledPage() {
 
             {/* VR Experiences */}
             {registration.bookedExperiences && registration.bookedExperiences.length > 0 && (
-              <div className="p-4 border border-gray-200 rounded-xl bg-gray-50">
-                <h3 className="font-semibold mb-3 text-[#262624]">Selected VR Experiences</h3>
+              <div className="p-3 border border-gray-200 rounded-xl bg-gray-50">
+                <h3 className="font-semibold mb-2 text-[#262624]">Selected VR Experiences</h3>
                 <div className="space-y-2">
                   {registration.bookedExperiences.map((experience, index) => (
                     <div key={index} className="flex justify-between text-sm">
@@ -212,8 +192,8 @@ export default function VRPaymentCancelledPage() {
 
             {/* Payment Summary */}
             {!isFreeBooking && (
-              <div className="p-4 border border-[#01AEED]/20 rounded-xl bg-[#01AEED]/5">
-                <h3 className="font-semibold mb-3 text-[#262624]">Payment Summary</h3>
+              <div className="p-3 border border-[#01AEED]/20 rounded-xl bg-[#01AEED]/5">
+                <h3 className="font-semibold mb-2 text-[#262624]">Payment Summary</h3>
                 <div className="text-sm space-y-2">
                   {registration.discountAmount > 0 && (
                     <>
@@ -237,23 +217,20 @@ export default function VRPaymentCancelledPage() {
             )}
 
             {/* Cancellation Message */}
-            <div className="p-4 border border-yellow-200 rounded-xl bg-yellow-50">
-              <div className="flex items-start gap-3">
+            <div className="p-3 border border-yellow-200 rounded-xl bg-yellow-50">
+              <div className="flex items-start gap-2">
                 <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5 flex-shrink-0" />
                 <div>
                   <h4 className="font-medium text-yellow-800 mb-1">Payment Cancelled</h4>
                   <p className="text-sm text-yellow-700">
-                    Your payment was cancelled and no charges were made. 
-                    Your VR booking is still reserved and you can complete payment anytime.
+                    Your payment was cancelled and no charges were made. Your VR booking is still reserved and you can complete payment anytime.
                   </p>
                 </div>
               </div>
             </div>
 
-            
-
             {/* Action Buttons */}
-            <div className="space-y-3">
+            <div className="space-y-2">
               {!isFreeBooking && (
                 <Button 
                   onClick={handleRetryPayment}
@@ -265,7 +242,7 @@ export default function VRPaymentCancelledPage() {
                 </Button>
               )}
               
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <Link href="/book">
                   <Button className="w-full" variant="outline">
                     <RotateCcw className="mr-2 h-4 w-4" />
@@ -283,7 +260,7 @@ export default function VRPaymentCancelledPage() {
             </div>
 
             {/* Contact Information */}
-            <div className="text-center p-3 bg-[#01AEED]/5 border border-[#01AEED]/20 rounded-lg">
+            <div className="text-center p-2 bg-[#01AEED]/5 border border-[#01AEED]/20 rounded-lg">
               <p className="text-sm text-gray-600 mb-1">
                 <strong>Need Help?</strong>
               </p>
@@ -292,7 +269,7 @@ export default function VRPaymentCancelledPage() {
                 <span className="font-medium text-[#01AEED]">info@vrroommalta.com</span>
               </p>
               <p className="text-xs text-gray-500 mt-1">
-               50meters from Bugibba Square, Malta
+               50 meters from Bugibba Square, Malta
               </p>
             </div>
 
