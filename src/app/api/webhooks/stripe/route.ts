@@ -1,4 +1,4 @@
-// FIXED: src/app/api/webhooks/stripe/route.ts - Working VR ticket generation and email
+// src/app/api/webhooks/stripe/route.ts - Updated with plain text emails & ticket delivery
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { prisma } from '@/lib/prisma'
@@ -78,13 +78,13 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
   } catch (error: any) {
     console.error('❌ Error handling payment success:', error.message)
     
-    // Log the error for admin review - using a valid EmailType
+    // Log the error for admin review
     try {
       await prisma.emailLog.create({
         data: {
-          emailType: 'PAYMENT_CONFIRMATION', // Changed from 'PAYMENT_PROCESSING' to valid enum value
+          emailType: 'PAYMENT_CONFIRMATION',
           subject: 'Failed to process payment webhook',
-          recipient: 'admin@vrroom.mt',
+          recipient: 'admin@vrroommalta.com',
           status: 'FAILED',
           errorMessage: `Webhook processing failed: ${error.message}`
         }
@@ -123,7 +123,7 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
         email: registration.email,
         status: registration.status,
         existingTickets: registration.tickets.length,
-        adminNotes: !!registration.adminNotes
+        finalAmount: registration.finalAmount
       })
 
       // Update payment status
@@ -150,7 +150,6 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
         let selectedTickets: any[] = []
         if (registration.adminNotes) {
           try {
-            // Look for VR booking pattern
             const match = registration.adminNotes.match(/Selected experiences: (\[.*\])/)
             if (match) {
               selectedTickets = JSON.parse(match[1])
@@ -183,7 +182,6 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
               quantity: 1,
               priceInCents: registration.originalAmount || defaultVRType.priceInCents
             }]
-            console.log('📦 Created fallback VR ticket:', defaultVRType.name)
           } else {
             throw new Error('No VR ticket types found in database')
           }
@@ -206,7 +204,9 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
             continue
           }
 
-          const pricePerSession = Math.round(selectedTicket.priceInCents / selectedTicket.quantity)
+          // ✅ FIXED: Calculate correct price per session based on final amount
+          const totalSessions = selectedTickets.reduce((sum, t) => sum + t.quantity, 0)
+          const pricePerSession = Math.round((registration.finalAmount || 0) / totalSessions)
 
           // Create individual VR session tickets
           for (let i = 0; i < selectedTicket.quantity; i++) {
@@ -220,11 +220,14 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
                 ticketNumber: sessionNumber,
                 ticketSequence: sessionSequence++,
                 qrCode,
-                purchasePrice: pricePerSession,
+                purchasePrice: pricePerSession, // ✅ FIXED: Use actual paid amount per session
                 eventDate: new Date(),
                 venue: 'VR Room Malta',
                 boothLocation: 'Bugibba Square, Malta',
                 status: 'SENT'
+              },
+              include: {
+                ticketType: true // ✅ FIXED: Include ticketType relation
               }
             })
 
@@ -243,7 +246,7 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
           })
         }
 
-     let tickets: any[] = registration.tickets
+        tickets = newTickets
         console.log(`🎉 Generated ${tickets.length} VR session tickets total`)
       } else {
         console.log(`✅ VR tickets already exist: ${tickets.length} tickets`)
@@ -261,7 +264,7 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
       return { registration, tickets }
     })
 
-    // ✅ CRITICAL: Send VR session tickets via email with PDF
+    // ✅ FIXED: Send VR session tickets via email with PDF using plain text service
     try {
       const customerName = `${result.registration.firstName} ${result.registration.lastName}`
       console.log(`📧 Sending VR session tickets email to: ${result.registration.email}`)
@@ -300,7 +303,7 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
         isEmsClient: false, // VR bookings are never EMS
         ticketCount: result.tickets.length,
         finalAmount: result.registration.finalAmount || 0,
-        appliedCouponCode: result.registration.appliedCouponCode ?? undefined, // Convert null to undefined
+        appliedCouponCode: result.registration.appliedCouponCode ?? undefined,
         tickets: result.tickets.map((ticket: any) => ({
           ticketNumber: ticket.ticketNumber,
           customerName,
@@ -313,15 +316,15 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
         }))
       }
 
-      // Send VR payment confirmation email with PDF
-      const emailSent = await EmailService.sendPaymentConfirmation(emailData, pdfBuffer)
+      // ✅ FIXED: Use new plain text email service for ticket delivery
+      const emailSent = await EmailService.sendTicketDelivery(emailData, pdfBuffer)
 
       // Log VR email activity
       await prisma.emailLog.create({
         data: {
           registrationId,
-          emailType: 'PAYMENT_CONFIRMATION',
-          subject: `🎮 Your VR Room Malta Session Tickets (${result.tickets.length} sessions)`,
+          emailType: 'TICKET_DELIVERY',
+          subject: `Your VR Session Tickets - VR Room Malta (${result.tickets.length} sessions)`,
           recipient: result.registration.email,
           status: emailSent ? 'SENT' : 'FAILED',
           errorMessage: emailSent ? null : 'Failed to send VR session tickets email'
@@ -333,7 +336,8 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
         emailSent,
         sessionCount: result.tickets.length,
         ticketsGenerated: true,
-        pdfAttached: !!pdfBuffer
+        pdfAttached: !!pdfBuffer,
+        emailService: 'plain_text'
       })
 
     } catch (emailError: any) {
@@ -343,7 +347,7 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
       await prisma.emailLog.create({
         data: {
           registrationId,
-          emailType: 'PAYMENT_CONFIRMATION',
+          emailType: 'TICKET_DELIVERY',
           subject: 'Failed to send VR session tickets',
           recipient: result.registration.email,
           status: 'FAILED',
@@ -354,8 +358,7 @@ async function handleVRPaymentSuccess(registrationId: string, session: Stripe.Ch
 
   } catch (error: any) {
     console.error('❌ Error handling VR payment success:', error.message)
-    console.error('Stack trace:', error.stack)
-    throw error // Re-throw to be handled by parent function
+    throw error
   }
 }
 
@@ -419,10 +422,35 @@ async function handleRegularPaymentSuccess(registrationId: string, session: Stri
       return { registration, tickets: registration.tickets }
     })
 
-    // Send regular event confirmation email with tickets
+    // ✅ FIXED: Send regular event confirmation email with tickets using plain text service
     try {
       const customerName = `${result.registration.firstName} ${result.registration.lastName}`
       console.log(`Sending regular EMS tickets to: ${result.registration.email}`)
+
+      // Generate PDF for regular tickets
+      let pdfBuffer: Buffer | undefined
+      try {
+        const ticketDataForPDF = result.tickets.map((ticket: any, index: number) => ({
+          ticketNumber: ticket.ticketNumber,
+          customerName,
+          email: result.registration.email,
+          phone: result.registration.phone,
+          qrCode: ticket.qrCode,
+          sequence: index + 1,
+          totalTickets: result.tickets.length,
+          isEmsClient: result.registration.isEmsClient,
+          isVRTicket: false, // ✅ Regular tickets
+          venue: 'Malta Fairs and Conventions Centre',
+          boothLocation: 'EMS Booth - MFCC',
+          ticketTypeName: ticket.ticketType?.name || 'General Admission',
+          ticketTypePrice: ticket.purchasePrice || 0
+        }))
+
+        pdfBuffer = await PDFTicketGenerator.generateAllTicketsPDF(ticketDataForPDF)
+        console.log(`📄 Generated EMS PDF with ${result.tickets.length} tickets`)
+      } catch (pdfError) {
+        console.error('⚠️  PDF generation failed:', pdfError)
+      }
 
       const emailData: RegistrationEmailData = {
         registrationId: result.registration.id,
@@ -432,7 +460,7 @@ async function handleRegularPaymentSuccess(registrationId: string, session: Stri
         isEmsClient: result.registration.isEmsClient,
         ticketCount: result.tickets.length,
         finalAmount: result.registration.finalAmount || 0,
-        appliedCouponCode: result.registration.appliedCouponCode ?? undefined, // Convert null to undefined
+        appliedCouponCode: result.registration.appliedCouponCode ?? undefined,
         tickets: result.tickets.map(ticket => ({
           ticketNumber: ticket.ticketNumber,
           customerName,
@@ -447,17 +475,17 @@ async function handleRegularPaymentSuccess(registrationId: string, session: Stri
         }))
       }
 
-      // Send regular event confirmation email
-      const emailSent = await EmailService.sendPaymentConfirmation(emailData)
+      // ✅ FIXED: Use new plain text email service
+      const emailSent = await EmailService.sendTicketDelivery(emailData, pdfBuffer)
 
       await prisma.emailLog.create({
         data: {
           registrationId,
-          emailType: 'PAYMENT_CONFIRMATION',
-          subject: '🎉 Payment Successful - Your EMS Tickets Are Ready!',
+          emailType: 'TICKET_DELIVERY',
+          subject: 'Your EMS Event Tickets',
           recipient: result.registration.email,
           status: emailSent ? 'SENT' : 'FAILED',
-          errorMessage: emailSent ? null : 'Failed to send payment confirmation email'
+          errorMessage: emailSent ? null : 'Failed to send EMS tickets email'
         }
       })
 
@@ -522,6 +550,8 @@ export async function GET() {
     message: 'VR Room Malta webhook endpoint is active',
     timestamp: new Date().toISOString(),
     emailServiceEnabled: !!process.env.RESEND_API_KEY,
-    vrTicketGeneration: 'enabled'
+    emailService: 'plain_text_design',
+    ticketGeneration: 'enabled',
+    pdfAttachment: 'enabled'
   })
 }

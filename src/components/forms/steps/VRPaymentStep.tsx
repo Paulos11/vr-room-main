@@ -1,4 +1,4 @@
-// src/components/forms/steps/VRPaymentStep.tsx - VR payment step with Stripe integration
+// src/components/forms/steps/VRPaymentStep.tsx - FIXED subtotal display
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
@@ -36,6 +36,17 @@ export function VRPaymentStep({
     }
     return `€${(cents / 100).toFixed(2)}`
   }, [])
+
+  // ✅ FIXED: Calculate subtotal from booked experiences
+  const calculateSubtotal = useCallback(() => {
+    if (registrationData.bookedExperiences && registrationData.bookedExperiences.length > 0) {
+      return registrationData.bookedExperiences.reduce((sum, experience) => 
+        sum + (experience.totalPrice || 0), 0
+      )
+    }
+    // Fallback to originalAmount if available
+    return registrationData.originalAmount || 0
+  }, [registrationData])
 
   // Handle free order completion using existing API
   const handleFreeOrderComplete = useCallback(async () => {
@@ -243,6 +254,8 @@ export function VRPaymentStep({
     )
   }
 
+  const subtotalAmount = calculateSubtotal()
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -312,17 +325,24 @@ export function VRPaymentStep({
             </div>
           )}
 
-          {/* Payment Breakdown */}
+          {/* ✅ FIXED: Payment Breakdown with correct subtotal */}
           <div className="border-t border-[#01AEED]/20 pt-3 space-y-2">
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">Subtotal:</span>
-              <span className="text-gray-800">{formatPrice(registrationData.originalAmount)}</span>
+              <span className="text-gray-800">{formatPrice(subtotalAmount)}</span>
             </div>
             
             {registrationData.discountAmount > 0 && (
-              <div className="flex justify-between text-sm text-green-600">
-                <span>Discount ({registrationData.appliedCouponCode}):</span>
-                <span>-{formatPrice(registrationData.discountAmount)}</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-sm text-green-600">
+                  <span>Discount ({registrationData.appliedCouponCode}):</span>
+                  <span>-{formatPrice(registrationData.discountAmount)}</span>
+                </div>
+                {/* ✅ NEW: Show coupon applied confirmation */}
+                <div className="flex items-center gap-1 text-xs text-green-600 ml-2">
+                  <CheckCircle className="h-3 w-3" />
+                  <span>Coupon "{registrationData.appliedCouponCode}" applied - You saved {formatPrice(registrationData.discountAmount)}!</span>
+                </div>
               </div>
             )}
             

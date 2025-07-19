@@ -1,11 +1,10 @@
-// FIXED: src/app/api/create-checkout-session/route.ts - VR Registration Compatible
+// src/app/api/create-checkout-session/route.ts - COMPLETE FIXED VERSION (NO COUPONS)
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import Stripe from 'stripe'
 import { EmailService, RegistrationEmailData } from '@/lib/emailService'
-import { PDFTicketGenerator } from '@/lib/pdfTicketGenerator'
 
 // Type definitions
 interface SelectedTicket {
@@ -58,7 +57,7 @@ export async function POST(request: NextRequest) {
       hasAdminNotes: !!registration.adminNotes
     })
 
-    // ✅ UPDATED: Handle different VR registration statuses
+    // Handle different VR registration statuses
     if (registration.status === 'COMPLETED') {
       return NextResponse.json(
         { success: false, message: 'This VR booking is already completed' },
@@ -83,11 +82,10 @@ export async function POST(request: NextRequest) {
       existingTicketCount: registration.tickets.length
     })
 
-    // ✅ CRITICAL: Parse VR experience selections from adminNotes
+    // Parse VR experience selections from adminNotes
     let selectedTickets: SelectedTicket[] = []
     if (registration.adminNotes) {
       try {
-        // Extract the VR booking details
         if (registration.adminNotes.includes('VR Booking - Selected experiences:')) {
           const match = registration.adminNotes.match(/Selected experiences: (\[.*\])/)
           if (match) {
@@ -95,7 +93,6 @@ export async function POST(request: NextRequest) {
             console.log('✅ Parsed VR selections from adminNotes:', selectedTickets)
           }
         } else {
-          // Try parsing as direct JSON (fallback)
           const notesData = JSON.parse(registration.adminNotes)
           if (notesData.pendingTickets) {
             selectedTickets = notesData.pendingTickets as SelectedTicket[]
@@ -139,12 +136,11 @@ export async function POST(request: NextRequest) {
 
     console.log('🎮 VR Experiences to process:', selectedTickets)
 
-    // ✅ Handle 100% free VR bookings (bypass Stripe completely)
+    // Handle 100% free VR bookings ONLY (bypass Stripe completely)
     if (totalAmount <= 0) {
       console.log('🎉 Processing 100% free VR booking - bypassing Stripe')
       
       try {
-        // Mark as completed and generate tickets in transaction
         const result = await prisma.$transaction(async (tx) => {
           // Update registration status
           await tx.registration.update({
@@ -174,12 +170,11 @@ export async function POST(request: NextRequest) {
             }
           })
 
-          // ✅ GENERATE VR SESSION TICKETS for free bookings
+          // Generate VR session tickets for free bookings
           const tickets = []
           let sessionSequence = 1
 
           for (const selectedTicket of selectedTickets) {
-            // Validate VR experience
             const ticketType = await tx.ticketType.findUnique({
               where: { id: selectedTicket.ticketTypeId }
             })
@@ -191,8 +186,6 @@ export async function POST(request: NextRequest) {
             if (ticketType.availableStock < selectedTicket.quantity) {
               throw new Error(`Insufficient VR sessions for ${selectedTicket.name}`)
             }
-
-            const pricePerSession = Math.round(selectedTicket.priceInCents / selectedTicket.quantity)
 
             // Create individual VR session tickets
             for (let i = 0; i < selectedTicket.quantity; i++) {
@@ -206,7 +199,7 @@ export async function POST(request: NextRequest) {
                   ticketNumber: sessionNumber,
                   ticketSequence: sessionSequence++,
                   qrCode,
-                  purchasePrice: 0, // Free session
+                  purchasePrice: 0,
                   eventDate: new Date(),
                   venue: 'VR Room Malta',
                   boothLocation: 'Bugibba Square',
@@ -222,7 +215,7 @@ export async function POST(request: NextRequest) {
               where: { id: selectedTicket.ticketTypeId },
               data: {
                 availableStock: { decrement: selectedTicket.quantity },
-                reservedStock: { decrement: selectedTicket.quantity }, // Remove from reserved
+                reservedStock: { decrement: selectedTicket.quantity },
                 soldStock: { increment: selectedTicket.quantity }
               }
             })
@@ -234,7 +227,6 @@ export async function POST(request: NextRequest) {
               where: { id: registration.appliedCouponId },
               data: { currentUses: { increment: 1 } }
             })
-            console.log(`Coupon ${registration.appliedCouponCode} usage incremented for free VR booking`)
           }
 
           return { tickets }
@@ -243,8 +235,7 @@ export async function POST(request: NextRequest) {
         // Send VR confirmation email with tickets
         try {
           const customerName = `${registration.firstName} ${registration.lastName}`
-          console.log(`Sending free VR session confirmation: ${result.tickets.length} tickets`)
-
+          
           const emailData: RegistrationEmailData = {
             registrationId: registration.id,
             customerName,
@@ -283,10 +274,8 @@ export async function POST(request: NextRequest) {
 
         } catch (emailError: any) {
           console.error('Error sending free VR confirmation:', emailError)
-          // Don't fail the booking if email fails
         }
 
-        // Return success response for free VR booking
         return NextResponse.json({
           success: true,
           isFreeOrder: true,
@@ -309,13 +298,32 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ✅ Continue with regular Stripe checkout for paid VR bookings
-    console.log('Processing paid VR booking through Stripe')
+    // Check for amounts too small for Stripe (but not zero)
+    const STRIPE_MINIMUM_AMOUNT = 50 // €0.50
+    
+    if (totalAmount > 0 && totalAmount < STRIPE_MINIMUM_AMOUNT) {
+      console.log(`⚠️  Amount ${totalAmount} cents is below Stripe minimum - cannot process payment`)
+      return NextResponse.json(
+        { 
+          success: false, 
+          message: `Payment amount €${(totalAmount/100).toFixed(2)} is below the minimum charge of €0.50. Please contact support or adjust your order.`,
+          errorType: 'BelowMinimumAmount',
+          suggestedAction: 'contact_support'
+        },
+        { status: 400 }
+      )
+    }
 
-    // ✅ Build line items from VR experience selections (not existing tickets)
+    // ✅ FIXED: Build line items using FINAL AMOUNT ONLY (NO COUPONS)
+    console.log('🔧 FIXED: Building line items using final amount directly')
+    
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = []
+    const totalFinalAmount = registration.finalAmount || 0
 
-    for (const selectedTicket of selectedTickets) {
+    if (selectedTickets.length === 1) {
+      // Single VR experience - use final amount directly
+      const selectedTicket = selectedTickets[0]
+      
       // Validate VR experience is still available
       const ticketType = await prisma.ticketType.findUnique({
         where: { id: selectedTicket.ticketTypeId }
@@ -335,25 +343,97 @@ export async function POST(request: NextRequest) {
         )
       }
 
+      // ✅ KEY FIX: Use final amount divided by quantity
+      const unitAmount = Math.max(1, Math.round(totalFinalAmount / selectedTicket.quantity))
       const itemName = selectedTicket.quantity > 1 
         ? `${selectedTicket.name} (${selectedTicket.quantity} sessions)`
         : selectedTicket.name
 
-      const description = `VR Room Malta - ${selectedTicket.name} | Duration: 5 Minutes per session`
-      const unitAmount = Math.max(1, Math.round(selectedTicket.priceInCents / selectedTicket.quantity))
+      console.log('🔧 Single item calculation:', {
+        finalAmount: totalFinalAmount,
+        quantity: selectedTicket.quantity,
+        unitAmount: unitAmount,
+        calculatedTotal: unitAmount * selectedTicket.quantity
+      })
 
       lineItems.push({
         price_data: {
-          currency: 'eur',
+          currency: 'eur', // ✅ ENSURE EUR CURRENCY
           product_data: {
             name: itemName,
-            description: description,
+            description: `VR Room Malta - ${selectedTicket.name} | Duration: 5 Minutes per session`,
           },
           unit_amount: unitAmount,
         },
         quantity: selectedTicket.quantity,
       })
+    } else {
+      // Multiple VR experiences - distribute final amount proportionally
+      const totalOriginalCost = selectedTickets.reduce((sum, ticket) => sum + ticket.priceInCents, 0)
+      
+      for (const selectedTicket of selectedTickets) {
+        // Validate VR experience is still available
+        const ticketType = await prisma.ticketType.findUnique({
+          where: { id: selectedTicket.ticketTypeId }
+        })
+
+        if (!ticketType || !ticketType.isActive) {
+          return NextResponse.json(
+            { success: false, message: `VR experience ${selectedTicket.name} is no longer available` },
+            { status: 400 }
+          )
+        }
+
+        if (ticketType.availableStock < selectedTicket.quantity) {
+          return NextResponse.json(
+            { success: false, message: `Insufficient VR sessions for ${selectedTicket.name}` },
+            { status: 400 }
+          )
+        }
+
+        // Calculate proportional share of the final amount
+        const proportion = selectedTicket.priceInCents / totalOriginalCost
+        const ticketFinalAmount = Math.round(totalFinalAmount * proportion)
+        const unitAmount = Math.max(1, Math.round(ticketFinalAmount / selectedTicket.quantity))
+
+        const itemName = selectedTicket.quantity > 1 
+          ? `${selectedTicket.name} (${selectedTicket.quantity} sessions)`
+          : selectedTicket.name
+
+        lineItems.push({
+          price_data: {
+            currency: 'eur', // ✅ ENSURE EUR CURRENCY
+            product_data: {
+              name: itemName,
+              description: `VR Room Malta - ${selectedTicket.name} | Duration: 5 Minutes per session`,
+            },
+            unit_amount: unitAmount,
+          },
+          quantity: selectedTicket.quantity,
+        })
+      }
     }
+
+    // Verify the calculated total matches the registration final amount
+    const calculatedTotal = lineItems.reduce((sum, item) => 
+      sum + ((item.price_data?.unit_amount || 0) * (item.quantity || 0)), 0
+    )
+
+    console.log('✅ FIXED: VR Total verification:', {
+      registrationFinalAmount: totalFinalAmount,
+      calculatedFromLineItems: calculatedTotal,
+      matches: Math.abs(totalFinalAmount - calculatedTotal) <= 10, // Allow 10 cent tolerance for rounding
+      difference: Math.abs(totalFinalAmount - calculatedTotal),
+      lineItemsCount: lineItems.length
+    })
+
+    console.log('✅ FIXED: VR Stripe line items:', lineItems.map(item => ({
+      name: item.price_data?.product_data?.name,
+      unit_amount: item.price_data?.unit_amount,
+      quantity: item.quantity,
+      total: (item.price_data?.unit_amount || 0) * (item.quantity || 0),
+      currency: item.price_data?.currency
+    })))
 
     // ✅ CRITICAL: Final validation that we have line items
     if (!lineItems || lineItems.length === 0) {
@@ -364,26 +444,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('VR Stripe line items:', lineItems.map(item => ({
-      name: item.price_data?.product_data?.name,
-      unit_amount: item.price_data?.unit_amount,
-      quantity: item.quantity,
-      total: (item.price_data?.unit_amount || 0) * (item.quantity || 0)
-    })))
-
-    // Verify total matches registration
-    const calculatedTotal = lineItems.reduce((sum: number, item) => 
-      sum + ((item.price_data?.unit_amount || 0) * (item.quantity || 0)), 0
-    )
-
-    console.log('VR Total verification:', {
-      registrationFinalAmount: totalAmount,
-      calculatedFromSelections: calculatedTotal,
-      matches: totalAmount === calculatedTotal,
-      difference: Math.abs(totalAmount - calculatedTotal)
-    })
-
-    // Create VR checkout session configuration
+    // ✅ FIXED: Create VR checkout session configuration (NO DISCOUNTS/COUPONS)
     const sessionConfig: Stripe.Checkout.SessionCreateParams = {
       mode: 'payment',
       payment_method_types: ['card'],
@@ -405,42 +466,23 @@ export async function POST(request: NextRequest) {
       success_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/success?session_id={CHECKOUT_SESSION_ID}&vr_booking=true`,
       cancel_url: `${process.env.NEXT_PUBLIC_SITE_URL}/payment/cancelled?id=${registrationId}&vr_booking=true`,
       expires_at: Math.floor(Date.now() / 1000) + (30 * 60),
+      // ✅ NO DISCOUNTS SECTION - discount already applied in line items pricing
     }
 
-    // Add VR booking discount if applicable
-    if (registration.discountAmount && registration.discountAmount > 0 && registration.appliedCouponCode) {
-      try {
-        console.log('Creating Stripe coupon for VR discount:', registration.discountAmount)
-        
-        const coupon = await stripe.coupons.create({
-          amount_off: registration.discountAmount,
-          currency: 'eur',
-          duration: 'once',
-          name: `${registration.appliedCouponCode} - VR Discount`,
-          metadata: {
-            registrationId: registrationId,
-            originalCouponCode: registration.appliedCouponCode,
-            bookingType: 'VR_EXPERIENCE'
-          }
-        })
-
-        sessionConfig.discounts = [{
-          coupon: coupon.id
-        }]
-
-        console.log('Created VR Stripe coupon:', coupon.id)
-      } catch (couponError: any) {
-        console.error('Failed to create VR discount coupon:', couponError.message)
-        // Continue without coupon discount
-      }
-    }
+    console.log('🔧 Creating Stripe session with configuration:', {
+      mode: sessionConfig.mode,
+      currency: lineItems[0]?.price_data?.currency,
+      lineItemsCount: lineItems.length,
+      totalAmount: calculatedTotal
+    })
 
     const session = await stripe.checkout.sessions.create(sessionConfig)
 
-    console.log('VR Stripe session created successfully:', {
+    console.log('✅ VR Stripe session created successfully:', {
       sessionId: session.id,
       url: session.url,
       amount_total: session.amount_total,
+      currency: session.currency,
       line_items_count: lineItems.length
     })
 
@@ -480,7 +522,6 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('VR Stripe API Error:', error)
     
-    // Enhanced error handling for VR bookings
     if (error.type === 'StripeInvalidRequestError') {
       console.error('VR Stripe request details:', {
         message: error.message,

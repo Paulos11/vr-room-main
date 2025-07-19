@@ -1,16 +1,16 @@
-// src/app/api/vr-register/route.ts - VR Room Malta registration (FIXED - No Premature Tickets)
+// src/app/api/vr-register/route.ts - VR Room Malta registration (FIXED - 50 ticket limit)
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
 import { Prisma, TicketType } from '@prisma/client'
 import { EmailService, RegistrationEmailData } from '@/lib/emailService'
 
-// Schema for VR ticket selection
+// Schema for VR ticket selection - ✅ FIXED: Changed to 50
 const VRSelectedTicketSchema = z.object({
   ticketTypeId: z.string(),
   name: z.string(),
   priceInCents: z.number(),
-  quantity: z.number().min(1).max(50) // VR allows up to 50 sessions
+  quantity: z.number().min(1).max(50) // ✅ CHANGED: From .max(10) to .max(50)
 });
 
 // VR Registration schema - simplified, no EMS fields
@@ -72,6 +72,14 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // ✅ ADDITIONAL CHECK: Verify maxPerOrder limit from database
+      if (selectedTicket.quantity > ticketType.maxPerOrder) {
+        return NextResponse.json(
+          { success: false, message: `Maximum ${ticketType.maxPerOrder} sessions allowed for ${selectedTicket.name}` },
+          { status: 400 }
+        );
+      }
+
       // For VR, use the exact price sent from frontend
       const effectivePrice = selectedTicket.priceInCents;
       const ticketTotal = effectivePrice;
@@ -80,6 +88,7 @@ export async function POST(request: NextRequest) {
       console.log(`✅ VR experience validation for ${selectedTicket.name}:`, {
         pricePerSession: ticketType.priceInCents,
         quantity: selectedTicket.quantity,
+        maxPerOrder: ticketType.maxPerOrder,
         totalPrice: ticketTotal
       })
 

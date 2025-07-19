@@ -1,4 +1,4 @@
-// src/components/forms/steps/VRTicketSelectionStep.tsx - Optimized for mobile & performance
+// src/components/forms/steps/VRTicketSelectionStep.tsx - Complete code with 50 ticket limit
 'use client'
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
@@ -289,7 +289,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
         name: experience.name,
         priceInCents: totalPrice,
         quantity: newQuantity,
-        maxPerOrder: experience.maxPerOrder || 10,
+        maxPerOrder: experience.maxPerOrder || 50, // ✅ UPDATED: Set to 50
         minPerOrder: experience.minPerOrder || 1
       }
       
@@ -310,14 +310,16 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
 
   const increaseQuantity = useCallback((experience: VRTicketType) => {
     const currentQty = getSelectedQuantity(experience.id)
-    const maxQty = Math.min(experience.maxPerOrder, experience.availableStock)
+    const maxQty = Math.min(experience.maxPerOrder || 50, experience.availableStock || 50) // ✅ UPDATED: Set to 50
     
     if (currentQty < maxQty) {
       updateExperienceQuantity(experience, currentQty + 1)
     } else {
       toast({
         title: "Quantity limit reached",
-        description: currentQty >= experience.availableStock ? "No more sessions available" : `Maximum ${experience.maxPerOrder} sessions per booking`,
+        description: currentQty >= experience.availableStock ? 
+          "No more sessions available" : 
+          `Maximum ${experience.maxPerOrder || 50} sessions per booking`, // ✅ UPDATED: Set to 50
         variant: "destructive",
       })
     }
@@ -410,7 +412,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
         ) : (
           availableExperiences.map(experience => {
             const selectedQty = getSelectedQuantity(experience.id)
-            const maxQty = Math.min(experience.maxPerOrder, experience.availableStock)
+            const maxQty = Math.min(experience.maxPerOrder || 50, experience.availableStock || 50) // ✅ UPDATED: Set to 50
             const isSelected = selectedQty > 0
             const canAddMore = selectedQty < maxQty
             const pricingDisplay = getPricingDisplay(experience, selectedQty)
@@ -661,7 +663,7 @@ export function VRTicketSelectionStep({ formData, onUpdate }: VRStepProps) {
                           className="h-9 w-9 p-0 border-[#01AEED] text-[#01AEED] hover:bg-[#01AEED] hover:text-white"
                           title={
                             selectedQty >= experience.availableStock ? "No more sessions available" :
-                            selectedQty >= experience.maxPerOrder ? `Maximum ${experience.maxPerOrder} per booking` : ""
+                            selectedQty >= (experience.maxPerOrder || 50) ? `Maximum ${experience.maxPerOrder || 50} per booking` : "" // ✅ UPDATED: Set to 50
                           }
                         >
                           <Plus className="h-4 w-4" />
