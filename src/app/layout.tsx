@@ -173,10 +173,10 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
       </head>
       <body className={`${inter.className} font-sans antialiased bg-white`}>
-        <ConsentWrapper>
+        {/* <ConsentWrapper>
           {children}
           <Toaster />
-        </ConsentWrapper>
+        </ConsentWrapper> */}
       </body>
     </html>
   )
